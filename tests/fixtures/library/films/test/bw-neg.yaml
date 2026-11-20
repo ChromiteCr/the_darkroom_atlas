@@ -1,0 +1,45 @@
+# Fictional black-and-white negative film for structural tests. All values are made up.
+schema_version: 1
+id: test/bw-neg
+maker: test
+name: test-bw-neg
+kind: bw_negative
+model: test-bw
+iso_speed: {value: 100, unit: "1", source: assumed}
+note: Not a real material.
+layers:
+  - type: overcoat
+    id: overcoat
+    thickness: {value: 1.0, unit: um, source: assumed}
+  - type: emulsion
+    id: emulsion
+    thickness: {value: 10.0, unit: um, source: assumed, uncertainty: 1.0}
+    sensitized_to: panchromatic
+    grain:
+      morphology: conventional
+      mean_diameter: {value: 0.5, unit: um, source: assumed}
+      sigma_log: {value: 0.3, unit: "1", source: assumed}
+      silver_coverage: {value: 5.0, unit: g/m2, source: assumed}
+      halide: AgBrI
+    spectral_sensitivity:
+      quantity: relative_energy_sensitivity
+      source: assumed
+      inline:
+        wavelengths_nm: [380, 450, 550, 650, 680]
+        values: [0.2, 1.0, 0.8, 0.6, 0.0]
+    parameters:
+      speed_factor: {value: 1.0, unit: "1", source: assumed}
+  - type: antihalation
+    id: antihalation
+    kind: undercoat
+    spectral_density:
+      quantity: spectral_density
+      source: assumed
+      inline:
+        wavelengths_nm: [380, 780]
+        values: [0.5, 0.5]
+  - type: base
+    id: base
+    material: test-polymer
+    thickness: {value: 125.0, unit: um, source: assumed}
+    refractive_index: {value: 1.5, unit: "1", source: assumed}

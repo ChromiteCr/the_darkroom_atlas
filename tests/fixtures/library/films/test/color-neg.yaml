@@ -1,0 +1,85 @@
+# Fictional colour negative film for structural tests. All values are made up.
+schema_version: 1
+id: test/color-neg
+maker: test
+name: test-color-neg
+kind: color_negative
+model: test-color
+iso_speed: {value: 400, unit: "1", source: assumed}
+note: Not a real material.
+layers:
+  - type: overcoat
+    id: overcoat
+  - type: emulsion
+    id: blue
+    sensitized_to: blue
+    spectral_sensitivity:
+      quantity: relative_energy_sensitivity
+      source: assumed
+      inline:
+        wavelengths_nm: [380, 420, 460, 500, 520]
+        values: [0.3, 0.9, 1.0, 0.2, 0.0]
+    couplers:
+      - id: yellow-image
+        dye: yellow
+        kind: image
+        dye_spectral_density:
+          quantity: spectral_density
+          source: assumed
+          inline:
+            wavelengths_nm: [380, 450, 520]
+            values: [0.6, 1.0, 0.1]
+  - type: filter
+    id: yellow-filter
+    spectral_density:
+      quantity: spectral_density
+      source: assumed
+      inline:
+        wavelengths_nm: [380, 480, 520, 780]
+        values: [2.0, 2.0, 0.0, 0.0]
+    removed_in_processing: true
+  - type: emulsion
+    id: green
+    sensitized_to: green
+    spectral_sensitivity:
+      quantity: relative_energy_sensitivity
+      source: assumed
+      inline:
+        wavelengths_nm: [480, 520, 550, 580, 620]
+        values: [0.0, 0.7, 1.0, 0.6, 0.0]
+    couplers:
+      - id: magenta-image
+        dye: magenta
+        kind: image
+      - id: magenta-dir
+        dye: magenta
+        kind: dir
+        parameters:
+          inhibitor_yield: {value: 0.1, unit: "1", source: assumed}
+      - id: magenta-mask
+        dye: magenta
+        kind: colored_mask
+  - type: interlayer
+    id: interlayer
+    thickness: {value: 1.0, unit: um, source: assumed}
+    scavenger: true
+  - type: emulsion
+    id: red
+    sensitized_to: red
+    spectral_sensitivity:
+      quantity: relative_energy_sensitivity
+      source: assumed
+      inline:
+        wavelengths_nm: [570, 600, 640, 680, 700]
+        values: [0.0, 0.6, 1.0, 0.4, 0.0]
+    couplers:
+      - id: cyan-image
+        dye: cyan
+        kind: image
+  - type: antihalation
+    id: antihalation
+    kind: undercoat
+  - type: base
+    id: base
+    material: test-polymer
+    thickness: {value: 125.0, unit: um, source: assumed}

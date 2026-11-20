@@ -1,0 +1,12 @@
+schema_version: 1
+id: ideal
+maker: none
+name: Ideal linear XYZ recorder
+kind: ideal
+model: ideal
+default_readout: ideal_colorimetric
+note: Not a real material. Records CIE XYZ linearly; used to verify the spectral pipeline.
+layers:
+  - {type: emulsion, id: x, spectral_sensitivity: {quantity: relative_energy_sensitivity, source: assumed, builtin: cie1931_x}}
+  - {type: emulsion, id: y, spectral_sensitivity: {quantity: relative_energy_sensitivity, source: assumed, builtin: cie1931_y}}
+  - {type: emulsion, id: z, spectral_sensitivity: {quantity: relative_energy_sensitivity, source: assumed, builtin: cie1931_z}}

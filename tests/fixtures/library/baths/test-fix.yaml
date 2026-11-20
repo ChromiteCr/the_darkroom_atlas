@@ -1,0 +1,9 @@
+# Fictional fixer for structural tests; its composition is deliberately left empty.
+schema_version: 1
+id: test-fix
+name: test-fixer
+kind: fixer
+formula_confidence: published
+components: []
+standard_dilutions: ["1+4"]
+note: Not a real formula.

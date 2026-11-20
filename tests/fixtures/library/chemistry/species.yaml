@@ -1,0 +1,20 @@
+# Fictional species for structural tests. None of these values describe a real chemical.
+schema_version: 1
+species:
+  - id: test-dev-agent
+    name: test-developing-agent
+    molar_mass: {value: 100.0, unit: g/mol, source: assumed, note: Fictional value.}
+    roles: [developing_agent]
+    pka:
+      - {value: 10.0, unit: "1", source: assumed}
+    diffusion_coefficient: {value: 500.0, unit: um2/s, source: assumed, uncertainty: 50.0}
+  - id: test-preservative
+    name: test-preservative
+    molar_mass: {value: 120.0, unit: g/mol, source: assumed}
+    roles: [preservative, alkali]
+  - id: test-cd-agent
+    name: test-color-developing-agent
+    molar_mass: {value: 300.0, unit: g/mol, source: assumed}
+    roles: [color_developing_agent]
+    parameters:
+      coupling_rate: {value: 1.0, unit: "1", source: assumed, note: Placeholder.}

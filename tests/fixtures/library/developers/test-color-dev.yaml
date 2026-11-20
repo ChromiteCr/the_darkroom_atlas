@@ -1,0 +1,13 @@
+# Fictional colour developer for structural tests.
+schema_version: 1
+id: test-color-dev
+name: test-color-developer
+kind: color_developer
+formula_confidence: msds-estimated
+components:
+  - species: test-cd-agent
+    amount: {value: 4.0, unit: g/L, source: assumed}
+  - species: test-preservative
+    amount: {value: 4.0, unit: g/L, source: assumed}
+ph: {value: 10.0, unit: "1", source: assumed}
+note: Not a real formula.

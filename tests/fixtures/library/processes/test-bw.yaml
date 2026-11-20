@@ -1,0 +1,23 @@
+# Fictional black-and-white process for structural tests.
+schema_version: 1
+id: test-bw
+name: test-bw-process
+family: bw
+steps:
+  - kind: develop
+    bath: test-bw-dev
+    dilution: "1+1"
+    time: "9:45"
+    temperature: {value: 20.0, unit: C, source: assumed}
+    agitation: {method: inversion, initial_s: 30.0, interval_s: 60.0, duration_s: 10.0}
+    tank: {volume_ml: 500.0, film_area_cm2: 80.0}
+  - kind: stop
+    time: "30s"
+    note: Plain water.
+  - kind: fix
+    bath: test-fix
+    dilution: "1+4"
+    time: "5min"
+  - kind: wash
+    time: "10min"
+note: Not a real process.

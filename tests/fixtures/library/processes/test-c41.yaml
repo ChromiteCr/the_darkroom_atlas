@@ -1,0 +1,22 @@
+# Fictional colour negative process for structural tests.
+schema_version: 1
+id: test-c41
+name: test-c41-process
+family: c41
+steps:
+  - kind: develop
+    bath: test-color-dev
+    time: "3:15"
+    temperature: {value: 38.0, unit: C, source: assumed}
+    agitation: {method: rotary}
+  - kind: bleach
+    bath: test-bleach
+    time: "6:30"
+  - kind: fix
+    bath: test-fix
+    time: "6:30"
+  - kind: wash
+    time: "3:15"
+  - kind: stabilize
+    time: "1:30"
+note: Not a real process.

@@ -1,0 +1,14 @@
+# Fictional black-and-white developer for structural tests.
+schema_version: 1
+id: test-bw-dev
+name: test-bw-developer
+kind: developer
+formula_confidence: published
+components:
+  - species: test-dev-agent
+    amount: {value: 2.0, unit: g/L, source: assumed}
+  - species: test-preservative
+    amount: {value: 100.0, unit: g/L, source: assumed}
+ph: {value: 8.5, unit: "1", source: assumed, uncertainty: 0.1}
+standard_dilutions: ["stock", "1+1", "1+3"]
+note: Not a real formula.
