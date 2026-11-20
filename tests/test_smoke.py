@@ -6,6 +6,7 @@ def test_version():
 def test_xp_of_numpy_and_strict():
     import array_api_strict as xps
     import numpy as np
+
     from darkroom_atlas.backend import xp_of
     assert xp_of(np.zeros(2)).__name__.endswith("numpy")
     assert xp_of(xps.zeros(2)) is xps or "strict" in xp_of(xps.zeros(2)).__name__
