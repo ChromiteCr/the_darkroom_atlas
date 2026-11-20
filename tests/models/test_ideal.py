@@ -5,9 +5,20 @@ import pytest
 
 from darkroom_atlas.data.library import Library
 from darkroom_atlas.light import Light
+from darkroom_atlas.models import ideal as ideal_model
 from darkroom_atlas.pipeline import Readout, RunContext, expose, process, readout
+from darkroom_atlas.scene import camera
 from darkroom_atlas.scene.camera import scene_light
 from darkroom_atlas.scene.io import read_image
+from darkroom_atlas.spectral import (
+    _SRGB_PRIMARIES_XY,
+    DEFAULT_GRID,
+    XYZ_TO_LINEAR_SRGB,
+    _normalised_primary_matrix,
+    cmf_xyz,
+    illuminant,
+)
+from darkroom_atlas.units import photon_energy_j
 
 SAMPLE = Path(__file__).resolve().parents[1] / "assets" / "sample.png"
 TIME_S = 1 / 125
@@ -81,6 +92,44 @@ def test_roundtrip_independent_of_iso_ev_time(img, ideal, identity, ctx):
     for scene in ({"iso": 400.0}, {"ev": -2.5}, {"time_s": 1 / 4}, {"iso": 25.0, "ev": 1.0}):
         other = _develop_and_read(img, ideal, identity, ctx, **scene).data
         np.testing.assert_allclose(other, base, rtol=0.0, atol=1e-9, err_msg=str(scene))
+
+
+def test_roundtrip_error_is_the_srgb_white_point(img, ideal, identity, ctx):
+    # The readout uses the IEC 61966-2-1 matrix, built on the rounded D65 white
+    # xy = (0.3127, 0.3290). Built on the grid's own D65 white instead, the round trip is
+    # exact to rounding: the error is the white-point difference, not resampling.
+    light = scene_light(img, time_s=TIME_S)
+    state = process(expose(ideal, light, TIME_S, ctx), identity, ctx)
+    scale = state.meta["light"]["energy_scale_j_per_um2"]
+    xyz = np.stack([state.get(layer, "signal") for layer in ("x", "y", "z")], axis=-1) / scale
+    white = illuminant("D65", DEFAULT_GRID) @ cmf_xyz(DEFAULT_GRID)
+    grid_white_xy = tuple(white[:2] / white.sum())
+    exact = np.linalg.inv(_normalised_primary_matrix(_SRGB_PRIMARIES_XY, grid_white_xy))
+    assert float(np.max(np.abs(xyz @ exact.T - img))) < 1e-6
+    standard = readout(state, "ideal_colorimetric", ctx).data
+    np.testing.assert_allclose(standard, xyz @ XYZ_TO_LINEAR_SRGB.T, rtol=0, atol=1e-15)
+    assert float(np.max(np.abs(standard - img))) > 1e-4
+
+
+def test_roundtrip_is_blind_to_absolute_photometry(img, ideal, identity, ctx, monkeypatch):
+    # k is multiplied in by the camera and divided out by the readout, and the photon energy
+    # is divided by the camera and multiplied back by the model, so errors in K_m, in the
+    # m^2 -> um^2 factor or in the photon energy all cancel. They are anchored by the unit
+    # tests named in docs/physics.md section 3.4 instead.
+    base = _develop_and_read(img, ideal, identity, ctx).data
+    monkeypatch.setattr(camera, "K_M", 1.0)
+    monkeypatch.setattr(camera, "_J_PER_M2_TO_J_PER_UM2", 1e-6)
+
+    def wrong_photon_energy(wavelength_nm):
+        return 2.0 * photon_energy_j(wavelength_nm) * (wavelength_nm / 555.0) ** 2
+
+    monkeypatch.setattr(camera, "photon_energy_j", wrong_photon_energy)
+    monkeypatch.setattr(ideal_model, "photon_energy_j", wrong_photon_energy)
+    light = scene_light(img, time_s=TIME_S)
+    mean_lux_s = float(np.mean(light.luminous_exposure_lux_s(TIME_S)))
+    assert abs(mean_lux_s - 0.1) > 1.0  # the metering is badly wrong ...
+    wrong = _develop_and_read(img, ideal, identity, ctx).data
+    np.testing.assert_allclose(wrong, base, rtol=0, atol=1e-12)  # ... and nothing shows
 
 
 def test_tungsten_scene_is_warm(img, ideal, identity, ctx):

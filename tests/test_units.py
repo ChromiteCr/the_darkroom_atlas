@@ -30,6 +30,14 @@ def test_photon_energy_555nm():
     assert photon_energy_j(555.0) == pytest.approx(3.5792e-19, rel=1e-4)
 
 
+def test_photon_energy_across_the_grid():
+    # The ideal round trip cannot catch a wrong photon energy (camera and model share it),
+    # so anchor it at every band against h*c = 1239.841984 eV nm and 1 eV = 1.602176634e-19 J.
+    wavelengths = np.arange(380.0, 781.0, 5.0)
+    expected = 1239.841984 / wavelengths * 1.602176634e-19
+    np.testing.assert_allclose(photon_energy_j(wavelengths), expected, rtol=1e-9, atol=0.0)
+
+
 def test_density_roundtrip():
     d = np.array([0.0, 0.3, 1.0, 3.0])
     back = transmittance_to_density(density_to_transmittance(d))
