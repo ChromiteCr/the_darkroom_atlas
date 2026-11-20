@@ -398,6 +398,22 @@ class Library:
         except ValueError as exc:
             raise DataError(f"{path}: {exc}") from None
 
+    @staticmethod
+    def curve_files(material: Material) -> list[str]:
+        """Sorted paths, relative to the root, of every curve file that ``material`` names.
+
+        These are the :attr:`SpectralCurve.file` values of all its layers and couplers
+        (``./`` and repeated ``/`` removed, duplicates listed once), whether or not the
+        material's model reads them.
+        """
+        return sorted(
+            {
+                PurePosixPath(curve.file).as_posix()
+                for _, curve in _material_curves(material)
+                if curve.file is not None
+            }
+        )
+
     # ---- hashing ---------------------------------------------------------------------
 
     @staticmethod

@@ -5,11 +5,12 @@ import numpy as np
 import pytest
 
 from darkroom_atlas import ATLAS_VERSION
-from darkroom_atlas.data.library import ENV_DATA_ROOT, DataNotFound, Library
-from darkroom_atlas.manifest import RunManifest
+from darkroom_atlas.data.library import ENV_DATA_ROOT, DataError, DataNotFound, Library
+from darkroom_atlas.manifest import FileRef, RunManifest
 from darkroom_atlas.registry import RegistryError
 from darkroom_atlas.runner import manifest_path, run_image
 from darkroom_atlas.scene.io import EIGHT_BIT_WARNING, read_image
+from darkroom_atlas.spectral import DEFAULT_GRID, cmf_xyz
 
 TESTS = Path(__file__).resolve().parent
 SAMPLE = TESTS / "assets" / "sample.png"
@@ -114,6 +115,63 @@ def test_manifest_contents(tmp_path, lib):
     assert manifest.output.sha256 == Library.sha256(out)
     # What was written is what was returned, and it survives the JSON round trip.
     assert RunManifest.read(manifest_path(out)) == manifest
+
+
+def _cmf_csv(column: int, scale: float = 1.0) -> str:
+    """A curve CSV holding one CIE 1931 colour-matching function on the default grid."""
+    values = cmf_xyz(DEFAULT_GRID)[:, column] * scale
+    return "".join(f"{w!r},{v!r}\n" for w, v in zip(DEFAULT_GRID.wavelengths, values, strict=True))
+
+
+def _file_curve_library(tmp_path) -> tuple[Library, Path]:
+    """The repository library plus ``filecurve``: ideal, with its y sensitivity in a CSV file."""
+    material = _ideal_yaml(
+        {"id: ideal\n": "id: filecurve\n", "builtin: cie1931_y": "file: curves/ybar.csv"}
+    )
+    lib = _copy_with_material(tmp_path, REPO_DATA, "filecurve.yaml", material)
+    curve = lib.root / "curves" / "ybar.csv"
+    curve.parent.mkdir()
+    curve.write_text(_cmf_csv(1), encoding="utf-8")
+    assert lib.validate() == []
+    return lib, curve
+
+
+def test_manifest_records_curve_files(tmp_path):
+    lib, curve = _file_curve_library(tmp_path)
+    run = {"material_id": "filecurve", "process_id": "identity", "library": lib}
+    out_a, manifest_a = run_image(SAMPLE, tmp_path / "a", **run)
+    assert manifest_a.curve_files == [FileRef(path="curves/ybar.csv", sha256=Library.sha256(curve))]
+    assert RunManifest.read(manifest_path(out_a)) == manifest_a
+    _, builtin_only = _run(tmp_path / "builtin", Library(REPO_DATA))
+    assert builtin_only.curve_files == []
+
+    # A change to the curve too small to alter the 16-bit output: the material file, the
+    # output and every other recorded hash stay the same, so only the curve's own hash can
+    # tell the two runs apart.
+    curve.write_text(_cmf_csv(1, scale=1.0 + 1e-9), encoding="utf-8")
+    out_b, manifest_b = run_image(SAMPLE, tmp_path / "b", **run)
+    assert out_b.read_bytes() == out_a.read_bytes()
+    assert manifest_b.material == manifest_a.material
+    assert manifest_b.curve_files[0].sha256 == Library.sha256(curve)
+    assert manifest_b.curve_files[0].sha256 != manifest_a.curve_files[0].sha256
+    assert manifest_b.recipe_hash() != manifest_a.recipe_hash()
+
+
+def test_missing_curve_file_fails_before_output(tmp_path):
+    # The ideal model never reads a filter layer's density, but the run record must hash
+    # every curve file the material names, so a missing one stops the run before any output.
+    lib, _ = _file_curve_library(tmp_path)
+    text = (lib.root / "films" / "filecurve.yaml").read_text(encoding="utf-8")
+    filter_layer = (
+        "  - {type: filter, id: f, spectral_density: "
+        "{quantity: density, source: assumed, file: curves/missing.csv}}\n"
+    )
+    material = text.replace("id: filecurve\n", "id: filtered\n") + filter_layer
+    (lib.root / "films" / "filtered.yaml").write_text(material, encoding="utf-8")
+    out_dir = tmp_path / "out"
+    with pytest.raises(DataError, match="curves/missing.csv"):
+        run_image(SAMPLE, out_dir, material_id="filtered", process_id="identity", library=lib)
+    assert not out_dir.exists()
 
 
 def test_slash_ids_in_filename(tmp_path):

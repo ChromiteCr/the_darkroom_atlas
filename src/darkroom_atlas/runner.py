@@ -2,8 +2,8 @@
 
 :func:`run_image` is what ``atlas run`` calls. Everything that can be looked up is looked up
 before any work is done or any file is written: the material, the process and its baths,
-the exposure model, step handlers and readout device, the input file and the output
-directory. A run that cannot complete therefore fails at once and leaves nothing behind.
+the curve files the material names (hashed for the manifest), the exposure model, step
+handlers and readout device, the input file and the output directory. A run that cannot complete therefore fails at once and leaves nothing behind.
 
 Output files are named ``<input stem>__<material>__<process>.png`` (``/`` in ids becomes
 ``-``); the manifest has the same name with ``.run.json`` instead of ``.png``.
@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 
 from darkroom_atlas import ATLAS_VERSION
-from darkroom_atlas.data.library import _SPECIES_FILE, Kind, Library
+from darkroom_atlas.data.library import _SPECIES_FILE, DataError, Kind, Library
 from darkroom_atlas.data.models import Material, Process
 from darkroom_atlas.manifest import (
     DataRef,
@@ -78,7 +78,8 @@ def run_image(
     existing files of the same name are replaced.
 
     Raises :class:`~darkroom_atlas.data.library.DataNotFound` for unknown ids,
-    :class:`~darkroom_atlas.registry.RegistryError` when a model, step handler or readout
+    :class:`~darkroom_atlas.data.library.DataError` for a curve file the material names but
+    the library lacks, :class:`~darkroom_atlas.registry.RegistryError` when a model, step handler or readout
     device is not registered, ``FileNotFoundError`` for a missing input,
     ``NotADirectoryError`` when ``output_dir`` cannot be a directory, and ``ValueError`` for
     invalid settings or input images. All of these happen before anything is written.
@@ -93,6 +94,7 @@ def run_image(
     device = _readout_device(material, readout_device)
     bath_ids = _check_runnable(material, proc, device, library)
     iso_value = _iso(material, iso)
+    curve_refs = _curve_refs(library, material)
     _check_input(input_path)
     _check_output_dir(output_dir)
 
@@ -129,6 +131,7 @@ def run_image(
         species_file=(
             _file_ref(species_path, _SPECIES_FILE.as_posix()) if species_path.is_file() else None
         ),
+        curve_files=curve_refs,
         readout=ReadoutRef(device=device, params={}),
         exposure=dict(light.meta),
         geometry={
@@ -178,6 +181,20 @@ def _check_runnable(material: Material, proc: Process, device: str, library: Lib
     for bath_id in bath_ids:
         library.bath(bath_id)
     return bath_ids
+
+
+def _curve_refs(library: Library, material: Material) -> list[FileRef]:
+    """Hash every curve file ``material`` names; :class:`DataError` if one is missing."""
+    refs = []
+    for rel in library.curve_files(material):
+        path = library.root / rel
+        if not path.is_file():
+            raise DataError(
+                f"{library.path_of('material', material.id)}: curve file {rel!r} not found "
+                f"under {library.root}"
+            )
+        refs.append(_file_ref(path, rel))
+    return refs
 
 
 def _iso(material: Material, iso: float | None) -> float:

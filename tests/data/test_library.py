@@ -370,6 +370,41 @@ def test_resolve_inline_zero_outside(fx):
     assert out[-1] == 0.0  # 780 nm
 
 
+def test_curve_files_lists_every_named_file(fx):
+    def curve(**given):
+        return {"quantity": "q", "source": "assumed", **given}
+
+    material = Material.model_validate(
+        _material_data(
+            layers=[
+                {
+                    "type": "emulsion",
+                    "id": "e",
+                    "spectral_sensitivity": curve(file="./curves/s.csv"),
+                    "couplers": [
+                        {
+                            "id": "c",
+                            "dye": "cyan",
+                            "kind": "image",
+                            "dye_spectral_density": curve(file="curves/dye.csv"),
+                        }
+                    ],
+                },
+                {"type": "emulsion", "id": "f", "spectral_sensitivity": curve(file="curves/s.csv")},
+                {"type": "filter", "id": "y", "spectral_density": curve(builtin="cie1931_y")},
+                {
+                    "type": "base",
+                    "id": "b",
+                    "material": "PET",
+                    "spectral_density": curve(file="curves//base.csv"),
+                },
+            ]
+        )
+    )
+    assert Library.curve_files(material) == ["curves/base.csv", "curves/dye.csv", "curves/s.csv"]
+    assert fx.curve_files(fx.material("test/bw-neg")) == []
+
+
 def test_resolve_file_curve(tmp_path):
     csv = tmp_path / "curves" / "s.csv"
     csv.parent.mkdir(parents=True)

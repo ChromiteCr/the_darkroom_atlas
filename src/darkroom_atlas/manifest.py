@@ -1,9 +1,10 @@
 """The run manifest: everything needed to reproduce one output image, written next to it.
 
 A :class:`RunManifest` records the input and output files (with their SHA-256), the data
-files that defined the run (material, process, baths, species), the readout device, the
-exposure (the light's metadata), the frame geometry, the spectral grid, the seed and the
-tile size, plus the software environment and the git commit for reference.
+files that defined the run (material, process, baths, species and every spectral-curve
+file the material names), the readout device, the exposure (the light's metadata), the
+frame geometry, the spectral grid, the seed and the tile size, plus the software
+environment and the git commit for reference.
 
 :meth:`RunManifest.recipe_hash` condenses what determines the result into one SHA-256. It
 leaves out what may differ between equivalent runs: the creation time, the environment, the
@@ -11,8 +12,9 @@ git commit, the tile size (tiling never changes the result) and where the input 
 files are (their hashes are kept). Two runs with the same recipe hash used the same inputs,
 data and settings and produced the same output bytes.
 
-Data-file paths are relative to the library root, so the same data in two checkouts gives
-the same hash. The free-form ``dict`` fields hold JSON values only: tuples become lists and
+Data-file paths are relative to the library root and are part of the hash, so the same data
+in two checkouts gives the same hash, while moving or renaming a file inside the library
+changes it. The free-form ``dict`` fields hold JSON values only: tuples become lists and
 NaN or infinity is rejected, so a manifest read back from disk equals the one written.
 """
 
@@ -113,8 +115,10 @@ class ReadoutRef(_Model):
 class RunManifest(_Model):
     """Record of one run of :func:`darkroom_atlas.runner.run_image`; see the module docs.
 
-    ``exposure`` is the light's metadata (illuminant, ISO, EV, exposure time, metering and
-    energy scale), ``geometry`` holds ``shape_hw long_edge_mm pixel_pitch_um``,
+    ``curve_files`` lists the spectral-curve files the material names (see
+    :meth:`Library.curve_files <darkroom_atlas.data.library.Library.curve_files>`), with
+    paths relative to the library root. ``exposure`` is the light's metadata (illuminant,
+    ISO, EV, exposure time, metering and energy scale), ``geometry`` holds ``shape_hw long_edge_mm pixel_pitch_um``,
     ``spectral_grid`` holds ``start_nm stop_nm step_nm`` and ``environment`` the versions of
     ``python numpy scipy colour`` and the ``platform``.
     """
@@ -127,6 +131,7 @@ class RunManifest(_Model):
     process: DataRef
     baths: list[DataRef] = Field(default_factory=list)
     species_file: FileRef | None = None
+    curve_files: list[FileRef] = Field(default_factory=list)
     readout: ReadoutRef
     exposure: JsonDict
     geometry: JsonDict

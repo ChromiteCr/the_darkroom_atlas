@@ -22,6 +22,7 @@ def _data() -> dict:
         },
         "baths": [],
         "species_file": {"path": "chemistry/species.yaml", "sha256": "d" * 64},
+        "curve_files": [{"path": "curves/ybar.csv", "sha256": "9" * 64}],
         "readout": {"device": "ideal_colorimetric", "params": {}},
         "exposure": {
             "illuminant": "D65",
@@ -132,6 +133,10 @@ def test_recipe_hash_ignores_volatile(manifest):
     ("dotted", "value"),
     [
         ("process.file.sha256", "f" * 64),
+        ("curve_files", [{"path": "curves/ybar.csv", "sha256": "f" * 64}]),
+        ("curve_files", [{"path": "curves/other.csv", "sha256": "9" * 64}]),
+        ("curve_files", []),
+        ("material.file.path", "papers/ideal.yaml"),
         ("input.sha256", "f" * 64),
         ("output.sha256", "f" * 64),
         ("exposure.ev", 1.0),
