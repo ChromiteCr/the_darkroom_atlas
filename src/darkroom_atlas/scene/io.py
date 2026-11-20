@@ -3,21 +3,27 @@
 Integer images (8 or 16 bits per sample) are taken to be sRGB encoded and are decoded to
 linear RGB; floating-point images (TIFF) are taken to be scene-linear already. Grey images
 are copied to three channels, alpha channels are dropped, and non-finite samples are an
-error. Outputs are 16-bit sRGB PNG.
+error. Palette images are expanded through their colour map, MinIsWhite TIFFs are inverted,
+and the EXIF or TIFF Orientation tag is applied, so the array is the image as a viewer shows
+it. Colour models other than grey, palette and RGB (CMYK, YCbCr stored as such, CIELab, raw
+sensor data) are rejected rather than misread. Outputs are 16-bit sRGB PNG.
 
 PNG files are decoded and encoded with imagecodecs (libpng), because Pillow reads 16-bit
 RGB PNG as 8 bits per sample without warning and cannot write it. TIFF files are read with
-tifffile, everything else through imageio.
+tifffile, everything else (JPEG and the other formats Pillow reads) with Pillow.
 """
 
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
+from numbers import Integral
 from pathlib import Path
 from typing import Literal
 
 import imagecodecs
-import imageio.v3 as iio
 import numpy as np
 import tifffile
+from PIL import Image, UnidentifiedImageError
 
 from darkroom_atlas._frozen import readonly_array
 from darkroom_atlas.backend import xp_of
@@ -37,6 +43,30 @@ EIGHT_BIT_WARNING = (
 
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 _TIFF_SIGNATURES = (b"II*\x00", b"MM\x00*", b"II+\x00", b"MM\x00+")
+_ORIENTATION_TAG = 274  # EXIF and TIFF Orientation
+_UNREADABLE_EXIF = "unreadable EXIF data: the Orientation tag, if any, is ignored"
+
+# How to turn the stored array into the displayed one for each Orientation value (EXIF 2.3,
+# TIFF 6.0): 2-4 mirror or turn by 180 degrees, 5-8 also swap rows and columns.
+_ORIENTATIONS: dict[int, Callable[[np.ndarray], np.ndarray]] = {
+    1: lambda a: a,
+    2: lambda a: a[:, ::-1],
+    3: lambda a: a[::-1, ::-1],
+    4: lambda a: a[::-1],
+    5: lambda a: np.swapaxes(a, 0, 1),
+    6: lambda a: np.rot90(a, -1),
+    7: lambda a: np.swapaxes(a[::-1, ::-1], 0, 1),
+    8: lambda a: np.rot90(a, 1),
+}
+
+# Pillow modes read as they are, and those converted first (palette modes are handled apart).
+_PILLOW_MODES = frozenset({"1", "L", "LA", "RGB", "RGBA", "I;16", "I;16L", "I;16B", "F"})
+_PILLOW_CONVERSIONS = {"La": "LA", "RGBa": "RGBA", "RGBX": "RGB", "PA": "RGBA"}
+
+# TIFF photometric interpretations that tifffile returns as grey or RGB samples. YCbCr is
+# converted to RGB by tifffile only when it decodes JPEG-compressed data.
+_PHOTOMETRIC = tifffile.PHOTOMETRIC
+_GREY_OR_RGB = frozenset({_PHOTOMETRIC.MINISBLACK, _PHOTOMETRIC.RGB})
 
 # IEC 61966-2-1 piecewise transfer function.
 _DECODE_THRESHOLD = 0.04045
@@ -136,15 +166,20 @@ def read_image(path: str | Path) -> ImageInput:
       negative samples are clipped to 0 (with a warning); NaN or inf raises ``ValueError``.
     * Grey images are copied to three channels; an alpha channel is dropped (with a warning
       when it is not fully opaque).
+    * Palette images are expanded through their colour map (8-bit when the map holds 8-bit
+      colours), MinIsWhite TIFFs are inverted, and the Orientation tag (EXIF, or TIFF tag
+      274) is applied.
+    * CMYK, YCbCr (other than JPEG-compressed TIFF, which is decoded to RGB), CIELab and the
+      other colour models raise ``ValueError``.
 
-    Problems with the file's content raise ``ValueError`` naming the file; a missing file
-    raises ``FileNotFoundError``.
+    Problems with the file's content, including an empty or unrecognised file, raise a
+    one-line ``ValueError`` naming the file; a missing file raises ``FileNotFoundError``.
     """
     path = Path(path)
     with path.open("rb") as handle:
         head = handle.read(8)
-    raw = _decode(path, head)
     warnings: list[str] = []
+    raw = _decode(path, head, warnings)
     colour = _rgb_channels(path, raw, warnings)
 
     kind = colour.dtype.kind
@@ -183,22 +218,176 @@ def read_image(path: str | Path) -> ImageInput:
     return ImageInput(linear, bit_depth, encoding, tuple(warnings))
 
 
-def _decode(path: Path, head: bytes) -> np.ndarray:
+def _decode(path: Path, head: bytes, warnings: list[str]) -> np.ndarray:
+    """Decode ``path`` to grey, grey + alpha, RGB or RGBA samples, as a viewer shows it."""
+    if not head:
+        raise ValueError(f"{path}: the file is empty")
+    if head.startswith(_PNG_SIGNATURE):
+        array, orientation = _decode_png(path, warnings)
+    elif head[:4] in _TIFF_SIGNATURES:
+        array, orientation = _decode_tiff(path)
+    else:
+        array, orientation = _decode_pillow(path, warnings)
+    return _orient(array, orientation, warnings)
+
+
+@contextmanager
+def _decoding(path: Path) -> Iterator[None]:
+    """Turn any failure of a decoder into a one-line ``ValueError`` naming ``path``.
+
+    Decoders raise many exception types on malformed files (``struct.error``, ``EOFError``,
+    ``SyntaxError``, ...), so everything except a missing file and lack of memory is caught.
+    """
     try:
-        if head.startswith(_PNG_SIGNATURE):
-            return np.asarray(imagecodecs.png_decode(path.read_bytes()))
-        if head[:4] in _TIFF_SIGNATURES:
-            with tifffile.TiffFile(path) as tif:
-                page = tif.pages.first
-                array = page.asarray()
-                if array.ndim == 3 and page.planarconfig == tifffile.PLANARCONFIG.SEPARATE:
-                    array = np.moveaxis(array, 0, -1)
-                return array
-        return np.asarray(iio.imread(path, index=0))
-    except (OSError, ValueError, TypeError, RuntimeError, imagecodecs.PngError) as exc:
-        if isinstance(exc, FileNotFoundError):
-            raise
-        raise ValueError(f"{path}: cannot decode image: {exc}") from exc
+        yield
+    except (FileNotFoundError, MemoryError):
+        raise
+    except UnidentifiedImageError:
+        raise ValueError(
+            f"{path}: not a recognised image file (expected PNG, TIFF, JPEG or another format "
+            "that Pillow reads)"
+        ) from None
+    except Exception as exc:
+        message = " ".join(str(exc).split()) or type(exc).__name__
+        raise ValueError(f"{path}: cannot decode image: {message}") from exc
+
+
+def _decode_png(path: Path, warnings: list[str]) -> tuple[np.ndarray, object]:
+    data = path.read_bytes()
+    with _decoding(path):
+        array = np.asarray(imagecodecs.png_decode(data))
+    try:
+        orientation = _png_orientation(data)
+    except Exception:  # noqa: BLE001 - a broken eXIf chunk must not stop the image
+        warnings.append(_UNREADABLE_EXIF)
+        orientation = None
+    return array, orientation
+
+
+def _png_orientation(data: bytes) -> object:
+    """The Orientation value of the PNG's ``eXIf`` chunk, or ``None`` if it has none."""
+    pos = len(_PNG_SIGNATURE)
+    while pos + 8 <= len(data):
+        length = int.from_bytes(data[pos : pos + 4], "big")
+        tag = data[pos + 4 : pos + 8]
+        if tag == b"eXIf":
+            exif = Image.Exif()
+            exif.load(data[pos + 8 : pos + 8 + length])
+            return exif.get(_ORIENTATION_TAG)
+        if tag == b"IEND":
+            break
+        pos += 12 + length
+    return None
+
+
+def _decode_tiff(path: Path) -> tuple[np.ndarray, object]:
+    with _decoding(path), tifffile.TiffFile(path) as tif:
+        page = tif.pages.first
+        array = page.asarray()
+        photometric = page.photometric
+        compression = page.compression
+        bits = page.bitspersample
+        colormap = page.colormap
+        orientation = page.tags.valueof(_ORIENTATION_TAG)
+        if array.ndim == 3 and page.planarconfig == tifffile.PLANARCONFIG.SEPARATE:
+            array = np.moveaxis(array, 0, -1)
+
+    if photometric in _GREY_OR_RGB:
+        return array, orientation
+    if photometric == _PHOTOMETRIC.YCBCR and compression == tifffile.COMPRESSION.JPEG:
+        return array, orientation
+    if photometric == _PHOTOMETRIC.MINISWHITE:
+        return _invert_min_is_white(path, array, bits), orientation
+    if photometric == _PHOTOMETRIC.PALETTE:
+        return _expand_palette(path, array, colormap), orientation
+    try:
+        name = _PHOTOMETRIC(photometric).name
+    except ValueError:
+        name = str(int(photometric))
+    if name == "SEPARATED":
+        name = "SEPARATED (CMYK)"
+    raise ValueError(
+        f"{path}: unsupported TIFF photometric interpretation {name}; convert the image to "
+        "RGB or greyscale first"
+    )
+
+
+def _invert_min_is_white(path: Path, array: np.ndarray, bits: int) -> np.ndarray:
+    """MinIsWhite grey (0 is white) as MinIsBlack; extra samples such as alpha are kept."""
+    if array.dtype == np.bool_:
+        flipped = np.logical_not(array)
+    elif array.dtype.kind == "u":
+        flipped = ((1 << int(bits)) - 1 - array.astype(np.int64)).astype(array.dtype)
+    else:
+        raise ValueError(
+            f"{path}: MinIsWhite TIFF with {array.dtype} samples is not supported; expected "
+            "unsigned integer or bilevel samples"
+        )
+    if array.ndim == 3:  # grey plus extra samples: invert only the grey one
+        flipped = np.concatenate([flipped[..., :1], array[..., 1:]], axis=-1)
+    return flipped
+
+
+def _expand_palette(path: Path, array: np.ndarray, colormap: np.ndarray | None) -> np.ndarray:
+    """Palette indices ``(H, W)`` as RGB through the TIFF colour map ``(3, N)``."""
+    if colormap is None:
+        raise ValueError(f"{path}: palette TIFF without a colour map")
+    if array.ndim != 2 or array.dtype.kind != "u":
+        raise ValueError(
+            f"{path}: unsupported palette TIFF: expected one unsigned-integer index per pixel, "
+            f"got samples of shape {array.shape[2:]} and type {array.dtype}"
+        )
+    colours = np.asarray(colormap, dtype=np.uint16)
+    if colours.ndim != 2 or colours.shape[0] != 3 or int(array.max()) >= colours.shape[1]:
+        raise ValueError(
+            f"{path}: palette index {int(array.max())} lies outside the colour map of shape "
+            f"{colours.shape}"
+        )
+    # Colour maps hold 16-bit values. Writers store 8-bit colours as v * 257 (full scale) or
+    # v * 256 (Pillow), and some store the raw 8-bit values, which libtiff also accepts when
+    # no entry exceeds 255; those maps are read back as 8-bit colours.
+    if colours.max() <= 255:
+        colours = colours.astype(np.uint8)
+    elif not np.any(colours % 257):
+        colours = (colours // 257).astype(np.uint8)
+    elif not np.any(colours % 256):
+        colours = (colours // 256).astype(np.uint8)
+    return np.moveaxis(colours[:, array], 0, -1)
+
+
+def _decode_pillow(path: Path, warnings: list[str]) -> tuple[np.ndarray, object]:
+    with _decoding(path), Image.open(path) as image:
+        mode, image_format = image.mode, image.format
+        try:
+            orientation = image.getexif().get(_ORIENTATION_TAG)
+        except Exception:  # noqa: BLE001 - broken EXIF data must not stop the image
+            warnings.append(_UNREADABLE_EXIF)
+            orientation = None
+        if mode == "P":
+            has_alpha = "transparency" in image.info
+            array = np.asarray(image.convert("RGBA" if has_alpha else "RGB"))
+        elif mode in _PILLOW_CONVERSIONS:
+            array = np.asarray(image.convert(_PILLOW_CONVERSIONS[mode]))
+        elif mode in _PILLOW_MODES:
+            array = np.asarray(image)
+        else:
+            array = None
+    if array is None:
+        raise ValueError(
+            f"{path}: unsupported colour mode {mode} in this {image_format} image; convert the "
+            "image to RGB or greyscale first"
+        )
+    return array, orientation
+
+
+def _orient(array: np.ndarray, orientation: object, warnings: list[str]) -> np.ndarray:
+    """Apply an Orientation tag value (``None``: no tag) to the decoded array."""
+    if orientation is None:
+        return array
+    if isinstance(orientation, Integral) and int(orientation) in _ORIENTATIONS:
+        return _ORIENTATIONS[int(orientation)](array)
+    warnings.append(f"unknown Orientation tag value {orientation!r} ignored")
+    return array
 
 
 def _rgb_channels(path: Path, raw: np.ndarray, warnings: list[str]) -> np.ndarray:

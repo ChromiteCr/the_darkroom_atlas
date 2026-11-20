@@ -123,6 +123,16 @@ def test_run_ev_out_of_range(tmp_path, cli, ev):
     assert not (tmp_path / "out").exists()
 
 
+@pytest.mark.parametrize(("name", "content"), [("empty.png", b""), ("tiny.png", b"ab")])
+def test_run_unreadable_input(tmp_path, cli, name, content):
+    image = tmp_path / name
+    image.write_bytes(content)
+    result = cli.invoke(app, _run_args(tmp_path / "out", image=image))
+    line = _assert_one_line_error(result)
+    assert name in line
+    assert "pip" not in line
+
+
 def test_check_data_ok(cli):
     result = cli.invoke(app, ["check-data"])
     assert result.exit_code == 0, result.output

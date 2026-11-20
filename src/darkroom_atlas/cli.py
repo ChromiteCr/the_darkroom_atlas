@@ -50,7 +50,10 @@ DataOption = Annotated[
 @app.command("run")
 def run_command(
     input_path: Annotated[
-        Path, typer.Argument(metavar="INPUT", help="Input image (PNG or TIFF).", show_default=False)
+        Path,
+        typer.Argument(
+            metavar="INPUT", help="Input image (PNG, TIFF or JPEG).", show_default=False
+        ),
     ],
     material: Annotated[
         str, typer.Option("--material", "-m", help="Material id, e.g. ideal.", show_default=False)
