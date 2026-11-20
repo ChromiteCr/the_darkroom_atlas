@@ -19,6 +19,7 @@ that the film receives a chosen photometric exposure:
 """
 
 import math
+import sys
 from numbers import Real
 
 import numpy as np
@@ -52,7 +53,9 @@ def scene_light(
 ) -> Light:
     """Light on the film plane for a linear sRGB scene ``(H, W, 3)``; see the module docs.
 
-    ``linear_rgb`` must be finite and non-negative. ``meta`` of the result records
+    ``linear_rgb`` must be finite and non-negative. Settings so extreme that the energy scale
+    ``k`` is not a normal floating-point number or the photon flux is not finite (for
+    example ``|ev|`` near 1000) raise ``ValueError`` naming them. ``meta`` of the result records
     ``illuminant iso ev time_s metering`` (``"average"`` or ``"fixed"``) and
     ``energy_scale_j_per_um2`` (``k``).
     """
@@ -74,15 +77,27 @@ def scene_light(
         white = _positive_finite("white_exposure_lux_s", white_exposure_lux_s)
         scale = white / K_M * _J_PER_M2_TO_J_PER_UM2
         metering = "fixed"
+        settings = f"white_exposure_lux_s={white!r}"
     else:
-        target_lux_s = (10.0 / iso) * 2.0**ev
+        try:
+            target_lux_s = (10.0 / iso) * 2.0**ev
+        except OverflowError:  # 2.0**ev raises where the other operations give inf
+            target_lux_s = math.inf
         mean_luminance = float(np.mean(energy @ cmf_xyz(grid)[:, 1]))
         if not mean_luminance >= DARK_FRAME_LUMINANCE:
             mean_luminance = METERED_GREY
         scale = target_lux_s / (K_M * mean_luminance) * _J_PER_M2_TO_J_PER_UM2
         metering = "average"
+        settings = f"iso={iso!r} and ev={ev!r}"
 
-    flux = energy * (scale / time_s / photon_energy_j(grid.wavelengths))
+    # The energy scale must be a normal float (the readout divides by it) and the flux finite.
+    with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+        flux = energy * (scale / time_s / photon_energy_j(grid.wavelengths))
+    if not (math.isfinite(scale) and scale >= sys.float_info.min and np.all(np.isfinite(flux))):
+        raise ValueError(
+            f"{settings} with time_s={time_s!r} put the exposure outside the floating-point "
+            f"range (energy scale {scale:.3g} J/um^2); use less extreme values"
+        )
     flux.flags.writeable = False  # owned here, so Light can keep it without a copy
     meta = {
         "illuminant": str(illuminant),

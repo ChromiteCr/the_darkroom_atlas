@@ -18,7 +18,8 @@ Tiling: when ``RunContext.tile_px`` is set, a step whose handler declares a fini
 ``ceil(interaction_range_um / pixel_pitch_um)`` pixels) cut with
 :meth:`EmulsionState.crop` and stitched back with :meth:`EmulsionState.paste`; a step with
 ``interaction_range_um=None`` always receives the whole frame. A tiled handler must return
-the same field names and the same ``meta`` for every tile: the stitched state takes its
+the same field names, each with the same dtype and trailing dimensions, and the same
+``meta`` for every tile (differing fields raise ``ValueError``): the stitched state takes its
 ``meta`` from the first tile, and the handler must not touch the history (the pipeline
 appends the step's record).
 """
@@ -271,19 +272,34 @@ def _run_step(
     # Start from no fields, so that fields the step removes stay removed, as untiled.
     assembled = replace(state, fields={})
     keys: frozenset[str] | None = None
+    layouts: dict[str, str] = {}
     meta: Mapping[str, Any] = state.meta
     for tile in iter_tiles(state.geometry.shape_hw, tile_px, overlap_px):
         window = state.crop(tile.outer)
         result = _checked_result(handler.fn(window, step, ctx), window, what)
         if keys is None:
             keys, meta = frozenset(result.fields), result.meta
+            layouts = {key: _layout(value) for key, value in result.fields.items()}
         elif frozenset(result.fields) != keys:
             raise ValueError(
                 f"{what} returned fields {sorted(result.fields)} for tile {tile.inner} but "
                 f"{sorted(keys)} for the first tile; every tile must give the same fields"
             )
+        else:
+            for key, value in result.fields.items():
+                if _layout(value) != layouts[key]:
+                    raise ValueError(
+                        f"{what} returned field {key!r} as {_layout(value)} for tile "
+                        f"{tile.inner} but as {layouts[key]} for the first tile; every tile "
+                        "must give each field the same dtype and trailing dimensions"
+                    )
         assembled = assembled.paste(result, tile)
     return replace(assembled, meta=meta)
+
+
+def _layout(field_value: np.ndarray) -> str:
+    """A field's dtype and trailing dimensions, which every tile must agree on."""
+    return f"{field_value.dtype} with trailing dimensions {field_value.shape[2:]}"
 
 
 def _checked_result(result: object, given: EmulsionState, what: str) -> EmulsionState:

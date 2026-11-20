@@ -114,6 +114,15 @@ def test_run_bad_values(tmp_path, cli, extra):
     _assert_one_line_error(result)
 
 
+@pytest.mark.parametrize("ev", ["1024", "1100", "1010", "-1100"])
+def test_run_ev_out_of_range(tmp_path, cli, ev):
+    result = cli.invoke(app, _run_args(tmp_path / "out", f"--ev={ev}"))
+    line = _assert_one_line_error(result)
+    assert "ev" in line
+    assert "energy_scale_j_per_um2" not in line
+    assert not (tmp_path / "out").exists()
+
+
 def test_check_data_ok(cli):
     result = cli.invoke(app, ["check-data"])
     assert result.exit_code == 0, result.output

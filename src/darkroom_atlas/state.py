@@ -236,10 +236,11 @@ class EmulsionState:
         ``tile_state`` must be the state of window ``tile.outer`` of this frame (for example
         a processed ``self.crop(tile.outer)``). For each of its fields, the
         ``tile.inner_in_outer`` part is written at ``tile.inner``; fields of this state that
-        ``tile_state`` lacks are kept as they are. A field this state does not have yet, or
-        has with different trailing dimensions or dtype, starts as zeros with the trailing
-        dimensions and dtype of ``tile_state``'s field, so pasting a full set of tiles
-        defines it everywhere.
+        ``tile_state`` lacks are kept as they are. A field this state does not have yet
+        starts as zeros with the trailing dimensions and dtype of ``tile_state``'s field, so
+        pasting a full set of tiles defines it everywhere. A field this state has with other
+        trailing dimensions or another dtype raises ``ValueError`` (rather than silently
+        discarding what was pasted before).
         """
         if not isinstance(tile_state, EmulsionState):
             raise TypeError(f"tile_state must be an EmulsionState, got {type(tile_state)}")
@@ -265,14 +266,16 @@ class EmulsionState:
         for key, value in tile_state.fields.items():
             source = value[inner_in_outer]
             current = self.fields.get(key)
-            if (
-                current is not None
-                and current.shape[2:] == source.shape[2:]
-                and current.dtype == source.dtype
-            ):
-                target = current.copy()
-            else:
+            if current is None:
                 target = np.zeros((*self.geometry.shape_hw, *source.shape[2:]), source.dtype)
+            elif current.shape[2:] != source.shape[2:] or current.dtype != source.dtype:
+                raise ValueError(
+                    f"cannot paste field {key!r}: the tile has {source.dtype} with trailing "
+                    f"dimensions {source.shape[2:]}, but this state has {current.dtype} with "
+                    f"trailing dimensions {current.shape[2:]}"
+                )
+            else:
+                target = current.copy()
             target[inner] = source
             target.flags.writeable = False
             fields[key] = target

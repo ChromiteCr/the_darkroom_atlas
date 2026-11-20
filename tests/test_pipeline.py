@@ -258,6 +258,37 @@ def test_global_step_not_tiled(scratch, exposed, identity, lib):
     np.testing.assert_array_equal(result.get("x", "signal"), exposed.get("x", "exposure"))
 
 
+@pytest.mark.parametrize(
+    ("first", "rest", "fragment"),
+    [
+        (np.float32, np.float64, "float32"),  # only the tile at the origin differs
+        ((), (2,), "(2,)"),  # trailing dimensions differ
+    ],
+)
+def test_tiled_rejects_inconsistent_tile_fields(
+    scratch, exposed, identity, lib, first, rest, fragment
+):
+    # Each tile must return each field with the same dtype and trailing shape; stitching
+    # used to restart the field from zeros, silently losing the tiles pasted before.
+    @register_step("mixedtest", StepKind.identity, interaction_range_um=0.0)
+    def mixed(state, step, ctx):
+        signal = state.get("y", "exposure")
+        kind = first if state.geometry.origin_px == (0, 0) else rest
+        if isinstance(kind, tuple):
+            signal = np.broadcast_to(
+                signal[(...,) + (np.newaxis,) * len(kind)], (*signal.shape, *kind)
+            )
+        else:
+            signal = signal.astype(kind)
+        return state.with_fields({"y/signal": signal})
+
+    state = _as_model(exposed, "mixedtest")
+    with pytest.raises(ValueError, match="y/signal") as caught:
+        process(state, identity, RunContext(lib, tile_px=16))
+    assert fragment in str(caught.value)
+    assert "mixedtest" in str(caught.value)
+
+
 def test_tiled_step_may_drop_fields(scratch, exposed, identity, lib):
     @register_step("droptest", StepKind.identity, interaction_range_um=0.0)
     def replace_all(state, step, ctx):

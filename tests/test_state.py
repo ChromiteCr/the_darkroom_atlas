@@ -133,6 +133,20 @@ def test_paste_into_existing_field(empty):
     np.testing.assert_array_equal(base.get("x", "exposure"), np.zeros((H, W)))
 
 
+@pytest.mark.parametrize(
+    "patch_value",
+    [np.ones((20, 20), np.float32), np.ones((20, 20, 2))],
+    ids=["dtype", "trailing-shape"],
+)
+def test_paste_rejects_incompatible_field(empty, patch_value):
+    # Restarting the field from zeros would silently discard what was already assembled.
+    base = empty.with_fields({"x/exposure": np.full((H, W), 5.0)})
+    tile = next(iter(iter_tiles((H, W), 16, 4)))
+    patch = base.crop(tile.outer).with_fields({"x/exposure": patch_value})
+    with pytest.raises(ValueError, match="x/exposure"):
+        base.paste(patch, tile)
+
+
 def test_paste_rejects_mismatched_tile(empty):
     tiles = list(iter_tiles((H, W), 16, 4))
     wrong = empty.crop(tiles[1].outer)

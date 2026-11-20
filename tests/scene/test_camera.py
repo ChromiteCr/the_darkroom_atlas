@@ -94,6 +94,36 @@ def test_rejects_bad_arguments(image):
         scene_light(np.full((2, 2, 3), -0.5))
 
 
+@pytest.mark.parametrize("ev", [1010.0, 1023.0, 1024.0, 1100.0, -1060.0, -1100.0])
+def test_rejects_ev_outside_float_range(image, ev):
+    # 2**ev overflowing (ev >= 1024), the flux overflowing (ev near 1010) and the energy
+    # scale underflowing to 0 or a subnormal (ev near -1060) are all one ValueError naming ev.
+    with pytest.raises(ValueError, match="ev"):
+        scene_light(image, ev=ev)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"iso": 1e-310},
+        {"time_s": 1e-320},
+        {"white_exposure_lux_s": 1e308},
+        {"white_exposure_lux_s": 1e-320},
+    ],
+)
+def test_rejects_settings_outside_float_range(image, kwargs):
+    name = next(iter(kwargs))
+    with pytest.raises(ValueError, match=name):
+        scene_light(image, **kwargs)
+
+
+@pytest.mark.parametrize("ev", [-100.0, 100.0])
+def test_large_but_representable_ev(image, ev):
+    light = scene_light(image, ev=ev)
+    assert np.all(np.isfinite(light.photon_flux))
+    assert _mean_exposure(light) == pytest.approx(0.1 * 2.0**ev, rel=1e-9)
+
+
 def test_tungsten_shifts_spectrum():
     white = np.ones((1, 1, 3))
     wl = DEFAULT_GRID.wavelengths
