@@ -27,11 +27,23 @@ atlas = "darkroom_atlas.cli:app"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# Editable installs also put the repository root on sys.path, so that the digitising tool
+# under tools/ can be run as `python -I -m tools.digitize` (-I drops the working directory).
+# The built wheel still contains only src/darkroom_atlas.
+[tool.hatch.build.targets.wheel]
+packages = ["src/darkroom_atlas"]
+dev-mode-dirs = ["src", "."]
+
 [dependency-groups]
 dev = [
     "array-api-strict>=2.6.1",
     "pytest>=9.2.0",
     "ruff>=0.17.6",
+]
+digitize = [
+    "pdfminer-six>=20260107",
+    "pdfplumber>=0.11.11",
+    "pypdfium2>=5.15.2",
 ]
 
 [tool.pytest.ini_options]
