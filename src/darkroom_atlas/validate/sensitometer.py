@@ -3,6 +3,8 @@
 :class:`StripResult` holds the densities read off one step wedge at a series of development
 times: ``log_h`` (J,) in log10(lux*s), ``times_s`` (T,), visual and Type 2 densities (T, J),
 and the densities of the unexposed patch (T,). All arrays are float64 and read-only.
+Densities may be non-finite (a failed strip); the metrics then return NaN with a reason
+(spec 8.2) instead of raising.
 """
 
 from dataclasses import dataclass
@@ -40,6 +42,8 @@ class StripResult:
             raise ValueError(
                 f"StripResult.times_s must be 1-D, non-empty, got {self.times_s.shape}"
             )
+        if not (np.all(np.isfinite(self.times_s)) and np.all(np.diff(self.times_s) > 0.0)):
+            raise ValueError("StripResult.times_s must be finite and strictly increasing")
         n_t, n_j = self.times_s.size, self.log_h.size
         for name in ("visual", "type2"):
             if getattr(self, name).shape != (n_t, n_j):

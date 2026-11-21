@@ -1,4 +1,4 @@
-"""Sensitometric metrics (spec D1 6.3-6.5, 6.10, 12.9)."""
+"""Sensitometric metrics (spec D1 6.3-6.5, 6.9 step 3, 6.10, 8.2, 12.9)."""
 
 import math
 
@@ -9,14 +9,22 @@ from scipy.interpolate import PchipInterpolator
 from darkroom_atlas.data.models import Agitation, Tank
 from darkroom_atlas.validate.conditions import Condition
 from darkroom_atlas.validate.metrics import (
+    MetricValue,
     SpeedResult,
     average_gradient,
+    average_gradient_detail,
     chord_contrast_index,
+    chord_contrast_index_detail,
+    ci_at_times,
     contrast_index,
+    contrast_index_detail,
+    d_min_star,
+    energy_exposure_erg_cm2,
     iso_bin,
     iso_speed,
     speed_point,
     time_to_ci,
+    time_to_ci_detail,
 )
 from darkroom_atlas.validate.sensitometer import StripResult
 
@@ -222,12 +230,134 @@ def test_curve_metrics_reject_bad_input(fn):
         fn(x, y[:-1], 0.2)
     with pytest.raises(ValueError, match="increasing"):
         fn(x[::-1], y, 0.2)
-    with pytest.raises(ValueError, match="finite"):
-        fn(x, np.where(x > -1, np.nan, y), 0.2)
+    with pytest.raises(ValueError, match="log_h must be finite"):
+        fn(np.where(x > -1, np.nan, x), y, 0.2)
     with pytest.raises(ValueError, match="at least 2"):
         fn(x[:1], y[:1], 0.2)
-    with pytest.raises(ValueError, match="finite"):
-        fn(x, y, math.nan)
+
+
+@pytest.mark.parametrize(
+    "fn",
+    [contrast_index_detail, chord_contrast_index_detail, average_gradient_detail],
+    ids=lambda f: f.__name__,
+)
+def test_curve_metrics_nan_with_reason_on_undefined_input(fn):
+    # Spec 8.2: a failed strip (non-finite densities) or an undefined D_min gives NaN with a
+    # reason, never an exception, so the metric is counted as failed rather than skipped.
+    x = np.linspace(-4.0, 1.0, 501)
+    y = _hinge(x, 0.2, 0.7, -3.0)
+    result = fn(x, np.where(x > -1, np.nan, y), 0.2)
+    assert isinstance(result, MetricValue)
+    assert math.isnan(result.value) and "non-finite" in result.reason
+    result = fn(x, y, math.nan)
+    assert math.isnan(result.value) and "not finite" in result.reason
+    good = fn(x, y, 0.2)
+    assert math.isfinite(good.value) and good.reason == ""
+
+
+def test_ci_detail_reason_on_short_curve():
+    x = np.linspace(-3.0, -1.5, 151)
+    result = contrast_index_detail(x, _hinge(x, 0.2, 0.3, -2.8), 0.2)
+    assert math.isnan(result.value) and "collinear" in result.reason
+    result = chord_contrast_index_detail(x, _hinge(x, 0.2, 0.3, -2.8), 0.2)
+    assert math.isnan(result.value) and "2.0 log H" in result.reason
+
+
+# ---- 6.3 step 2 D_min* -----------------------------------------------------------------
+
+
+def _sim_strip(times_s, x_lo, x_hi, fog_patch):
+    """A smooth synthetic strip on [x_lo, x_hi] whose unexposed patch differs from D(x_lo)."""
+    x = np.append(np.arange(x_lo, x_hi, 0.01), x_hi)
+    curves = []
+    for g in (0.48, 0.58, 0.68, 0.78):
+        w = 0.25
+        curves.append(0.24 + g * w * np.logaddexp(0.0, (x + 2.9) / w))
+    curves = np.array(curves)
+    fog = np.full(len(times_s), fog_patch)
+    return StripResult(
+        condition=_condition(tuple(times_s)),
+        log_h=x,
+        times_s=np.asarray(times_s, dtype=float),
+        visual=curves,
+        type2=curves.copy(),
+        base_fog_visual=fog,
+        base_fog_type2=fog,
+    )
+
+
+def test_dmin_star_same_operator(read_reference):
+    minutes = (6, 8, 10, 12)
+    times = [60.0 * m for m in minutes]
+    refs = [read_reference(f"tri-x-400/char-35mm-d76-{m:02d}min.csv")[1:] for m in minutes]
+    x_min = min(float(x[0]) for x, _ in refs)
+    x_max = max(float(x[-1]) for x, _ in refs)
+    # Spec 6.1: the strip spans the reference range widened by 0.30 on each side.
+    sim = _sim_strip(times, x_min - 0.30, x_max + 0.30, fog_patch=0.31)
+
+    def two_sided(shift):
+        shifted = [(x, y + shift) for x, y in refs]
+        stars = [d_min_star(x, y, sim.log_h, sim.visual[i]) for i, (x, y) in enumerate(shifted)]
+        ref_star = np.array([s[0] for s in stars])
+        sim_star = np.array([s[1] for s in stars])
+        ref_speed = iso_speed(
+            _strip_from_curves(shifted, times), density="visual", base_fog=ref_star
+        )
+        sim_speed = iso_speed(sim, density="visual", base_fog=sim_star)
+        ci_diff = [
+            contrast_index(x, y, ref_star[i])
+            - contrast_index(sim.log_h, sim.visual[i], sim_star[i])
+            for i, (x, y) in enumerate(shifted)
+        ]
+        return ref_star, sim_star, ref_speed.log_h_m - sim_speed.log_h_m, np.array(ci_diff)
+
+    ref_star, sim_star, d_log_h_m, d_ci = two_sided(0.0)
+    for i, (x, y) in enumerate(refs):
+        # Both sides are read at the reference's leftmost log H, not at the zero patch.
+        assert ref_star[i] == y[0]
+        expected = float(PchipInterpolator(sim.log_h, sim.visual[i])(x[0]))
+        assert sim_star[i] == pytest.approx(expected, abs=1e-15)
+        assert abs(sim_star[i] - sim.base_fog_visual[i]) > 0.01
+    assert math.isfinite(d_log_h_m) and np.all(np.isfinite(d_ci))
+
+    ref_star2, sim_star2, d_log_h_m2, d_ci2 = two_sided(0.02)
+    np.testing.assert_allclose(ref_star2, ref_star + 0.02, rtol=0, atol=1e-12)
+    np.testing.assert_array_equal(sim_star2, sim_star)
+    assert abs(d_log_h_m2 - d_log_h_m) <= 1e-9
+    np.testing.assert_allclose(d_ci2, d_ci, rtol=0, atol=1e-9)
+
+
+def test_dmin_star_nan_outside_simulated_range_and_bad_input():
+    x_ref = np.linspace(-3.0, 0.0, 31)
+    y_ref = _hinge(x_ref, 0.2, 0.6, -2.5)
+    x_sim = np.linspace(-2.5, 0.5, 31)
+    ref, sim = d_min_star(x_ref, y_ref, x_sim, _hinge(x_sim, 0.2, 0.6, -2.5))
+    assert ref == y_ref[0] and math.isnan(sim)
+    x_sim = np.linspace(-3.5, 0.5, 41)
+    y_sim = _hinge(x_sim, 0.2, 0.6, -2.5)
+    assert math.isnan(d_min_star(x_ref, y_ref, x_sim, np.full_like(x_sim, np.nan))[1])
+    with pytest.raises(ValueError, match="density_ref"):
+        d_min_star(x_ref, np.where(x_ref > -1, np.nan, y_ref), x_sim, y_sim)
+    with pytest.raises(ValueError, match="same length"):
+        d_min_star(x_ref, y_ref[:-1], x_sim, y_sim)
+    with pytest.raises(ValueError, match="increasing"):
+        d_min_star(x_ref, y_ref, x_sim[::-1], y_sim)
+
+
+def test_iso_speed_nan_with_reason_on_failed_strip():
+    x = np.linspace(-4.0, 0.0, 401)
+    curves = np.full((2, x.size), np.nan)
+    strip = StripResult(
+        _condition((300.0, 600.0)), x, [300.0, 600.0], curves, curves, [0.05, 0.05], [0.05, 0.05]
+    )
+    result = iso_speed(strip)
+    assert math.isnan(result.log_h_m) and "non-finite" in result.reason
+    good = np.array([_hinge(x, 0.05, g, -3.0) for g in (0.5, 0.7)])
+    strip = StripResult(
+        _condition((300.0, 600.0)), x, [300.0, 600.0], good, good, [0.05, 0.05], [0.05, 0.05]
+    )
+    result = iso_speed(strip, base_fog=np.array([math.nan, math.nan]))
+    assert math.isnan(result.log_h_m) and "base_fog is not finite" in result.reason
 
 
 # ---- 6.10 time to CI -------------------------------------------------------------------
@@ -255,6 +385,79 @@ def test_time_to_ci_rejects_bad_input():
         time_to_ci(np.array([2.0, 1.0]), np.array([0.5, 0.6]), 0.55)
     with pytest.raises(ValueError, match="same length"):
         time_to_ci(np.array([1.0, 2.0]), np.array([0.5]), 0.55)
+    with pytest.raises(ValueError, match="target"):
+        time_to_ci(np.array([1.0, 2.0]), np.array([0.5, 0.6]), math.nan)
+
+
+def test_time_to_ci_does_not_bridge_undefined_values():
+    t = np.array([300.0, 420.0, 540.0, 660.0, 780.0])
+    ci = np.array([0.40, 0.50, math.nan, 0.70, 0.80])
+    result = time_to_ci_detail(t, ci, 0.60)
+    assert math.isnan(result.value) and "undefined" in result.reason
+    assert time_to_ci(t, ci, 0.75) == pytest.approx(720.0, abs=1e-6)
+    assert time_to_ci(t, ci, 0.45) == pytest.approx(360.0, abs=1e-6)
+    assert "does not reach" in time_to_ci_detail(t, ci, 0.9).reason
+    assert "above" in time_to_ci_detail(t, ci, 0.3).reason
+    assert "no finite" in time_to_ci_detail(t, np.full(5, math.nan), 0.5).reason
+
+
+# ---- 6.10 / 7.2 CI at tabulated times --------------------------------------------------
+
+
+def test_ci_at_times_interpolates_monotone_series():
+    t = np.arange(0.0, 900.0 + 1.0, 15.0)
+    ci = 0.9 * (1.0 - np.exp(-t / 400.0))
+    at = np.array([[15.0, 397.5], [450.0, 900.0]])
+    out = ci_at_times(t, ci, at)
+    assert out.shape == at.shape and out.dtype == np.float64
+    assert not out.flags.writeable
+    assert out[0, 0] == pytest.approx(ci[1], abs=1e-15)
+    assert out[1, 1] == pytest.approx(ci[-1], abs=1e-15)
+    np.testing.assert_allclose(out, 0.9 * (1.0 - np.exp(-at / 400.0)), rtol=0, atol=1e-5)
+    # Monotone (PCHIP keeps the data's monotonicity) on a fine grid.
+    fine = ci_at_times(t, ci, np.linspace(0.0, 900.0, 5001))
+    assert np.all(np.diff(fine) >= 0.0)
+    # Linear data is reproduced exactly.
+    lin = ci_at_times(t, 0.2 + 0.001 * t, np.array([7.0, 333.3]))
+    np.testing.assert_allclose(lin, [0.207, 0.5333], rtol=0, atol=1e-12)
+    assert ci_at_times(t, ci, 400.0).shape == ()
+
+
+def test_ci_at_times_nan_outside_and_across_undefined_values():
+    t = np.array([300.0, 420.0, 540.0, 660.0, 780.0])
+    ci = np.array([0.40, 0.50, math.nan, 0.70, 0.80])
+    out = ci_at_times(t, ci, np.array([299.0, 360.0, 420.0, 480.0, 540.0, 600.0, 700.0, 781.0]))
+    assert math.isnan(out[0]) and math.isnan(out[-1])
+    assert out[1] == pytest.approx(0.45) and out[2] == pytest.approx(0.50)
+    assert all(math.isnan(v) for v in out[3:6])
+    assert out[6] == pytest.approx(0.70 + 0.1 * 40.0 / 120.0)
+    single = ci_at_times(t, np.array([math.nan, 0.5, math.nan, 0.7, 0.8]), np.array([420.0, 430.0]))
+    assert single[0] == 0.5 and math.isnan(single[1])
+
+
+def test_ci_at_times_rejects_bad_input():
+    t = np.array([300.0, 420.0])
+    with pytest.raises(ValueError, match="increasing"):
+        ci_at_times(t[::-1], np.array([0.5, 0.6]), np.array([350.0]))
+    with pytest.raises(ValueError, match="same length"):
+        ci_at_times(t, np.array([0.5]), np.array([350.0]))
+    with pytest.raises(ValueError, match="at_s"):
+        ci_at_times(t, np.array([0.5, 0.6]), np.array([math.nan]))
+    with pytest.raises(ValueError, match="empty"):
+        ci_at_times(np.array([]), np.array([]), np.array([1.0]))
+
+
+# ---- 6.9 step 3 energy conversion ------------------------------------------------------
+
+
+def test_spectral_energy_conversion():
+    # Spec 6.9 step 3 (LAT 3.3): at 550 nm, 1 erg/cm2 = 2769 photons/um2, relative 1e-3.
+    photons_per_erg_cm2 = 1.0 / energy_exposure_erg_cm2(1.0, 550.0)
+    assert photons_per_erg_cm2 == pytest.approx(2769.0, rel=1e-3)
+    assert energy_exposure_erg_cm2(2769.0, 550.0) == pytest.approx(1.0, rel=1e-3)
+    out = energy_exposure_erg_cm2(np.array([1.0, 2.0]), np.array([400.0, 400.0]))
+    assert out.shape == (2,) and out[1] == pytest.approx(2.0 * out[0])
+    assert energy_exposure_erg_cm2(1.0, 400.0) == pytest.approx(550.0 / 400.0 / 2768.8, rel=1e-3)
 
 
 # ---- StripResult -----------------------------------------------------------------------
@@ -272,3 +475,7 @@ def test_strip_result_is_read_only_and_checks_shapes():
         StripResult(_condition((60.0, 120.0)), x, [60.0, 120.0], d, d, [0, 0], [0])
     with pytest.raises(ValueError, match="log_h"):
         StripResult(_condition((60.0, 120.0)), x[::-1], [60.0, 120.0], d, d, [0, 0], [0, 0])
+    with pytest.raises(ValueError, match="times_s"):
+        StripResult(_condition((60.0, 120.0)), x, [120.0, 60.0], d, d, [0, 0], [0, 0])
+    with pytest.raises(ValueError, match="times_s"):
+        StripResult(_condition((60.0, 120.0)), x, [60.0, math.nan], d, d, [0, 0], [0, 0])
