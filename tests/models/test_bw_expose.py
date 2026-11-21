@@ -159,6 +159,16 @@ def reference_fields(lib, film):
     }
 
 
+def test_expose_workers_with_scratch_dir(lib, film, tmp_path, reference_fields):
+    # Workers read the convolution source from a file in the scratch directory; the file
+    # is removed afterwards and the result is unchanged.
+    ctx = RunContext(lib, long_edge_mm=55.0, workers=3, scratch_dir=tmp_path)
+    state = expose(film, _tiling_light(), TIME_S, ctx)
+    for key, ref in reference_fields.items():
+        assert np.array_equal(state.fields[key], ref), key
+    assert not list(tmp_path.rglob("exposure-source-*"))
+
+
 def test_expose_bw_reports_missing_fields(lib):
     data = yaml.safe_load((FIXTURES / "films" / "test" / "bw-mechanistic.yaml").read_text())
     data = copy.deepcopy(data)

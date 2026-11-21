@@ -205,8 +205,8 @@ def exposure_fields(
             _write(assembler, block, job(block, source=source))
     else:
         scratch, owned = _scratch_dir(store)
+        path = scratch / f"exposure-source-{uuid.uuid4().hex[:12]}.npy"
         try:
-            path = scratch / f"exposure-source-{uuid.uuid4().hex[:12]}.npy"
             np.save(path, source)
             remote = partial(job, source=str(path))
             batch = _BLOCKS_PER_WORKER_BATCH * workers
@@ -216,8 +216,8 @@ def exposure_fields(
                     chunk, run_blocks(remote, chunk, workers=workers), strict=True
                 ):
                     _write(assembler, block, result)
-            path.unlink(missing_ok=True)
         finally:
+            path.unlink(missing_ok=True)
             if owned:
                 shutil.rmtree(scratch, ignore_errors=True)
     fields = assembler.finish()
