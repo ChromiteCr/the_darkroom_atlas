@@ -317,7 +317,11 @@ _RULES: tuple[_Rule, ...] = (
         evaluated=False,
     ),
     # ---- T-Max tables.yaml: push, machine, replenishment -----------------------------------
-    _rule(_MT + r"push_exposure/[a-z0-9+-]+", "unused", _R_PUSH_TRAIN),
+    _rule(
+        _MT + r"push_exposure/[a-z0-9+-]+",
+        "unused",
+        "push exposure indices: push processing has no CI target (7.2, 7.6)",
+    ),
     _rule(
         _MT + r"push_processing/[a-z0-9-]+/(xtol|hc-110|t-max-dev)(/1\+\d+)?",
         "held_out",
@@ -1039,8 +1043,8 @@ class TrainingLibrary(Library):
         item_id = PurePosixPath(str(relpath)).as_posix()
         try:
             held = classify(item_id).split == "held_out"
-        except KeyError:
-            held = False  # unregistered: the base library reports a missing curve
+        except KeyError as exc:  # fail closed, e.g. a case variant of a held-out name
+            raise LeakageError(f"{item_id!r} is not in the split registry") from exc
         if held:
             raise LeakageError(f"{item_id!r} is held out (7.6)")
         curve = self._base.reference_curve(relpath)

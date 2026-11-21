@@ -1,6 +1,7 @@
 """Train / within-check / held-out / unused split registry (spec D1 7.6, 7.7, 8.3, 8.4)."""
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -351,7 +352,9 @@ def test_developer_publication_rows(registry: splits.Registry, items: list[str])
         assert tmax and set(tmax) <= registry.held_out
         assert set(rows) - set(tmax) <= registry.unused
     # Nothing of T-MAX RS is used anywhere.
-    rs = [i for i in items if "t-max-rs" in i.split("#")[0] or "/t-max-rs" in i]
+    rs = [
+        i for i in items if re.search(r"t-?max-rs", i.split("#")[0]) or re.search(r"/t-max-rs\b", i)
+    ]
     rs = [i for i in rs if "t-max-dev+t-max-rs" not in i]
     assert rs and set(rs) <= registry.unused
 
@@ -467,6 +470,13 @@ def test_training_library_filters_held_out(
         }
         assert "kodak/t-max-100" not in materials
     assert lib.developer_facts("d-76")["facts"]
+
+
+def test_training_library_refuses_unregistered_curves(root: Path, tmp_path: Path) -> None:
+    lib = TrainingLibrary(_library_copy(root, tmp_path))
+    for rel in (f"{_M}CI-Small-Tank-XTOL.csv", f"{_M}./ci-small-tank-xtol.csv", "x/y.csv"):
+        with pytest.raises(LeakageError):
+            lib.reference_curve(rel)
 
 
 def test_training_library_requires_library() -> None:
