@@ -3,12 +3,16 @@
 Layout of a library root (``data/`` in the repository by default)::
 
     chemistry/species.yaml          every chemical species
+    chemistry/kinetics.yaml         shared kinetics constants (D1)
     developers/<id>.yaml            developers           \\  both hold baths;
     baths/<id>.yaml                 other baths          /   developers/ is searched first
     films/<id>.yaml                 films                \\  both hold materials;
     papers/<id>.yaml                papers               /   films/ is searched first
     processes/<id>.yaml             processes
     reference/<material id>/*.csv   reference curves
+    reference/<material id>/tables.yaml   datasheet tables and facts (D1)
+    reference/developers/<name>.yaml      developer-publication facts (D1)
+    calibration/<run id>.yaml       calibration records (D1)
 
 Ids may contain ``/`` (``kodak/tri-x-400`` lives in ``films/kodak/tri-x-400.yaml``), and
 the ``id`` written in a file must equal the id implied by its path.
@@ -33,18 +37,33 @@ import yaml
 from pydantic import BaseModel, ValidationError
 
 from darkroom_atlas.data.models import (
+    BW_MECHANISTIC,
+    DATA_ID_PATTERN,
+    NAME_PATTERN,
     Bath,
+    CalibrationRecord,
+    KineticsFile,
     Material,
     Process,
     ReferenceCurve,
     Species,
     SpeciesFile,
     SpectralCurve,
+    bw_mechanistic_problems,
+    iter_quantities,
 )
+from darkroom_atlas.data.provenance import Source
 from darkroom_atlas.spectral import DEFAULT_GRID, SpectralGrid, cmf_xyz
 from darkroom_atlas.units import convert
 
-__all__ = ["ENV_DATA_ROOT", "DataError", "DataNotFound", "Library", "default_data_root"]
+__all__ = [
+    "DEVELOPER_FACTS_FILES",
+    "ENV_DATA_ROOT",
+    "DataError",
+    "DataNotFound",
+    "Library",
+    "default_data_root",
+]
 
 ENV_DATA_ROOT = "DARKROOM_ATLAS_DATA"
 """Environment variable that overrides the default data root."""
@@ -62,7 +81,23 @@ _KIND_MODELS: dict[str, type[BaseModel]] = {
     "process": Process,
 }
 _SPECIES_FILE = PurePosixPath("chemistry/species.yaml")
+_KINETICS_FILE = PurePosixPath("chemistry/kinetics.yaml")
+_CALIBRATION_DIR = "calibration"
 _REFERENCE_DIR = "reference"
+_TABLES_FILE = "tables.yaml"
+_DEVELOPER_FACTS_DIR = "developers"
+
+DEVELOPER_FACTS_FILES: dict[str, str] = {
+    "d-76": "d-76",
+    "xtol": "xtol",
+    "hc-110-pre2019": "hc-110",
+    "t-max-dev": "t-max-dev",
+}
+"""Bath id -> file name (without ``.yaml``) under ``reference/developers/`` (spec D1 5.9).
+
+The 2017 J-24 (HC-110) predates the 2019 reformulation, so its facts belong to
+``hc-110-pre2019``; ``t-max-rs`` is not used in D1.
+"""
 _CSV_HEADER_KEYS = ("material", "quantity", "x_unit", "y_unit", "origin", "ref", "conditions")
 _BUILTIN_CMF_COLUMN = {"cie1931_x": 0, "cie1931_y": 1, "cie1931_z": 2}
 
@@ -240,6 +275,17 @@ def _material_curves(material: Material) -> Iterator[tuple[str, SpectralCurve]]:
                 )
 
 
+def _check_reference_yaml(path: Path, data: dict[str, Any], key: str, expected: str) -> None:
+    version = data.get("schema_version", 1)
+    if version != 1:
+        raise DataError(f"{path}: schema_version: expected 1, got {version!r}")
+    declared = data.get(key, expected)
+    if declared != expected:
+        raise DataError(
+            f"{path}: {key}: the file declares {declared!r} but its path implies {expected!r}"
+        )
+
+
 # --------------------------------------------------------------------------------------
 # Library
 # --------------------------------------------------------------------------------------
@@ -338,6 +384,96 @@ class Library:
         species_file = _validate_model(SpeciesFile, _read_yaml(path), path)
         return {s.id: s for s in species_file.species}
 
+    def kinetics(self) -> KineticsFile:
+        """Load ``chemistry/kinetics.yaml``; raises :class:`DataNotFound` if it does not exist."""
+        path = self._root / _KINETICS_FILE
+        if not path.is_file():
+            raise DataNotFound(f"{path}: kinetics file does not exist")
+        return _validate_model(KineticsFile, _read_yaml(path), path)
+
+    def _calibration_files(self) -> list[tuple[str, Path]]:
+        base = self._root / _CALIBRATION_DIR
+        if not base.is_dir():
+            return []
+        return sorted(
+            (path.stem, path)
+            for path in base.glob("*.yaml")
+            if path.is_file() and not path.name.startswith(".")
+        )
+
+    def calibration_record(self, run_id: str) -> CalibrationRecord:
+        """Load ``calibration/<run_id>.yaml``; its ``run_id`` must equal the file name."""
+        path = self._root / _CALIBRATION_DIR / f"{run_id}.yaml"
+        if not (isinstance(run_id, str) and NAME_PATTERN.fullmatch(run_id) and path.is_file()):
+            available = [name for name, _ in self._calibration_files()]
+            raise DataNotFound(
+                f"{self._root / _CALIBRATION_DIR}: no calibration record {run_id!r}; "
+                f"available: {_available(available)}"
+            )
+        record = _validate_model(CalibrationRecord, _read_yaml(path), path)
+        if record.run_id != run_id:
+            raise DataError(
+                f"{path}: run_id: the file declares {record.run_id!r} but its name implies "
+                f"{run_id!r}"
+            )
+        return record
+
+    def _tables_files(self) -> list[tuple[str, Path]]:
+        """``(material id, path)`` of every ``reference/<material id>/tables.yaml``."""
+        base = self._root / _REFERENCE_DIR
+        if not base.is_dir():
+            return []
+        entries = []
+        for path in base.rglob(_TABLES_FILE):
+            rel = path.relative_to(base)
+            if any(part.startswith(".") for part in rel.parts) or not path.is_file():
+                continue
+            if rel.parts[0] == _DEVELOPER_FACTS_DIR:
+                continue
+            entries.append((rel.parent.as_posix(), path))
+        return sorted(entries)
+
+    def reference_tables(self, material_id: str) -> dict:
+        """Read ``reference/<material_id>/tables.yaml`` as plain data (spec D1 5.9).
+
+        The structure is the digitising team's (``tools/digitize/staged/kodak/<film>/``);
+        only ``schema_version`` (1 if given) and ``material`` (equal to ``material_id`` if
+        given) are checked.
+        """
+        path = self._root / _REFERENCE_DIR / material_id / _TABLES_FILE
+        safe = isinstance(material_id, str) and DATA_ID_PATTERN.fullmatch(material_id)
+        if not (safe and path.is_file()):
+            available = [id_ for id_, _ in self._tables_files()]
+            raise DataNotFound(
+                f"{self._root / _REFERENCE_DIR}: no reference tables for {material_id!r}; "
+                f"available: {_available(available)}"
+            )
+        data = _read_yaml(path)
+        _check_reference_yaml(path, data, "material", material_id)
+        return data
+
+    def developer_facts(self, developer: str) -> dict:
+        """Read the developer-publication facts of bath ``developer`` as plain data.
+
+        ``developer`` is a bath id of :data:`DEVELOPER_FACTS_FILES` (``hc-110-pre2019`` reads
+        ``reference/developers/hc-110.yaml``). The structure is the one described in
+        ``tools/digitize/staged/developers/README.md``; only ``schema_version`` (1 if given)
+        and ``developer`` (equal to the file name if given) are checked.
+        """
+        name = DEVELOPER_FACTS_FILES.get(developer) if isinstance(developer, str) else None
+        base = self._root / _REFERENCE_DIR / _DEVELOPER_FACTS_DIR
+        path = base / f"{name}.yaml"
+        if name is None or not path.is_file():
+            available = [
+                b for b, f in DEVELOPER_FACTS_FILES.items() if (base / f"{f}.yaml").is_file()
+            ]
+            raise DataNotFound(
+                f"{base}: no developer facts for {developer!r}; available: {_available(available)}"
+            )
+        data = _read_yaml(path)
+        _check_reference_yaml(path, data, "developer", name)
+        return data
+
     def _reference_files(self) -> list[tuple[str, Path]]:
         base = self._root / _REFERENCE_DIR
         if not base.is_dir():
@@ -434,6 +570,14 @@ class Library:
         read), reference curves for unknown materials, steps that name unknown baths, bath
         components that name unknown species, and curve files that are missing or malformed.
         Never stops at the first problem.
+
+        D1 checks (spec D1 section 5): ingredients whose ``dissolves_to`` names something
+        other than a component; developing agents whose ``kinetic_class`` is not an agent of
+        ``chemistry/kinetics.yaml`` (which must then load); ``bw-mechanistic`` materials
+        missing a field the model needs; ``reference/<material>/tables.yaml`` and
+        ``reference/developers/*.yaml`` that fail to load or name another material or
+        developer; calibration records that fail to load; and fitted values whose
+        ``fit.run_id`` names no calibration record.
         """
         problems: list[str] = []
         loaded: dict[str, list[tuple[Path, Any]]] = {kind: [] for kind in _KIND_DIRS}
@@ -457,11 +601,62 @@ class Library:
                 problems.append(f"{path}: not read: data files must use the .yaml extension")
 
         species_ids: list[str] | None
+        species: dict[str, Species] = {}
         try:
-            species_ids = sorted(self.species())
+            species = self.species()
+            species_ids = sorted(species)
         except DataError as exc:
             problems.extend(str(exc).splitlines())
             species_ids = None
+
+        kinetics: KineticsFile | None = None
+        kinetics_path = self._root / _KINETICS_FILE
+        if kinetics_path.is_file():
+            try:
+                kinetics = self.kinetics()
+            except DataError as exc:
+                problems.extend(str(exc).splitlines())
+        problems.extend(self._species_problems(species, kinetics, kinetics_path))
+
+        calibration_ids: set[str] = set()
+        for run_id, path in self._calibration_files():
+            try:
+                self.calibration_record(run_id)
+            except DataError as exc:
+                problems.extend(str(exc).splitlines())
+                continue
+            calibration_ids.add(run_id)
+
+        for material_id, path in self._tables_files():
+            try:
+                self.reference_tables(material_id)
+            except DataError as exc:
+                problems.extend(str(exc).splitlines())
+        facts_dir = self._root / _REFERENCE_DIR / _DEVELOPER_FACTS_DIR
+        if facts_dir.is_dir():
+            # Files no bath id maps to (t-max-rs) are checked too, though D1 does not read them.
+            for path in sorted(facts_dir.glob("*.yaml")):
+                if path.name.startswith(".") or not path.is_file():
+                    continue
+                try:
+                    _check_reference_yaml(path, _read_yaml(path), "developer", path.stem)
+                except DataError as exc:
+                    problems.extend(str(exc).splitlines())
+
+        fitted_sources: list[tuple[Path, Any]] = [
+            (path, obj) for kind in loaded for path, obj in loaded[kind]
+        ]
+        if species:
+            fitted_sources.append((self._root / _SPECIES_FILE, list(species.values())))
+        if kinetics is not None:
+            fitted_sources.append((kinetics_path, kinetics))
+        for path, obj in fitted_sources:
+            for loc, quantity in iter_quantities(obj):
+                if quantity.source is Source.FITTED and quantity.fit.run_id not in calibration_ids:
+                    problems.append(
+                        f"{path}: {loc}.fit.run_id: no calibration record "
+                        f"{quantity.fit.run_id!r} in {self._root / _CALIBRATION_DIR}"
+                    )
 
         for relpath, path in self._reference_files():
             try:
@@ -493,6 +688,8 @@ class Library:
                         )
 
         for path, material in loaded["material"]:
+            if material.model == BW_MECHANISTIC:
+                problems.extend(f"{path}: {line}" for line in bw_mechanistic_problems(material))
             for loc, curve in _material_curves(material):
                 if curve.file is None:
                     continue
@@ -507,4 +704,32 @@ class Library:
                 except DataError as exc:
                     problems.append(f"{path}: {loc}.file: {exc}")
 
+        return problems
+
+    def _species_problems(
+        self, species: dict[str, Species], kinetics: KineticsFile | None, kinetics_path: Path
+    ) -> list[str]:
+        """D1 cross-reference checks of the species file (spec D1 5.2)."""
+        path = self._root / _SPECIES_FILE
+        problems = []
+        index = {s.id: i for i, s in enumerate(species.values())}
+        components = sorted(s.id for s in species.values() if s.kind == "component")
+        for s in species.values():
+            i = index[s.id]
+            for target in s.dissolves_to:
+                if target not in components:
+                    problems.append(
+                        f"{path}: species[{i}].dissolves_to.{target}: {target!r} is not a "
+                        f"component species; components: {_available(components)}"
+                    )
+            if s.developing_agent is None:
+                continue
+            loc = f"{path}: species[{i}].developing_agent.kinetic_class"
+            if not kinetics_path.is_file():
+                problems.append(f"{loc}: needs {kinetics_path}, which does not exist")
+            elif kinetics is not None and s.developing_agent.kinetic_class not in kinetics.agents:
+                problems.append(
+                    f"{loc}: unknown agent class {s.developing_agent.kinetic_class!r}; "
+                    f"available in {kinetics_path}: {_available(sorted(kinetics.agents))}"
+                )
         return problems
