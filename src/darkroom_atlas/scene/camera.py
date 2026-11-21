@@ -71,7 +71,7 @@ def scene_light(
     read-only ``float64`` array, copied otherwise) and whose ``to_light()`` equals the
     ``low_rank=False`` result to rounding.
     """
-    if not isinstance(low_rank, bool):
+    if not isinstance(low_rank, bool | np.bool_):
         raise TypeError(f"low_rank must be a bool, got {type(low_rank).__name__}")
     rgb = np.asarray(linear_rgb, dtype=np.float64)
     if rgb.ndim != 3 or rgb.shape[2] != 3 or rgb.shape[0] < 1 or rgb.shape[1] < 1:
@@ -86,6 +86,7 @@ def scene_light(
         raise ValueError(f"ev must be a finite number, got {ev!r}")
     ev = float(ev)
 
+    low_rank = bool(low_rank)
     if low_rank:
         # Relative energy per unit RGB, (3, B): Mallett basis times the illuminant.
         unit_energy = mallett2019_basis(grid).T * illuminant_spd(illuminant, grid)

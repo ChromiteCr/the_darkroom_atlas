@@ -204,6 +204,11 @@ def test_scene_light_low_rank_matches_full(image, kwargs):
     assert rel.max() <= 1e-12
 
 
+def test_scene_light_low_rank_shares_read_image_output(image):
+    # The runner passes read_image(...).linear_rgb; it must become the coefficients as is.
+    assert scene_light(image, low_rank=True).coefficients is image
+
+
 def test_scene_light_low_rank_shares_read_only_input():
     rgb = np.random.default_rng(7).random((8, 9, 3))
     rgb.flags.writeable = False
