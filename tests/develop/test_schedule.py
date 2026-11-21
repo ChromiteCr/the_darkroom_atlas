@@ -84,10 +84,10 @@ def test_agitation_bad_duration_raises(duration):
 # ---- step_schedule -----------------------------------------------------------------------
 
 
-def _resets(times, duration):
-    """Zero-length resets as breakpoints: alternate periods hitting every time."""
-    points = sorted({0.0, *times, duration})
-    return _periods(list(zip(points[0::2], points[1::2], strict=False)))
+def _instant_resets(times, duration):
+    """Touching periods starting at 0 and at every time: each one is a reset point."""
+    starts = sorted({0.0, *times})
+    return _periods(list(zip(starts, [*starts[1:], duration], strict=True)))
 
 
 @pytest.mark.parametrize(
@@ -100,16 +100,51 @@ def _resets(times, duration):
     ],
 )
 def test_prototype_step_counts(table, every, expected):
-    # Spec D1 3.4 / 12.6: 400 s, liquid reset every 30 s (or 60 s). The 60 s row is
-    # reproduced with breakpoints {0, 30, 60, 120, ..., 360, 400}: a 30 s initial period.
+    # Spec D1 3.4 / 12.6: 400 s, instantaneous liquid reset every 30 s (or 60 s). The 60 s
+    # row is reproduced with resets {0, 30, 60, 120, ..., 360}: a 30 s initial period.
     times = list(np.arange(every, 400.0, every))
     if every == 60.0:
         times = [30.0, *times]
-    breakpoints = sorted({0.0, *times, 400.0})
-    periods = _resets(times, 400.0)
-    assert {0.0, 400.0} | _boundaries(periods) == set(breakpoints)
+    periods = _instant_resets(times, 400.0)
+    assert {p.start_s for p in periods} == {0.0, *times}
     schedule = step_schedule(periods, 400.0, **table)
     assert schedule.n_steps == expected
+
+
+# Spec D1 3.4 table. The small-tank initial agitation is not given there; initial_s = 15 s
+# reproduces the table (5 s and 10 s give one step more, 30 s about ten fewer).
+SMALL_TANK = Agitation(method="inversion", initial_s=15.0, interval_s=30.0, duration_s=5.0)
+LARGE_TANK = Agitation(method="lift", initial_s=22.5, interval_s=60.0, duration_s=7.5)
+
+
+@pytest.mark.parametrize(
+    ("agitation", "minutes", "image", "calibration"),
+    [
+        (SMALL_TANK, 7.5, 209, 314),
+        (SMALL_TANK, 12.0, 335, 503),
+        (LARGE_TANK, 8.0, 160, 248),
+        (LARGE_TANK, 12.0, 240, 372),
+    ],
+)
+def test_condition_step_counts(agitation, minutes, image, calibration):
+    duration = 60.0 * minutes
+    periods = agitation_periods(agitation, duration)
+    assert step_schedule(periods, duration, **IMAGE).n_steps == image
+    assert step_schedule(periods, duration, **CALIBRATION).n_steps == calibration
+
+
+@pytest.mark.parametrize("agitation", [SMALL_TANK, LARGE_TANK])
+@pytest.mark.parametrize("table", [IMAGE, CALIBRATION])
+def test_snapshots_add_no_steps(agitation, table):
+    # Spec D1 3.4: snapshots are alignment points, so 15 s and 60 s snapshots cost the same.
+    duration = 1080.0
+    periods = agitation_periods(agitation, duration)
+    every_15 = step_schedule(periods, duration, record_s=np.arange(15.0, 1081.0, 15.0), **table)
+    every_60 = step_schedule(periods, duration, record_s=np.arange(60.0, 1081.0, 60.0), **table)
+    bare = step_schedule(periods, duration, **table)
+    assert every_15.n_steps == every_60.n_steps == bare.n_steps
+    for r, i in every_15.record_steps.items():
+        assert every_15.times_s[i] == r
 
 
 @pytest.mark.parametrize("table", [IMAGE, CALIBRATION, COARSE])
@@ -145,13 +180,40 @@ def test_kodak_inversion_schedule_properties(table):
     assert schedule.record_steps[0.0] == 0
 
 
-def test_steps_restart_at_h0_after_each_event():
-    schedule = step_schedule(_periods([(0.0, 10.0)]), 30.0, **IMAGE)
+def test_steps_restart_at_h0_only_at_period_starts():
+    schedule = step_schedule(_periods([(0.0, 10.0), (20.0, 25.0)]), 40.0, **IMAGE)
     t = schedule.times_s
+    steps = np.diff(t)
+    assert steps[0] == pytest.approx(0.1)
+    # The stop at 10 s is only aligned to: the step after it is not h0.
     i = int(np.flatnonzero(t == 10.0)[0])
-    assert t[1] - t[0] == pytest.approx(0.1)
-    assert t[i + 1] - t[i] == pytest.approx(0.1)
-    assert t[i + 2] - t[i + 1] == pytest.approx(0.16)
+    assert steps[i] > 1.0
+    # The start at 20 s restarts the sequence.
+    k = int(np.flatnonzero(t == 20.0)[0])
+    assert steps[k] == pytest.approx(0.1)
+    assert steps[k + 1] == pytest.approx(0.16)
+
+
+def test_cut_step_at_alignment_does_not_advance_sequence():
+    # Steps 0.1, 0.16, 0.256, 0.4096 end at 0.9256; the next step 0.65536 would pass 1.2, so
+    # it is cut to 1.2 (0.2744 >= h0/2) and the step after it is 0.65536 again.
+    schedule = step_schedule((), 3.0, record_s=[1.2], **IMAGE)
+    steps = schedule.steps_s
+    np.testing.assert_allclose(steps[:4], [0.1, 0.16, 0.256, 0.4096])
+    assert schedule.times_s[5] == 1.2
+    assert steps[4] == pytest.approx(1.2 - 0.9256)
+    assert steps[5] == pytest.approx(0.65536)
+    assert schedule.record_steps[1.2] == 5
+
+
+def test_short_cut_at_alignment_stretches_previous_step():
+    # 0.9256 + 0.65536 = 1.58096; an alignment at 1.6 leaves 0.01904 (< h0/2), so the
+    # previous step is stretched to 1.6 and the sequence continues with 1.048576.
+    schedule = step_schedule((), 4.0, record_s=[1.6], **IMAGE)
+    steps = schedule.steps_s
+    assert schedule.times_s[5] == 1.6
+    assert steps[4] == pytest.approx(1.6 - 0.9256)
+    assert steps[5] == pytest.approx(1.048576)
 
 
 def test_short_tail_is_merged_into_previous_step():

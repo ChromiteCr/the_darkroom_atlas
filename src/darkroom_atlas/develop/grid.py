@@ -1,8 +1,10 @@
 """Finite-volume column grid for development (spec D1 2.4.1, 3.1).
 
 A column is, from bottom to top: ``n_z`` swollen emulsion cells (z = n_z ... 1), one swollen
-overcoat cell and ``n_l`` liquid boundary-layer cells of geometrically growing thickness that
-together span ``delta_max``. Above that is the well-mixed tank (top Dirichlet value).
+overcoat cell and ``n_l`` liquid boundary-layer cells spanning ``delta_max``. The liquid is two
+geometric sections, ``n_a = n_l // 2`` cells in ``[0, delta_agit]`` and ``n_l - n_a`` in
+``[delta_agit, delta_max]``, so ``delta_agit`` is a cell face (the agitated Dirichlet face,
+spec D1 2.4.8). Above that is the well-mixed tank (top Dirichlet value).
 """
 
 import math
@@ -32,7 +34,8 @@ class ColumnGrid:
     ``thickness_um`` and ``height_um`` (cell centres above the film base) have shape ``(L,)``
     with ``L = n_z + 1 + n_l``. Heights in the liquid are measured from the base; the liquid
     heights of spec D1 0.3 / 2.4.8 (``delta_agit``, ``delta_max``) are measured from the
-    overcoat's outer surface, i.e. ``height_um - gel_thickness_um``.
+    overcoat's outer surface, i.e. ``height_um - gel_thickness_um``. ``n_a`` is the number of
+    liquid cells below ``delta_agit``.
     """
 
     n_z: int
@@ -41,6 +44,13 @@ class ColumnGrid:
     kinds: tuple[Kind, ...]
     height_um: np.ndarray
     delta_max_um: float
+    delta_agit_um: float
+    n_a: int
+
+    @property
+    def agit_cell(self) -> int:
+        """Index (into the ``(L,)`` arrays) of the cell whose top face is at ``delta_agit``."""
+        return self.n_z + self.n_a
 
     @property
     def gel_thickness_um(self) -> float:
@@ -52,23 +62,30 @@ def column_grid(
     emulsion_dry_um: float,
     overcoat_dry_um: float,
     swelling_ratio: float,
+    delta_agit_um: float,
     delta_max_um: float,
     profile: Literal["image", "calibration", "reference"],
 ) -> ColumnGrid:
     """Build the column grid of ``profile`` (spec D1 2.4.1, 3.1).
 
     Emulsion cells are ``swelling_ratio * emulsion_dry_um / n_z`` thick, the overcoat cell
-    ``swelling_ratio * overcoat_dry_um``; liquid cell ``l`` is ``h1 * r_l**(l-1)`` with
-    ``h1 = delta_max (r_l - 1) / (r_l**n_l - 1)``. ``TypeError`` on a non-number;
-    ``ValueError`` on a non-positive or non-finite thickness or ratio, ``swelling_ratio < 1``
-    or an unknown profile.
+    ``swelling_ratio * overcoat_dry_um``. The liquid section ``[a, b]`` with ``n`` cells has
+    cells ``h1 * r_l**k`` with ``h1 = (b - a)(r_l - 1) / (r_l**n - 1)``; the sections are
+    ``[0, delta_agit]`` (``n_l // 2`` cells) and ``[delta_agit, delta_max]``. ``TypeError`` on
+    a non-number; ``ValueError`` on a non-positive or non-finite thickness or ratio,
+    ``swelling_ratio < 1``, ``delta_agit_um >= delta_max_um`` or an unknown profile.
     """
     if profile not in PROFILE_LEVELS:
         raise ValueError(f"profile must be one of {sorted(PROFILE_LEVELS)}, got {profile!r}")
     _positive("emulsion_dry_um", emulsion_dry_um)
     # A zero-thickness overcoat cell would break the harmonic-mean face D (spec D1 2.4.8).
     _positive("overcoat_dry_um", overcoat_dry_um)
+    _positive("delta_agit_um", delta_agit_um)
     _positive("delta_max_um", delta_max_um)
+    if delta_agit_um >= delta_max_um:
+        raise ValueError(
+            f"delta_agit_um ({delta_agit_um!r}) must be < delta_max_um ({delta_max_um!r})"
+        )
     _positive("swelling_ratio", swelling_ratio)
     if swelling_ratio < 1.0:
         raise ValueError(f"swelling_ratio must be >= 1, got {swelling_ratio!r}")
@@ -76,10 +93,11 @@ def column_grid(
     n_z, n_l, r_l = PROFILE_LEVELS[profile]
     emulsion = np.full(n_z, swelling_ratio * emulsion_dry_um / n_z)
     overcoat = np.array([swelling_ratio * overcoat_dry_um])
-    # Spec D1 2.4.1: geometric liquid layer from the film surface to delta_max.
-    h1 = delta_max_um * (r_l - 1.0) / (r_l**n_l - 1.0)
-    liquid = h1 * r_l ** np.arange(n_l, dtype=np.float64)
-    liquid[-1] = delta_max_um - liquid[:-1].sum()  # exact total delta_max
+    # Spec D1 2.4.1 / 3.1: two geometric liquid sections with a face exactly at delta_agit.
+    n_a = n_l // 2
+    lower = _geometric(float(delta_agit_um), n_a, r_l)
+    upper = _geometric(float(delta_max_um) - float(delta_agit_um), n_l - n_a, r_l)
+    liquid = np.concatenate([lower, upper])
 
     thickness = np.concatenate([emulsion, overcoat, liquid])
     tops = np.cumsum(thickness)
@@ -92,7 +110,17 @@ def column_grid(
         kinds=kinds,
         height_um=readonly_array(height),
         delta_max_um=float(delta_max_um),
+        delta_agit_um=float(delta_agit_um),
+        n_a=n_a,
     )
+
+
+def _geometric(length: float, n: int, ratio: float) -> np.ndarray:
+    """``n`` cells growing by ``ratio`` that sum to ``length`` (last cell absorbs rounding)."""
+    h1 = length * (ratio - 1.0) / (ratio**n - 1.0)
+    cells = h1 * ratio ** np.arange(n, dtype=np.float64)
+    cells[-1] = length - cells[:-1].sum()
+    return cells
 
 
 def _positive(name: str, value: float) -> None:

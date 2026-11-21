@@ -1,14 +1,14 @@
 """Agitation periods and the shared, event-aligned time-step table (spec D1 2.4.8, 3.4).
 
-Every column, member, pre-pass and image block uses the same table. Breakpoints are 0, the
-start and stop of every agitation period, every record (snapshot) time and the end. Within
-each segment the step starts at ``h0``, grows by ``ratio`` and is capped at ``h_max``; the
-last step is cut to the segment end, and folded into the previous one if shorter than
-``h0 / 2`` (so a merged step can exceed ``h_max`` by less than ``h0 / 2``). The step restarts
-at ``h0`` after every breakpoint, because agitation is a discontinuity of the data.
+Every column, member, pre-pass and image block uses the same table. Reset points are 0 and
+the start of every agitation period: the step restarts there at ``h0`` (a fast transient).
+Alignment points are the stop of every period, every record (snapshot) time and the end: one
+step is cut to land on them exactly, without restarting. Step ``j`` after the last reset is
+``h_j = min(h0 ratio**j, h_max)``; a step cut short at an event does not advance ``j``, and a
+cut step shorter than ``h0 / 2`` is folded into the previous step instead (so a merged step
+can exceed ``h_max`` by less than ``h0 / 2``).
 """
 
-import itertools
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -103,8 +103,9 @@ def step_schedule(
     """Build the event-aligned geometric step table (spec D1 3.4).
 
     ``periods`` must be sorted, non-overlapping, non-empty and inside ``[0, duration_s]``
-    (as :func:`agitation_periods` returns them). Every period boundary and record time is a
-    grid time, hit exactly. ``ValueError`` on ``h0_s <= 0``, ``ratio < 1``, ``h_max_s < h0_s``,
+    (as :func:`agitation_periods` returns them); touching periods are allowed. Period starts
+    restart the geometric sequence; stops, record times and the end are only aligned to. Every
+    period boundary and record time is a grid time, hit exactly. ``ValueError`` on ``h0_s <= 0``, ``ratio < 1``, ``h_max_s < h0_s``,
     a non-positive duration, a malformed period or a record time outside ``[0, duration_s]``.
     """
     _positive_finite("duration_s", duration_s)
@@ -136,18 +137,18 @@ def step_schedule(
         if not math.isfinite(t) or t < 0.0 or t > duration_s:
             raise ValueError(f"record time {t!r} is outside [0, {duration_s}]")
 
-    breakpoints = sorted({0.0, duration_s, *records, *(x for span in spans for x in span)})
-    times = [0.0]
-    for start, end in itertools.pairwise(breakpoints):
-        times.extend(_segment(start, end, float(h0_s), float(ratio), float(h_max_s)))
-    times_s = np.array(times, dtype=np.float64)
+    resets = {0.0, *(start for start, _ in spans)}
+    events = sorted(resets | {duration_s, *records, *(stop for _, stop in spans)})
+    times_s = np.array(
+        _walk(events, resets, float(h0_s), float(ratio), float(h_max_s)), dtype=np.float64
+    )
 
     midpoints = 0.5 * (times_s[:-1] + times_s[1:])
     agitated = np.zeros(midpoints.shape, dtype=bool)
     for start, stop in spans:
         agitated |= (midpoints >= start) & (midpoints < stop)
 
-    index = {t: i for i, t in enumerate(times)}
+    index = {float(t): i for i, t in enumerate(times_s)}
     record_steps = FrozenDict({t: index[t] for t in records})
     return Schedule(
         times_s=readonly_array(times_s),
@@ -156,23 +157,34 @@ def step_schedule(
     )
 
 
-def _segment(start: float, end: float, h0: float, ratio: float, h_max: float) -> list[float]:
-    """Step end times in ``(start, end]``; the last one is exactly ``end``."""
-    length = end - start
-    steps: list[float] = []
-    elapsed = 0.0
-    h = h0
-    while elapsed < length:
-        step = min(h, h_max, length - elapsed)
-        steps.append(step)
-        elapsed += step
-        h *= ratio
-    if len(steps) > 1 and steps[-1] < 0.5 * h0:
-        tail = steps.pop()
-        steps[-1] += tail
-    out = list(start + np.cumsum(steps))
-    out[-1] = end
-    return [float(t) for t in out]
+def _walk(
+    events: list[float], resets: set[float], h0: float, ratio: float, h_max: float
+) -> list[float]:
+    """Grid times from 0 through every event (spec D1 3.4); each event is hit exactly."""
+    times = [0.0]
+    j = 0
+    last_event = 0.0
+    for event in events:
+        if event <= 0.0:
+            continue
+        while times[-1] < event:
+            t = times[-1]
+            h = min(h0 * ratio**j, h_max)
+            if t + h < event:
+                times.append(t + h)
+                j += 1
+                continue
+            cut = event - t
+            if cut < 0.5 * h0 and t > last_event:
+                times[-1] = event  # fold the short tail into the previous step
+            else:
+                times.append(event)
+                if cut >= h:  # a full step that lands on the event still advances j
+                    j += 1
+        last_event = event
+        if event in resets:
+            j = 0
+    return times
 
 
 def _union(raw: list[tuple[float, float]], duration_s: float) -> tuple[AgitationPeriod, ...]:
