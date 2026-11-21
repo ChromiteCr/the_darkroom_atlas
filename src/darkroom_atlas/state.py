@@ -9,10 +9,15 @@ A state may describe a window of a larger frame (a tile). Its :class:`FrameGeome
 records where the window sits (``origin_px``) and how big the whole frame is
 (``frame_shape_hw``), so that position-dependent computations such as
 :func:`darkroom_atlas.rng.pixel_uniform` give the same result tiled or untiled.
+
+A :class:`FrameAssembler` builds whole-frame output fields from per-block results: each
+field is allocated once (through a :class:`darkroom_atlas.fieldstore.FieldStore`) and each
+block writes only its inner part, so assembling costs O(pixels) (spec §4.4).
 """
 
+import itertools
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from numbers import Integral, Real
 from typing import Any
@@ -21,11 +26,12 @@ import numpy as np
 
 from darkroom_atlas._frozen import FrozenDict, freeze_mapping, readonly_array
 from darkroom_atlas.data.models import NAME_PATTERN, RESERVED_LAYER_IDS, Material
+from darkroom_atlas.fieldstore import FieldStore
 from darkroom_atlas.spectral import SpectralGrid
 from darkroom_atlas.tiling import Tile
 from darkroom_atlas.units import pixel_pitch_um
 
-__all__ = ["EmulsionState", "FrameGeometry", "StepRecord"]
+__all__ = ["EmulsionState", "FieldSpec", "FrameAssembler", "FrameGeometry", "StepRecord"]
 
 Window = tuple[slice, slice]
 
@@ -202,6 +208,20 @@ class EmulsionState:
         """Return a new state with ``updates`` added to (or replacing) the fields."""
         return replace(self, fields={**self.fields, **updates})
 
+    def drop(self, *keys: str) -> "EmulsionState":
+        """Return a new state without fields ``keys``; the other fields are shared as is.
+
+        ``KeyError`` listing the available fields if a key is absent.
+        """
+        missing = [key for key in keys if key not in self.fields]
+        if missing:
+            available = ", ".join(sorted(self.fields)) or "(none)"
+            raise KeyError(f"no field {missing[0]!r}; available fields: {available}")
+        drop = set(keys)
+        return replace(
+            self, fields={key: value for key, value in self.fields.items() if key not in drop}
+        )
+
     def with_history(self, record: StepRecord) -> "EmulsionState":
         """Return a new state with ``record`` appended to the history."""
         if not isinstance(record, StepRecord):
@@ -241,6 +261,10 @@ class EmulsionState:
         pasting a full set of tiles defines it everywhere. A field this state has with other
         trailing dimensions or another dtype raises ``ValueError`` (rather than silently
         discarding what was pasted before).
+
+        Each call copies every pasted field of the whole frame, so it costs O(frame pixels);
+        assembling many tiles this way grows with tiles x pixels. Use
+        :class:`FrameAssembler` to assemble a frame from tiles.
         """
         if not isinstance(tile_state, EmulsionState):
             raise TypeError(f"tile_state must be an EmulsionState, got {type(tile_state)}")
@@ -280,6 +304,210 @@ class EmulsionState:
             target.flags.writeable = False
             fields[key] = target
         return replace(self, fields=fields)
+
+
+@dataclass(frozen=True)
+class FieldSpec:
+    """An output field of a :class:`FrameAssembler`: key, trailing dimensions and dtype."""
+
+    key: str
+    trailing: tuple[int, ...] = ()
+    dtype: str = "float64"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.key, str) or not self.key:
+            raise ValueError(f"key must be a non-empty string, got {self.key!r}")
+        try:
+            trailing = tuple(self.trailing)
+        except TypeError:
+            raise ValueError(
+                f"trailing must be a tuple of integers, got {self.trailing!r}"
+            ) from None
+        for d in trailing:
+            if isinstance(d, bool) or not isinstance(d, Integral) or d < 1:
+                raise ValueError(f"trailing must be a tuple of integers >= 1, got {trailing!r}")
+        dt = np.dtype(self.dtype)
+        if dt.kind not in "biufc":
+            raise ValueError(f"field {self.key!r}: dtype must be numeric or boolean, got {dt}")
+        object.__setattr__(self, "trailing", tuple(int(d) for d in trailing))
+        object.__setattr__(self, "dtype", dt.name)
+
+
+class _Assembly:
+    """Book-keeping for one field of a FrameAssembler."""
+
+    def __init__(self, spec: FieldSpec, store_key: str) -> None:
+        self.spec = spec
+        self.store_key = store_key
+        self.array: np.ndarray | None = None  # allocated on the first non-uniform write
+        self.allocated = False
+        self.uniform: np.ndarray | None = None  # (1, 1, *trailing) while all writes match
+        self.written: list[tuple[int, int, int, int]] = []  # (r0, r1, c0, c1)
+
+
+_SERIAL = itertools.count(1)
+
+
+class FrameAssembler:
+    """Assemble whole-frame fields from per-block (or per-tile) results (spec §4.4).
+
+    Each field of ``specs`` is allocated once, through ``store`` (RAM only when None), with
+    shape ``(*geometry.shape_hw, *spec.trailing)`` and ``spec.dtype``; :meth:`write` copies
+    a block's values straight into its inner region. Every pixel of every field must be
+    written exactly once: overlapping writes raise ``ValueError`` at once, gaps raise in
+    :meth:`finish`. Values are cast to the field's dtype only when the cast is safe.
+
+    A field whose every write is a broadcast view (all strides of the two frame axes 0) of
+    one bit-identical value is never allocated: :meth:`finish` returns it as a read-only
+    broadcast view of a ``(1, 1, *trailing)`` array. Allocation is therefore deferred to the
+    field's first non-uniform write, which also fills in the regions written before.
+
+    Store keys are ``"<field key>#<serial>"`` (see :attr:`store_keys`), so several
+    assemblers can share one store; releasing the files is up to the store's owner.
+    """
+
+    def __init__(
+        self,
+        geometry: FrameGeometry,
+        specs: Sequence[FieldSpec],
+        store: FieldStore | None = None,
+    ) -> None:
+        if not isinstance(geometry, FrameGeometry):
+            raise TypeError(f"geometry must be a FrameGeometry, got {type(geometry).__name__}")
+        if store is not None and not isinstance(store, FieldStore):
+            raise TypeError(f"store must be a FieldStore or None, got {type(store).__name__}")
+        self.geometry = geometry
+        self._store = FieldStore(None) if store is None else store
+        self._fields: dict[str, _Assembly] = {}
+        serial = next(_SERIAL)
+        for spec in specs:
+            if not isinstance(spec, FieldSpec):
+                raise TypeError(f"specs must be FieldSpec instances, got {type(spec).__name__}")
+            if spec.key in self._fields:
+                raise ValueError(f"duplicate field spec {spec.key!r}")
+            self._fields[spec.key] = _Assembly(spec, f"{spec.key}#{serial}")
+        if not self._fields:
+            raise ValueError("a FrameAssembler needs at least one FieldSpec")
+        self._finished = False
+
+    @property
+    def store_keys(self) -> dict[str, str]:
+        """Field key -> key of its array in the store (for fields that were allocated)."""
+        return {k: a.store_key for k, a in self._fields.items() if a.allocated}
+
+    def write(self, key: str, inner: tuple[slice, slice], values: np.ndarray) -> None:
+        """Write ``values`` (shape ``(rows, cols, *trailing)``) into region ``inner``."""
+        if self._finished:
+            raise ValueError("this FrameAssembler is finished")
+        try:
+            item = self._fields[key]
+        except KeyError:
+            known = ", ".join(self._fields)
+            raise KeyError(f"no field spec {key!r}; specs: {known}") from None
+        rows, cols = _window(inner, self.geometry.shape_hw)
+        spec = item.spec
+        values = np.asarray(values)
+        expected = (rows.stop - rows.start, cols.stop - cols.start, *spec.trailing)
+        if values.shape != expected:
+            raise ValueError(
+                f"field {key!r}: values for region {(rows, cols)} must have shape {expected}, "
+                f"got {values.shape}"
+            )
+        if not np.can_cast(values.dtype, spec.dtype, "safe"):
+            raise ValueError(
+                f"field {key!r}: cannot safely cast values of dtype {values.dtype} to {spec.dtype}"
+            )
+        rect = (rows.start, rows.stop, cols.start, cols.stop)
+        for r0, r1, c0, c1 in item.written:
+            if rect[0] < r1 and r0 < rect[1] and rect[2] < c1 and c0 < rect[3]:
+                raise ValueError(
+                    f"field {key!r}: region {(rows, cols)} overlaps region "
+                    f"{(slice(r0, r1), slice(c0, c1))} written before"
+                )
+
+        if item.array is None and values.strides[:2] == (0, 0):
+            value = np.array(values[:1, :1], dtype=spec.dtype)
+            if item.uniform is None and not item.written:
+                item.uniform = value
+                item.written.append(rect)
+                return
+            if item.uniform is not None and value.tobytes() == item.uniform.tobytes():
+                item.written.append(rect)
+                return
+        if item.array is None:
+            self._allocate(item)
+        assert item.array is not None
+        item.array[rows, cols] = values
+        item.written.append(rect)
+
+    def write_state(self, tile_state: "EmulsionState", tile: Tile) -> None:
+        """Write the inner part of ``tile_state`` (window ``tile.outer`` of the frame).
+
+        Every spec field is taken from ``tile_state.fields[key][tile.inner_in_outer]`` and
+        written at ``tile.inner``; fields of ``tile_state`` without a spec are ignored. A
+        spec field missing from ``tile_state`` raises ``KeyError``.
+        """
+        if not isinstance(tile_state, EmulsionState):
+            raise TypeError(f"tile_state must be an EmulsionState, got {type(tile_state)}")
+        outer = _window(tile.outer, self.geometry.shape_hw)
+        inner = _window(tile.inner, self.geometry.shape_hw)
+        inner_in_outer = _window(tile.inner_in_outer, tile_state.geometry.shape_hw)
+        expected = self.geometry.crop(outer)
+        if tile_state.geometry != expected:
+            raise ValueError(
+                f"tile_state has geometry {tile_state.geometry}, but window {tile.outer} of "
+                f"this frame has {expected}"
+            )
+        for axis, (o, i, io) in enumerate(zip(outer, inner, inner_in_outer, strict=True)):
+            if io.start != i.start - o.start or io.stop != i.stop - o.start:
+                raise ValueError(
+                    f"tile is inconsistent along axis {axis}: inner {i} inside outer {o} "
+                    f"is not inner_in_outer {io}"
+                )
+        missing = [key for key in self._fields if key not in tile_state.fields]
+        if missing:
+            raise KeyError(f"tile_state lacks field(s) {', '.join(missing)}")
+        for key in self._fields:
+            self.write(key, inner, tile_state.fields[key][inner_in_outer])
+
+    def finish(self) -> dict[str, np.ndarray]:
+        """Check that every pixel of every field was written once; return read-only fields.
+
+        Allocated fields are frozen through the store (read-only RAM arrays or ``mode="r"``
+        memory maps); uniform fields are read-only broadcast views.
+        """
+        if self._finished:
+            raise ValueError("this FrameAssembler is already finished")
+        h, w = self.geometry.shape_hw
+        for key, item in self._fields.items():
+            area = sum((r1 - r0) * (c1 - c0) for r0, r1, c0, c1 in item.written)
+            if area != h * w:
+                raise ValueError(
+                    f"field {key!r}: {area} of {h * w} pixels written; every pixel must be "
+                    "written exactly once"
+                )
+        out: dict[str, np.ndarray] = {}
+        for key, item in self._fields.items():
+            if not item.allocated:
+                assert item.uniform is not None
+                item.uniform.flags.writeable = False
+                out[key] = np.broadcast_to(item.uniform, (h, w, *item.spec.trailing))
+            else:
+                item.array = None
+                out[key] = self._store.freeze(item.store_key)
+        self._finished = True
+        return out
+
+    def _allocate(self, item: _Assembly) -> None:
+        spec = item.spec
+        shape = (*self.geometry.shape_hw, *spec.trailing)
+        array = self._store.allocate(item.store_key, shape, spec.dtype)
+        if item.uniform is not None:
+            for r0, r1, c0, c1 in item.written:
+                array[r0:r1, c0:c1] = item.uniform
+            item.uniform = None
+        item.array = array
+        item.allocated = True
 
 
 def _field_prefixes(material: Any) -> frozenset[str] | None:

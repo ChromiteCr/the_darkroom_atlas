@@ -1,9 +1,19 @@
+import math
+import time
+
 import numpy as np
 import pytest
 
 from darkroom_atlas.data.library import Library
+from darkroom_atlas.fieldstore import FieldStore
 from darkroom_atlas.spectral import DEFAULT_GRID
-from darkroom_atlas.state import EmulsionState, FrameGeometry, StepRecord
+from darkroom_atlas.state import (
+    EmulsionState,
+    FieldSpec,
+    FrameAssembler,
+    FrameGeometry,
+    StepRecord,
+)
 from darkroom_atlas.tiling import iter_tiles
 
 H, W = 50, 70
@@ -173,3 +183,198 @@ def test_history_and_meta(empty):
         tagged.meta["light"]["iso"] = 200.0
     assert tagged.history == again.history
     assert tagged.seed == 3
+
+
+# --------------------------------------------------------------------------------------
+# drop and FrameAssembler (spec §4.4)
+# --------------------------------------------------------------------------------------
+
+
+def test_drop_fields(empty):
+    a = np.ones((H, W))
+    b = np.zeros((H, W, 2))
+    state = empty.with_fields({"x/a": a, "x/b": b, "frame/c": a}).with_meta(note="m")
+    dropped = state.drop("x/a", "frame/c")
+    assert set(dropped.fields) == {"x/b"}
+    assert dropped.fields["x/b"] is state.fields["x/b"]
+    assert dropped.meta == state.meta and dropped.history == state.history
+    assert dropped.geometry == state.geometry
+    assert set(state.fields) == {"x/a", "x/b", "frame/c"}  # the original is unchanged
+    assert state.drop().fields == state.fields
+    with pytest.raises(KeyError, match="available fields"):
+        state.drop("x/missing")
+
+
+def _write_all(assembler, key, full, tile_px):
+    for tile in iter_tiles(full.shape[:2], tile_px, 0):
+        assembler.write(key, tile.inner, full[tile.inner])
+
+
+def test_assembler_each_pixel_once():
+    geom = FrameGeometry.from_long_edge((H, W))
+    full = np.random.default_rng(0).random((H, W, 3))
+    tiles = list(iter_tiles((H, W), 16, 0))
+
+    asm = FrameAssembler(geom, [FieldSpec("x/a", (3,))])
+    _write_all(asm, "x/a", full, 16)
+    out = asm.finish()
+    np.testing.assert_array_equal(out["x/a"], full)
+    assert not out["x/a"].flags.writeable
+
+    # A missed tile raises in finish.
+    asm = FrameAssembler(geom, [FieldSpec("x/a", (3,))])
+    for tile in tiles[1:]:
+        asm.write("x/a", tile.inner, full[tile.inner])
+    with pytest.raises(ValueError, match="exactly once"):
+        asm.finish()
+
+    # A rewritten (or overlapping) region raises at once.
+    asm = FrameAssembler(geom, [FieldSpec("x/a", (3,))])
+    asm.write("x/a", tiles[0].inner, full[tiles[0].inner])
+    with pytest.raises(ValueError, match="overlaps"):
+        asm.write("x/a", tiles[0].inner, full[tiles[0].inner])
+    with pytest.raises(ValueError, match="overlaps"):
+        asm.write("x/a", (slice(10, 20), slice(10, 20)), full[10:20, 10:20])
+
+    # Uniform writes are tracked the same way.
+    asm = FrameAssembler(geom, [FieldSpec("x/u")])
+    asm.write("x/u", tiles[0].inner, np.broadcast_to(1.0, (16, 16)))
+    with pytest.raises(ValueError, match="overlaps"):
+        asm.write("x/u", tiles[0].inner, np.broadcast_to(1.0, (16, 16)))
+    with pytest.raises(ValueError, match="exactly once"):
+        asm.finish()
+
+    # A field never written raises in finish.
+    asm = FrameAssembler(geom, [FieldSpec("x/a", (3,)), FieldSpec("x/b")])
+    _write_all(asm, "x/a", full, 16)
+    with pytest.raises(ValueError, match="x/b"):
+        asm.finish()
+
+
+def test_assembler_uniform_fields_stay_broadcast():
+    geom = FrameGeometry.from_long_edge((H, W))
+    one = np.ones((1, 1))
+    one.flags.writeable = False
+    asm = FrameAssembler(geom, [FieldSpec("x/u"), FieldSpec("x/v", (2,)), FieldSpec("x/m")])
+    for i, tile in enumerate(iter_tiles((H, W), 16, 0)):
+        shape = (tile.inner[0].stop - tile.inner[0].start, tile.inner[1].stop - tile.inner[1].start)
+        asm.write("x/u", tile.inner, np.broadcast_to(one, shape))
+        asm.write("x/v", tile.inner, np.broadcast_to(np.array([[[1.0, 2.0]]]), (*shape, 2)))
+        # Different scalars in different tiles: allocated and filled in correctly.
+        asm.write("x/m", tile.inner, np.broadcast_to(float(i % 2), shape))
+    out = asm.finish()
+    assert asm.store_keys.keys() == {"x/m"}
+    for key in ("x/u", "x/v"):
+        assert out[key].strides[:2] == (0, 0) and out[key].base is not None
+        assert not out[key].flags.writeable
+    assert out["x/u"].shape == (H, W) and (out["x/u"] == 1.0).all()
+    assert out["x/v"].shape == (H, W, 2) and (out["x/v"] == [1.0, 2.0]).all()
+    expected = np.zeros((H, W))
+    for i, tile in enumerate(iter_tiles((H, W), 16, 0)):
+        expected[tile.inner] = i % 2
+    np.testing.assert_array_equal(out["x/m"], expected)
+    # Into an EmulsionState without materialising the broadcast view.
+    state = EmulsionState(
+        Library().material("ideal"), geom, DEFAULT_GRID, seed=0, fields={"frame/u": out["x/u"]}
+    )
+    assert state.fields["frame/u"] is out["x/u"]
+
+
+def test_assembler_uniform_then_real_write_backfills():
+    geom = FrameGeometry.from_long_edge((H, W))
+    full = np.random.default_rng(2).random((H, W))
+    tiles = list(iter_tiles((H, W), 16, 0))
+    asm = FrameAssembler(geom, [FieldSpec("x/a")])
+    asm.write("x/a", tiles[0].inner, np.broadcast_to(7.0, full[tiles[0].inner].shape))
+    for tile in tiles[1:]:
+        asm.write("x/a", tile.inner, full[tile.inner])
+    out = asm.finish()["x/a"]
+    expected = full.copy()
+    expected[tiles[0].inner] = 7.0
+    np.testing.assert_array_equal(out, expected)
+
+
+def test_assembler_uses_store_memmap(tmp_path):
+    geom = FrameGeometry.from_long_edge((H, W))
+    full = np.random.default_rng(3).random((H, W, 2))
+    with FieldStore(tmp_path, ram_threshold_bytes=0) as store:
+        asm = FrameAssembler(geom, [FieldSpec("x/a", (2,))], store=store)
+        _write_all(asm, "x/a", full, 20)
+        out = asm.finish()["x/a"]
+        assert isinstance(out, np.memmap) and out.mode == "r"
+        np.testing.assert_array_equal(out, full)
+        assert asm.store_keys["x/a"] in store
+        # Two assemblers producing the same field key can share a store.
+        asm2 = FrameAssembler(geom, [FieldSpec("x/a", (2,))], store=store)
+        _write_all(asm2, "x/a", full, 25)
+        asm2.finish()
+
+
+def test_assembler_write_state_matches_paste(empty):
+    rng = np.random.default_rng(4)
+    source = empty.with_fields({"x/a": rng.random((H, W, 2)), "x/b": rng.random((H, W))})
+    pasted = empty
+    asm = FrameAssembler(empty.geometry, [FieldSpec("x/a", (2,)), FieldSpec("x/b")])
+    for tile in iter_tiles((H, W), 16, 5):
+        tile_state = source.crop(tile.outer)
+        pasted = pasted.paste(tile_state, tile)
+        asm.write_state(tile_state, tile)
+    out = asm.finish()
+    for key in ("x/a", "x/b"):
+        np.testing.assert_array_equal(out[key], pasted.fields[key])
+
+
+def test_assembler_rejects_bad_input(empty):
+    geom = empty.geometry
+    with pytest.raises(ValueError, match="duplicate"):
+        FrameAssembler(geom, [FieldSpec("x/a"), FieldSpec("x/a")])
+    with pytest.raises(ValueError):
+        FrameAssembler(geom, [])
+    with pytest.raises(ValueError):
+        FieldSpec("x/a", (0,))
+    with pytest.raises(ValueError):
+        FieldSpec("x/a", dtype="U3")
+    asm = FrameAssembler(geom, [FieldSpec("x/a", (2,))])
+    with pytest.raises(KeyError):
+        asm.write("x/b", (slice(0, 2), slice(0, 2)), np.zeros((2, 2, 2)))
+    with pytest.raises(ValueError, match="shape"):
+        asm.write("x/a", (slice(0, 2), slice(0, 2)), np.zeros((2, 2)))
+    with pytest.raises(ValueError):
+        asm.write("x/a", (slice(0, 2), slice(0, W + 1)), np.zeros((2, W + 1, 2)))
+    with pytest.raises(ValueError, match="cast"):
+        asm.write("x/a", (slice(0, 2), slice(0, 2)), np.zeros((2, 2, 2), dtype=complex))
+    tile = next(iter_tiles((H, W), 16, 2))
+    with pytest.raises(KeyError, match="lacks"):
+        asm.write_state(empty.crop(tile.outer), tile)
+    with pytest.raises(ValueError, match="geometry"):
+        asm.write_state(empty.with_fields({"x/a": np.zeros((H, W, 2))}), tile)
+    asm.write("x/a", (slice(0, H), slice(0, W)), np.zeros((H, W, 2), dtype=np.float32))
+    asm.finish()
+    with pytest.raises(ValueError, match="finished"):
+        asm.finish()
+    with pytest.raises(ValueError, match="finished"):
+        asm.write("x/a", (slice(0, 2), slice(0, 2)), np.zeros((2, 2, 2)))
+
+
+def _assembly_seconds(blocks_per_side, block_px=64, trailing=6, repeats=9):
+    side = blocks_per_side * block_px
+    geom = FrameGeometry.from_long_edge((side, side))
+    values = np.ones((block_px, block_px, trailing))
+    tiles = list(iter_tiles((side, side), block_px, 0))
+    best = math.inf
+    for _ in range(repeats):
+        start = time.perf_counter()
+        asm = FrameAssembler(geom, [FieldSpec("x/a", (trailing,))])
+        for tile in tiles:
+            asm.write("x/a", tile.inner, values)
+        asm.finish()
+        best = min(best, time.perf_counter() - start)
+    return best
+
+
+def test_assembler_linear_cost():
+    # Same block size, 4 blocks vs 64 blocks: area ratio 16 (spec §10 D1a). Frames stay
+    # small (12 MB at most) so both sizes see the same allocator and cache behaviour and the
+    # ratio measures the algorithm (D0's repeated paste gives about 16 x 16 = 256).
+    ratio = _assembly_seconds(8) / _assembly_seconds(2)
+    assert ratio <= 1.5 * 16
