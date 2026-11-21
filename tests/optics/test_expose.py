@@ -324,3 +324,41 @@ def test_exposure_fields_rejects_bad_input(stack):
     other = LowRankLight(np.ones((20, 30, 1)), np.ones((1, other_grid.n_bands)), other_grid)
     with pytest.raises(ValueError, match="grid"):
         exposure_fields(other, TIME_S, stack, response, geometry)
+
+
+def _shifted_copy(array: np.ndarray, offset: int) -> np.ndarray:
+    raw = np.empty(array.nbytes + 64, dtype=np.uint8)
+    start = (-raw.ctypes.data) % 64 + offset
+    out = raw[start : start + array.nbytes].view(np.float64).reshape(array.shape)
+    out[...] = array
+    return out
+
+
+@pytest.mark.parametrize("low_rank", [True, False])
+def test_block_result_independent_of_alignment(stack, low_rank):
+    # Spec §3.6: the same block computed from a copy of its input misaligned by 8 bytes is
+    # bit-identical.
+    from functools import partial
+
+    from darkroom_atlas.blocks import block_grid
+    from darkroom_atlas.optics.expose import _block_job
+
+    response = _response(stack)
+    light = _random_light((50, 70), seed=5)
+    plus, minus = depth_weights(stack, response)
+    pitch = 20.0
+    psf = scatter_kernel(pitch, stack.psf_weight, stack.psf_length_um)
+    hal = halation_kernel(pitch, stack.base).kernel
+    if low_rank:
+        source = np.array(light.coefficients)
+        mix = (TIME_S * (light.basis @ plus), TIME_S * (light.basis @ minus))
+    else:
+        source = light.project(TIME_S * np.concatenate([plus, minus], axis=1))
+        mix = None
+    block = block_grid((50, 70), 64, hal.shape[0] // 2)[1]
+    side = block.padded_shape[0] + 3  # any size >= the padded block
+    job = partial(_block_job, psf=psf, halation=hal, side=side, n_z=2, mix=mix)
+    ref = job(block, source=_shifted_copy(source, 0))
+    shifted = job(block, source=_shifted_copy(source, 8))
+    for a, b in zip(ref, shifted, strict=True):
+        assert np.array_equal(a, b)
