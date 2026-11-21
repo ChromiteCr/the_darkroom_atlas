@@ -4,6 +4,7 @@ and turning selected paths into ordered data points.
 Works on :class:`~tools.digitize.page.Page` objects only, so it needs no PDF library.
 """
 
+import itertools
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -23,6 +24,7 @@ __all__ = [
     "label_words",
     "legend_sample",
     "match_style",
+    "nearest_to_annotation",
     "tick_candidates",
     "to_data",
 ]
@@ -184,12 +186,15 @@ def find_phrase(page: Page, phrase: str, region: BBox) -> BBox:
     return matches[0]
 
 
-def legend_sample(page: Page, label: BBox, size_hint: float = 8.0) -> VectorPath:
+def legend_sample(
+    page: Page, label: BBox, size_hint: float = 8.0, max_gap: float = 12.0
+) -> VectorPath:
     """The legend sample line drawn just left of a legend label.
 
     A sample is a stroked, straight, horizontal line 5-80 pt long whose right end lies at
-    most 12 pt left of the label and whose height is within 0.6 em of the label's centre.
-    The one nearest the label wins; two equally near samples are an error.
+    most ``max_gap`` pt (default 12) left of the label and whose height is within 0.6 em of
+    the label's centre. The one nearest the label wins; two equally near samples are an
+    error.
     """
     cy = (label[1] + label[3]) / 2
     em = max(label[3] - label[1], size_hint * 0.5)
@@ -205,7 +210,7 @@ def legend_sample(page: Page, label: BBox, size_hint: float = 8.0) -> VectorPath
         length = abs(bx - ax)
         if not 5.0 <= length <= 80.0:
             continue
-        if not (label[0] - 12.0 <= right <= label[0] + 0.5):
+        if not (label[0] - max_gap <= right <= label[0] + 0.5):
             continue
         if abs(ay - cy) > 0.6 * em:
             continue
@@ -256,6 +261,57 @@ def match_style(
         if any(abs(a - b) > 0.01 for a, b in zip(color, stroke_color)):
             return False
     return True
+
+
+def _vertical_gap(polylines: Sequence[np.ndarray], box: BBox) -> float:
+    """Smallest vertical distance between the polylines and ``box``, over the box's width.
+
+    Only the parts of the polylines whose x lies within the box's horizontal extent count;
+    ``inf`` if no part does. 0 if a polyline passes through the box.
+    """
+    bx0, by0, bx1, by1 = box
+    best = math.inf
+    for poly in polylines:
+        for (x0, y0), (x1, y1) in itertools.pairwise(poly):
+            lo, hi = min(x0, x1), max(x0, x1)
+            if hi < bx0 or lo > bx1:
+                continue
+            if x1 == x0:
+                ends = [y0, y1]
+            else:
+                ends = []
+                for x in (max(lo, bx0), min(hi, bx1)):
+                    ends.append(y0 + (y1 - y0) * (x - x0) / (x1 - x0))
+            low, high = min(ends), max(ends)
+            if high >= by0 and low <= by1:
+                return 0.0
+            best = min(best, by0 - high if high < by0 else low - by1)
+    return best
+
+
+def nearest_to_annotation(
+    paths: Sequence[VectorPath], box: BBox, tolerance: float, ratio: float = 2.0
+) -> VectorPath:
+    """The path that passes vertically nearest to an annotation printed beside a curve.
+
+    Some figures label their curves with text placed next to each curve instead of a
+    legend (e.g. "0.3 greater than D-min"). Over the horizontal extent of the text's box,
+    the vertical gap between each path and the box is measured; the nearest path wins. The
+    runner-up must be at least ``ratio`` times as far (plus 1 pt), or the choice is
+    ambiguous and an error.
+    """
+    gaps = sorted(
+        ((_vertical_gap(p.polylines(tolerance), box), p.index, p) for p in paths),
+        key=lambda item: (item[0], item[1]),
+    )
+    if not gaps or math.isinf(gaps[0][0]):
+        raise DigitizeError(f"no candidate path passes above or below the annotation at {box}")
+    if len(gaps) > 1 and gaps[1][0] < ratio * gaps[0][0] + 1.0:
+        raise DigitizeError(
+            f"the annotation at {box} is about as near path #{gaps[0][1]} "
+            f"({gaps[0][0]:.2f} pt) as path #{gaps[1][1]} ({gaps[1][0]:.2f} pt)"
+        )
+    return gaps[0][2]
 
 
 def curve_candidates(

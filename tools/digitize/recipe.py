@@ -28,6 +28,7 @@ from tools.digitize.figure import (
     label_words,
     legend_sample,
     match_style,
+    nearest_to_annotation,
     tick_candidates,
     to_data,
 )
@@ -147,6 +148,13 @@ class CurveSpec(_Strict):
     output: Annotated[str, Field(pattern=FILE_NAME)]
     quantity: str
     legend: str | None = None
+    # Text printed beside the curve inside the frame, for figures that label curves in
+    # place instead of with a legend. Among the paths that match ``style``, the one passing
+    # vertically nearest to this text is taken (see figure.nearest_to_annotation).
+    annotation: str | None = None
+    # How far left of the legend text the sample line may end (pt). Right-aligned legend
+    # text with a short label ("8 min") can sit further from its sample than the default.
+    legend_max_gap_pt: float = Field(default=12.0, gt=0, le=40)
     style: Style | None = None
     raster: RasterSpec | None = None
     monotonic: Literal["strict", "drop-backtracking"] = "strict"
@@ -159,6 +167,8 @@ class CurveSpec(_Strict):
     def _check(self) -> Self:
         if (self.style is None) == (self.raster is None):
             raise ValueError("give exactly one of style (vector) or raster")
+        if self.annotation is not None and (self.style is None or self.expect.paths != 1):
+            raise ValueError("annotation selects one vector path: it needs style and paths: 1")
         if self.monotonic == "drop-backtracking" and not self.monotonic_reason:
             raise ValueError("monotonic: drop-backtracking needs a monotonic_reason")
         for key, value in self.conditions.items():
@@ -318,7 +328,7 @@ def _vector_curve(page, recipe, curve, x_axis, y_axis, skip, legend_paths) -> Cu
     frame: BBox = tuple(recipe.frame)
     if curve.legend is not None:
         label = find_phrase(page, curve.legend, frame)
-        sample = legend_sample(page, label)
+        sample = legend_sample(page, label, max_gap=curve.legend_max_gap_pt)
         legend_paths[curve.output] = sample.index
         if not match_style(sample, style.width, style.dash, style.stroke_color):
             raise DigitizeError(
@@ -328,6 +338,9 @@ def _vector_curve(page, recipe, curve, x_axis, y_axis, skip, legend_paths) -> Cu
             )
     candidates = curve_candidates(page, frame, [tuple(b) for b in recipe.exclude], skip)
     chosen = [p for p in candidates if match_style(p, style.width, style.dash, style.stroke_color)]
+    if curve.annotation is not None and chosen:
+        box = find_phrase(page, curve.annotation, frame)
+        chosen = [nearest_to_annotation(chosen, box, recipe.flatten_tolerance_pt)]
     if len(chosen) != curve.expect.paths:
         listing = ", ".join(f"#{p.index}" for p in chosen) or "none"
         raise DigitizeError(
@@ -407,7 +420,8 @@ def run_recipe(recipe: Recipe, page: Page, gray: np.ndarray | None = None) -> Fi
         for curve in recipe.curves:
             if curve.legend is not None:
                 label = find_phrase(page, curve.legend, tuple(recipe.frame))
-                legend_paths[curve.output] = legend_sample(page, label).index
+                sample = legend_sample(page, label, max_gap=curve.legend_max_gap_pt)
+                legend_paths[curve.output] = sample.index
         skip = set(legend_paths.values())
         for curve in recipe.curves:
             result = _vector_curve(page, recipe, curve, x_axis, y_axis, skip, legend_paths)
@@ -448,7 +462,8 @@ def _error_text(axis: Axis, error: float, unit: str) -> str:
 def citation(recipe: Recipe, curve: CurveSpec) -> str:
     """The publication, edition, page and figure a curve comes from."""
     pub = recipe.publication
-    which = f" (curve: {curve.legend})" if curve.legend else ""
+    label = curve.legend or curve.annotation
+    which = f" (curve: {label})" if label else ""
     return (
         f"{pub.publisher}, {pub.title}, Publication {pub.number}, {pub.edition}, "
         f'p. {recipe.printed_page}, figure "{recipe.figure}"{which}'

@@ -410,6 +410,70 @@ def test_csv_is_read_back_by_the_library(tmp_path):
     assert csv_text(again, again.curves[0], "tools/digitize/recipes/test/chart.yaml") == text
 
 
+UPPER = [(-1.5, 3.0), (0.0, 3.2), (1.5, 2.8)]
+LOWER = [(-1.5, 1.0), (0.0, 1.2), (1.5, 0.8)]
+
+
+def _annotated_chart(label_lower_y: float | None = None) -> Page:
+    """Two curves with the same style, labelled by text beside each, no legend."""
+    if label_lower_y is None:
+        label_lower_y = _py(0.6)
+    page = _chart()
+    paths = _Paths()
+    paths.items = [p for p in page.paths if not (p.line_width == 0.72 and p.dash == ())]
+    for data in (UPPER, LOWER):
+        pts = [(_px(x), _py(y)) for x, y in data]
+        paths.add([[Op("m", (pts[0],)), *[Op("l", (p,)) for p in pts[1:]]]], width=0.72)
+    chars = [c for c in page.chars if c.y0 < 100.0 or c.x1 < 100.0]
+    _text(chars, "upper curve", _px(-0.5), _py(3.5))
+    _text(chars, "lower curve", _px(-0.5), label_lower_y)
+    return Page(number=1, width=400.0, height=400.0, paths=tuple(paths.items), chars=tuple(chars))
+
+
+def _annotated_recipe() -> Recipe:
+    curves = [
+        {
+            "output": name,
+            "quantity": "spectral_sensitivity",
+            "annotation": f"{name} curve",
+            "style": {"width": 0.72, "dash": []},
+            "expect": {"paths": 1, "x_span": [-1.5, 1.5], "tolerance": [1e-6, 1e-6]},
+            "conditions": {"criterion": name},
+        }
+        for name in ("upper", "lower")
+    ]
+    return _recipe(curves=curves)
+
+
+def test_annotation_picks_the_curve_beside_its_label():
+    result = run_recipe(_annotated_recipe(), _annotated_chart())
+    upper, lower = result.curves
+    np.testing.assert_allclose(np.column_stack([upper.x, upper.y]), UPPER, atol=1e-4)
+    np.testing.assert_allclose(np.column_stack([lower.x, lower.y]), LOWER, atol=1e-4)
+    assert "(curve: upper curve)" in csv_text(result, upper, "r.yaml")
+
+
+def test_annotation_halfway_between_curves_is_an_error():
+    with pytest.raises(DigitizeError, match="about as near"):
+        run_recipe(_annotated_recipe(), _annotated_chart(label_lower_y=_py(2.1)))
+
+
+def test_annotation_needs_a_single_styled_path():
+    with pytest.raises(ValueError, match="annotation"):
+        _recipe(
+            curves=[
+                {
+                    "output": "x",
+                    "quantity": "q",
+                    "annotation": "upper curve",
+                    "style": {"width": 0.72},
+                    "expect": {"paths": 2},
+                    "conditions": {},
+                }
+            ]
+        )
+
+
 # --------------------------------------------------------------------------------------
 # Raster fallback
 # --------------------------------------------------------------------------------------
