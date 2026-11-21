@@ -19,6 +19,7 @@ pixel's value does not depend on the window it is computed in.
 
 import math
 from dataclasses import dataclass
+from numbers import Integral
 
 import numpy as np
 
@@ -200,11 +201,11 @@ def resolve_window(
         start = 0 if s.start is None else s.start
         stop = size if s.stop is None else s.stop
         for bound in (start, stop):
-            if isinstance(bound, bool) or not isinstance(bound, int) or not 0 <= bound <= size:
+            if isinstance(bound, bool) or not isinstance(bound, Integral) or not 0 <= bound <= size:
                 raise ValueError(f"{name} slice {s!r} must lie within 0..{size}")
         if stop <= start:
             raise ValueError(f"{name} slice {s!r} is empty")
-        out.append(slice(start, stop))
+        out.append(slice(int(start), int(stop)))
     return out[0], out[1]
 
 
@@ -318,8 +319,8 @@ def product_density(
     statistical-mode sample); with neutral silver and halide the density is
     ``-log10(T_Ag) + CP_hal halide + D_spec``, ``D_spec = -log10(sum_b p_b
     10^-(D_base,b + D_dye,b r))`` with ``p = P / sum P`` and ``r`` the residual dye. ``D_spec``
-    is one number when the dye is neutral or uniform over the window, else it is
-    accumulated band by band on ``(h, w)``; no ``(h, w, B)`` array is built. A zero
+    is accumulated band by band, on one pixel when the dye is neutral or uniform over the
+    window, else on ``(h, w)``; no ``(h, w, B)`` array is built. A zero
     transmittance gives ``inf``. Returns a read-only ``(h, w)`` array.
     """
     t = np.asarray(silver_transmittance, dtype=np.float64)
@@ -345,15 +346,16 @@ def product_density(
     bands = [b for b in range(weights.shape[0]) if weights[b] > 0.0]
 
     if not np.any(dye[bands] != 0.0) or _is_uniform(residual):
-        r = float(residual.flat[0]) if np.any(dye[bands] != 0.0) else 0.0
-        spectral = float(np.sum(weights * 10.0 ** (-(base + dye * r))))
-        d_spec: float | np.ndarray = -math.log10(spectral)
+        # One pixel's worth, by the same element-wise arithmetic as the general case, so a
+        # pixel gets the same bits whichever case its window takes.
+        r = residual[:1, :1] if np.any(dye[bands] != 0.0) else np.zeros((1, 1))
     else:
-        acc = np.zeros(t.shape, dtype=np.float64)
-        for b in bands:
-            # exp, not 10.0 ** array: ufunc power may round differently by array length.
-            acc = acc + weights[b] * np.exp(-LN10 * (base[b] + dye[b] * residual))
-        d_spec = -np.log10(acc)
+        r = residual
+    acc = np.zeros(r.shape, dtype=np.float64)
+    for b in bands:
+        # exp, not 10.0 ** array: ufunc power may round differently by array length.
+        acc = acc + weights[b] * np.exp(-LN10 * (base[b] + dye[b] * r))
+    d_spec = -np.log10(acc)
 
     with np.errstate(divide="ignore"):
         density = -np.log10(t)

@@ -26,26 +26,51 @@ def _strip_bounds(node: dict) -> None:
     node.pop("prior", None)
 
 
-def material(grain: dict | None = None, development: dict | None = None) -> Material:
-    """The fixture film with grain / development values replaced (values in the file's units).
+# The values the tests rely on are pinned here, so edits to the shared fixture film do not
+# change them: (value, unit).
+GRAIN = {
+    "mean_diameter": (1.0, "um"),
+    "sigma_log": (0.35, "1"),
+    "silver_coverage": (4.0, "g/m2"),
+    "thickness": (0.12, "um"),
+    "iodide_fraction": (0.03, "1"),
+}
+DEVELOPMENT = {
+    "covering_power": (0.6, "1/(g/m2)"),
+    "covering_power_size_exponent": (0.5, "1"),
+    "physical_covering_ratio": (0.5, "1"),
+    "halide_density": (0.3, "1/(g/m2)"),
+    "dye_density": (0.02, "1"),
+    "fixing_factor": (2.0, "1"),
+}
+GREY_DENSITY = {"135": 0.10, "120": 0.0}
 
-    ``grain`` keys: ``morphology``, ``mean_diameter``, ``sigma_log``, ``silver_coverage``,
-    ``thickness``; ``development`` keys: any :class:`EmulsionDevelopment` field. Replaced
-    values lose their bounds and prior.
+
+def _set(node: dict, value: float, unit: str) -> None:
+    node["value"] = value
+    node["unit"] = unit
+    _strip_bounds(node)
+
+
+def material(grain: dict | None = None, development: dict | None = None) -> Material:
+    """The fixture film's structure with pinned grain, development and base values.
+
+    Defaults are :data:`GRAIN`, :data:`DEVELOPMENT` (tabular grains, 6 classes) and
+    :data:`GREY_DENSITY`; ``grain`` (``morphology`` or a :data:`GRAIN` key) and
+    ``development`` (a :data:`DEVELOPMENT` key) override them, in the default units.
     """
     data = copy.deepcopy(Library(FIXTURES).material(FILM).model_dump(mode="json"))
     emulsion = data["layers"][1]
-    for key, value in (grain or {}).items():
-        if key == "morphology":
-            emulsion["grain"]["morphology"] = value
-        else:
-            node = emulsion["grain"][key]
-            node["value"] = value
-            _strip_bounds(node)
-    for key, value in (development or {}).items():
-        node = emulsion["development"][key]
-        node["value"] = value
-        _strip_bounds(node)
+    grain_values = {key: v for key, (v, _) in GRAIN.items()} | (grain or {})
+    emulsion["grain"]["morphology"] = grain_values.pop("morphology", "tabular")
+    emulsion["grain"]["n_classes"] = 6
+    for key, value in grain_values.items():
+        _set(emulsion["grain"][key], value, GRAIN[key][1])
+    dev_values = {key: v for key, (v, _) in DEVELOPMENT.items()} | (development or {})
+    for key, value in dev_values.items():
+        _set(emulsion["development"][key], value, DEVELOPMENT[key][1])
+    for fmt, grey in GREY_DENSITY.items():
+        _set(data["layers"][2]["formats"][fmt]["grey_density"], grey, "1")
     return Material.model_validate(data)
 
 

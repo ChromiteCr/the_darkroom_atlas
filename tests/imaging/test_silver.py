@@ -233,3 +233,31 @@ def test_bad_input(film):
         developed_areas_um2(classes, -np.ones(K))
     with pytest.raises(ValueError, match="film format"):
         transmittance_factors(_random_state(film, film_format="220"), slice(0, 1), slice(0, 1))
+
+
+def test_product_density_independent_of_window(film):
+    # Readouts tile through product_density: a pixel's density must not depend on the window.
+    shape = (30, 40)
+    s = _random_state(film, shape=shape)
+    rng = np.random.default_rng(8)
+    s = s.with_fields({"emulsion/residual_dye": rng.uniform(0.0, 1.0, shape)})
+    t = rng.uniform(0.01, 1.0, shape)
+    dye = np.linspace(0.0, 0.1, B)
+    product = visual_product(DEFAULT_GRID)
+
+    def density(rows, cols):
+        f = transmittance_factors(s, rows, cols)
+        f = TransmittanceFactors(f.base_density, dye, f.halide_density, f.dye_residual)
+        return product_density(t[rows, cols], f, product)
+
+    full = density(slice(0, 30), slice(0, 40))
+    for r, c in ((0, 0), (7, 13), (29, 39), (15, 2)):
+        assert density(slice(r, r + 1), slice(c, c + 1))[0, 0] == full[r, c]
+    assert np.array_equal(density(slice(5, 22), slice(3, 31)), full[5:22, 3:31])
+    assert np.array_equal(
+        silver_density(s, slice(4, 5), slice(9, 10))[0, 0], silver_density(s)[4, 9]
+    )
+    # numpy integers are accepted as slice bounds.
+    assert np.array_equal(
+        silver_density(s, slice(np.int64(2), np.int64(6)), None), silver_density(s)[2:6]
+    )
