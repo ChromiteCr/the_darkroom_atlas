@@ -91,6 +91,7 @@ __all__ = [
     "Material",
     "MaterialKind",
     "OvercoatLayer",
+    "PairStatus",
     "ParameterResult",
     "PhAnchor",
     "Process",
@@ -487,10 +488,15 @@ class AgentKinetics(FrozenModel):
 
 
 class HalideParams(FrozenModel):
-    """Halide adsorption (spec D1 2.4.11)."""
+    """Halide adsorption (spec D1 2.4.5, 2.4.11).
+
+    ``K_Br`` is the value at 20 C; ``adsorption_enthalpy`` (``Delta H_Br``, negative for
+    exothermic adsorption) scales ``K_Br`` and ``K_I`` with temperature by van 't Hoff.
+    """
 
     K_Br: InverseConcentration
     iodide_ratio: Dimensionless
+    adsorption_enthalpy: MolarEnergy
 
 
 class BarrierParams(FrozenModel):
@@ -553,13 +559,20 @@ class ViscosityTable(FrozenModel):
 
 
 class TransportParams(FrozenModel):
-    """Boundary layer, swelling and viscosity (spec D1 2.4.7, 2.4.8, 2.4.11)."""
+    """Boundary layer, swelling, viscosity and water-ion diffusion (spec D1 2.4.7, 2.4.8,
+    2.4.11).
+
+    ``proton_diffusion`` and ``hydroxide_diffusion`` are the H+ and OH- diffusion
+    coefficients in water at 20 C, used only in the TOTH flux (spec D1 2.4.8).
+    """
 
     delta_max: Length
     delta_agit: Length
     swelling_half_time: Time
     viscosity_ionic_coefficient: InverseConcentration
     water_viscosity: ViscosityTable
+    proton_diffusion: Diffusivity
+    hydroxide_diffusion: Diffusivity
 
 
 class GelatinParams(FrozenModel):
@@ -1211,7 +1224,13 @@ class ReferenceCurve(FrozenModel):
 
 
 class StageRecord(FrozenModel):
-    """One stage of a calibration run (spec D1 7.3)."""
+    """One stage of a calibration run (spec D1 7.2, 7.3).
+
+    ``n_effective`` is the number of independent observations of spec D1 7.2 (the residual
+    variance is ``s^2 = chi2 / (n_effective - n_parameters)``, spec D1 7.8);
+    ``n_penalised`` counts residuals replaced by the bounded penalty and must be 0 in a
+    frozen record (checked by :class:`CalibrationRecord`).
+    """
 
     name: Literal[
         "A_activity", "B_spectral", "C_film", "D_chemistry", "E_polish", "F_identifiability"
@@ -1222,12 +1241,58 @@ class StageRecord(FrozenModel):
     optimizer: JsonDict
     chi2: NonNegativeFloat
     n_observations: int = Field(ge=0)
+    n_effective: NonNegativeFloat
     n_parameters: int = Field(ge=0)
+    n_penalised: int = Field(default=0, ge=0)
     converged: bool
 
 
+class PairStatus(FrozenModel):
+    """Status of one film x developer pair under one threshold set (spec D1 8.2, 8.4).
+
+    ``tier`` is ``predicted`` exactly when ``status`` is (no reference data);
+    ``headline`` and ``baseline_headline`` are the held-out headline number and the naive
+    baseline's (spec D1 8.1 item 3), so only held-out pairs carry them, ``None`` if not
+    computable. A ``failed`` pair lists each failing metric with its reason, and only a
+    failed pair does.
+    """
+
+    material_id: Text
+    developer_id: Text
+    tier: Literal["training", "held_out", "predicted"]
+    status: Literal["validated", "failed", "predicted"]
+    headline: FiniteFloat | None = None
+    baseline_headline: FiniteFloat | None = None
+    failed_metrics: list[str] = Field(default_factory=list)
+    thresholds_sha256: Sha256
+    after_unblinding: bool = False
+    post_hoc_thresholds: bool = False
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        if (self.tier == "predicted") != (self.status == "predicted"):
+            raise ValueError(
+                f"tier 'predicted' if and only if status 'predicted' (spec D1 8.2); got tier "
+                f"{self.tier!r} with status {self.status!r}"
+            )
+        if self.tier != "held_out":
+            for name in ("headline", "baseline_headline"):
+                if getattr(self, name) is not None:
+                    raise ValueError(f"{name}: only for held-out pairs (spec D1 8.1)")
+        if self.status == "failed" and not self.failed_metrics:
+            raise ValueError("a failed pair needs failed_metrics with the reasons (spec D1 8.2)")
+        if self.status != "failed" and self.failed_metrics:
+            raise ValueError("failed_metrics: only allowed when status is 'failed'")
+        return self
+
+
 class ParameterResult(FrozenModel):
-    """The result for one fitted parameter (spec D1 7.8)."""
+    """The result for one fitted parameter (spec D1 7.5, 7.8).
+
+    Covariance and profile results are conditional on the other parameter block's fixed
+    point (``conditional_on_other_block``); ``prior_dominated`` marks
+    ``sigma_data > 0.5 tau_prior`` (spec D1 7.5).
+    """
 
     name: Text
     value: FiniteFloat
@@ -1236,12 +1301,20 @@ class ParameterResult(FrozenModel):
     sigma_transformed: FiniteFloat
     interval: tuple[FiniteFloat, FiniteFloat] | None
     method: Literal["covariance", "profile", "prior"]
+    conditional_on_other_block: bool = True
     at_bound: bool
     identifiable: bool
+    prior_dominated: bool = False
 
 
 class CalibrationRecord(FrozenModel):
-    """A calibration run: stages, results and the training-set hash (spec D1 5.7, 7.8)."""
+    """A calibration run: stages, results and the training-set hash (spec D1 5.7, 7.8).
+
+    Freezing (spec D1 8.4 step 3) writes ``thresholds`` (the spec D1 8.3 tables),
+    ``split_registry_sha256`` and ``metrics_code_sha256``; a frozen record needs all three
+    and no penalised residuals. ``pair_statuses`` (spec D1 8.2) may hold one status per
+    pair and threshold set, so post-hoc statuses sit beside the frozen ones.
+    """
 
     schema_version: Literal[1]
     run_id: Text
@@ -1253,14 +1326,35 @@ class CalibrationRecord(FrozenModel):
     parameters: list[ParameterResult]
     singular_values: dict[str, list[FiniteFloat]]
     training_set_sha256: Sha256
+    thresholds: JsonDict = Field(default_factory=dict)
+    split_registry_sha256: Sha256 | None = None
+    metrics_code_sha256: Sha256 | None = None
     frozen: bool = False
     held_out_evaluated: bool = False
+    pair_statuses: list[PairStatus] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _check(self) -> Self:
         if self.held_out_evaluated and not self.frozen:
             raise ValueError("held_out_evaluated requires frozen (spec D1 8.4)")
+        if self.frozen:
+            if not self.thresholds:
+                raise ValueError("frozen requires thresholds (spec D1 8.4)")
+            for name in ("split_registry_sha256", "metrics_code_sha256"):
+                if getattr(self, name) is None:
+                    raise ValueError(f"frozen requires {name} (spec D1 8.4)")
+            for i, stage in enumerate(self.stages):
+                if stage.n_penalised != 0:
+                    raise ValueError(
+                        f"stages[{i}].n_penalised must be 0 in a frozen record (spec D1 7.2), "
+                        f"got {stage.n_penalised}"
+                    )
+        keys = [(s.material_id, s.developer_id, s.thresholds_sha256) for s in self.pair_statuses]
+        duplicates = _duplicates(keys)
+        if duplicates:
+            listed = ", ".join(f"{m} x {d} ({h[:8]})" for m, d, h in duplicates)
+            raise ValueError(f"duplicate pair status(es) for one threshold set: {listed}")
         duplicates = _duplicates(p.name for p in self.parameters)
         if duplicates:
             raise ValueError(f"duplicate parameter name(s): {', '.join(map(repr, duplicates))}")

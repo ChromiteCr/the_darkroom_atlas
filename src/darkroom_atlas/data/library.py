@@ -86,6 +86,9 @@ _CALIBRATION_DIR = "calibration"
 _REFERENCE_DIR = "reference"
 _TABLES_FILE = "tables.yaml"
 _DEVELOPER_FACTS_DIR = "developers"
+# Built-in pseudo-components added by chemistry.species.component_table; they are not
+# entries of species.yaml (spec D1 2.3.1, 5.2).
+_BUILTIN_COMPONENTS = frozenset({"toth", "gelatin"})
 
 DEVELOPER_FACTS_FILES: dict[str, str] = {
     "d-76": "d-76",
@@ -576,8 +579,10 @@ class Library:
         ``chemistry/kinetics.yaml`` (which must then load); ``bw-mechanistic`` materials
         missing a field the model needs; ``reference/<material>/tables.yaml`` and
         ``reference/developers/*.yaml`` that fail to load or name another material or
-        developer; calibration records that fail to load; and fitted values whose
-        ``fit.run_id`` names no calibration record.
+        developer; calibration records that fail to load or whose ``pair_statuses`` name an
+        unknown material or bath; fitted values whose ``fit.run_id`` names no calibration
+        record; and species files that define the built-in pseudo-components ``toth`` or
+        ``gelatin``.
         """
         problems: list[str] = []
         loaded: dict[str, list[tuple[Path, Any]]] = {kind: [] for kind in _KIND_DIRS}
@@ -619,9 +624,10 @@ class Library:
         problems.extend(self._species_problems(species, kinetics, kinetics_path))
 
         calibration_ids: set[str] = set()
+        records: list[tuple[Path, CalibrationRecord]] = []
         for run_id, path in self._calibration_files():
             try:
-                self.calibration_record(run_id)
+                records.append((path, self.calibration_record(run_id)))
             except DataError as exc:
                 problems.extend(str(exc).splitlines())
                 continue
@@ -670,6 +676,18 @@ class Library:
                     f"available: {_available(known['material'])}"
                 )
 
+        for path, record in records:
+            for i, pair in enumerate(record.pair_statuses):
+                for field, kind, value in (
+                    ("material_id", "material", pair.material_id),
+                    ("developer_id", "bath", pair.developer_id),
+                ):
+                    if value not in known[kind]:
+                        problems.append(
+                            f"{path}: pair_statuses[{i}].{field}: unknown {kind} {value!r}; "
+                            f"available: {_available(known[kind])}"
+                        )
+
         for path, proc in loaded["process"]:
             for i, step in enumerate(proc.steps):
                 if step.bath is not None and step.bath not in known["bath"]:
@@ -716,6 +734,11 @@ class Library:
         components = sorted(s.id for s in species.values() if s.kind == "component")
         for s in species.values():
             i = index[s.id]
+            if s.id in _BUILTIN_COMPONENTS:
+                problems.append(
+                    f"{path}: species[{i}].id: {s.id!r} is a built-in pseudo-component and "
+                    "must not be defined in the species file (spec D1 2.3.1, 5.2)"
+                )
             for target in s.dissolves_to:
                 if target not in components:
                     problems.append(

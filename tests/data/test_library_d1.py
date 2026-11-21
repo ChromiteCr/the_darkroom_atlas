@@ -316,3 +316,52 @@ def test_validate_fitted_species_values_use_species_paths(root):
     _edit(root / "chemistry" / "species.yaml", change)
     (problem,) = Library(root).validate()
     assert "species.yaml: species[4].acid_base.pka[1].fit.run_id: no calibration record" in problem
+
+
+# ---- revised checks (spec D1 5.2, 5.7) -------------------------------------------------
+
+
+@pytest.mark.parametrize("builtin", ["toth", "gelatin"])
+def test_validate_rejects_builtin_pseudo_components_in_species_file(root, builtin):
+    def add(data):
+        entry = {
+            "id": builtin,
+            "name": builtin,
+            "molar_mass": {"value": 1.0, "unit": "g/mol", "source": "assumed"},
+            "roles": ["buffer"],
+            "kind": "component",
+            "immobile": True,
+        }
+        data["species"].append(entry)
+
+    _edit(root / "chemistry" / "species.yaml", add)
+    (problem,) = Library(root).validate()
+    assert f"species[{_species_count(root) - 1}].id: {builtin!r} is a built-in" in problem
+
+
+def _species_count(root: Path) -> int:
+    return len(yaml.safe_load((root / "chemistry" / "species.yaml").read_text())["species"])
+
+
+def _pair(material: str, developer: str) -> dict:
+    return {
+        "material_id": material,
+        "developer_id": developer,
+        "tier": "training",
+        "status": "validated",
+        "thresholds_sha256": "a" * 64,
+    }
+
+
+def test_validate_pair_statuses_name_known_files(root):
+    path = root / "calibration" / "d1e-test.yaml"
+    _edit(path, lambda d: d.update(pair_statuses=[_pair("test/bw-neg", "test-bw-dev")]))
+    assert Library(root).validate() == []
+    _edit(path, lambda d: d.update(pair_statuses=[_pair("test/nope", "nope-dev")]))
+    problems = Library(root).validate()
+    assert problems == [
+        f"{path}: pair_statuses[0].material_id: unknown material 'test/nope'; available: "
+        + ", ".join(Library(root).ids("material")),
+        f"{path}: pair_statuses[0].developer_id: unknown bath 'nope-dev'; available: "
+        + ", ".join(Library(root).ids("bath")),
+    ]

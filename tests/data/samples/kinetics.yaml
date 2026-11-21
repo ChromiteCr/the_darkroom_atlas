@@ -24,6 +24,7 @@ agents:
 halides:
   K_Br: {value: 300.0, unit: L/mol, source: assumed}
   iodide_ratio: {value: 30.0, unit: "1", source: assumed}
+  adsorption_enthalpy: {value: -45.0, unit: kJ/mol, source: literature, ref: "test ref", bounds: [-60.0, -30.0]}
 barriers:
   u_gel: {value: 2.0, unit: "1", source: assumed}
   u_halide: {value: 5.0, unit: "1", source: assumed}
@@ -48,6 +49,8 @@ transport:
   water_viscosity:
     temperature: {value: [18, 20, 24, 25], unit: C, source: assumed}
     viscosity: {value: [1.053, 1.002, 0.911, 0.890], unit: cP, source: assumed}
+  proton_diffusion: {value: 8130.0, unit: um2/s, source: assumed}
+  hydroxide_diffusion: {value: 4600.0, unit: um2/s, source: assumed}
 gelatin:
   groups_per_gram: {value: 4.8e-4, unit: mol/g, source: assumed}
   pka: {value: 10.5, unit: "1", source: assumed}

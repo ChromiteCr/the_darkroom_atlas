@@ -104,7 +104,8 @@ def test_load_repo_identity(repo):
     proc = repo.process("identity")
     assert isinstance(proc, Process)
     assert [step.kind.value for step in proc.steps] == ["identity"]
-    assert repo.species() == {}
+    # The repository species file grows with D1c; it must load whatever it holds.
+    assert all(s.id == key for key, s in repo.species().items())
 
 
 def test_load_color_negative(fx):

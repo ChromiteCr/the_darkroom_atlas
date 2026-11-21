@@ -1,6 +1,8 @@
 # Fictional tabular-grain black-and-white negative film for the bw-mechanistic model (spec D1
 # 2.0, 5.4). Every film field of spec D1 5.4 is present. All values are invented but of a
-# plausible size; none describes a real film.
+# plausible size; none describes a real film. The grain respects the T-Max-like calibration
+# constraints of spec D1 2.0.2 and 7.1: aspect ratio d_50/t_g = 1.0/0.12 = 8.3 in [8, 19],
+# d_50 in [0.6, 1.5] um.
 schema_version: 1
 id: test/bw-mechanistic
 maker: test
@@ -24,7 +26,7 @@ layers:
       morphology: tabular
       mean_diameter: {value: 1.0, unit: um, source: assumed, bounds: [0.6, 1.5], prior: lognormal}
       sigma_log: {value: 0.35, unit: "1", source: assumed, bounds: [0.2, 0.7], prior: uniform}
-      silver_coverage: {value: 4.0, unit: g/m2, source: assumed, bounds: [2.0, 6.0]}
+      silver_coverage: {value: 4.0, unit: g/m2, source: assumed, bounds: [2.0, 6.0], prior: lognormal}
       halide: AgBrI
       thickness: {value: 0.12, unit: um, source: assumed, bounds: [0.08, 0.15]}
       iodide_fraction: {value: 0.03, unit: "1", source: assumed, bounds: [0.01, 0.06]}

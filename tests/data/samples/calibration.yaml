@@ -14,6 +14,7 @@ stages:
     optimizer: {method: trf, loss: linear, x_scale: jac, starts: 8, seed: 0}
     chi2: 1.5
     n_observations: 20
+    n_effective: 8.0
     n_parameters: 2
     converged: true
 parameters:

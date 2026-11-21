@@ -15,9 +15,12 @@ from darkroom_atlas.data.models import (
     Grain,
     KineticsFile,
     Material,
+    PairStatus,
+    ParameterResult,
     PhAnchor,
     Species,
     SpeciesFile,
+    StageRecord,
     Tank,
     bw_mechanistic_problems,
     iter_quantities,
@@ -93,6 +96,20 @@ def test_fixture_film_has_every_d1_field(film):
     # every parameter is tagged assumed
     sources = {q.source.value for _, q in iter_quantities(material)}
     assert sources == {"assumed"}
+
+
+def test_fixture_film_follows_revised_priors(film):
+    """Revised film priors (spec D1 2.0.2, 2.2.7, 7.1): coated silver is fitted with a
+    lognormal prior on [2, 6] g/m2; the tablet aspect ratio lies in [8, 19]; tau0 and
+    sigma_tau use the T-Max-like boxes."""
+    emulsion = Material.model_validate(film).emulsion_layers[0]
+    silver = emulsion.grain.silver_coverage
+    assert (silver.value, silver.bounds, silver.prior) == (4.0, (2.0, 6.0), "lognormal")
+    aspect = emulsion.grain.mean_diameter.to("um") / emulsion.grain.thickness.to("um")
+    assert 8.0 <= aspect <= 19.0
+    assert emulsion.grain.thickness.bounds == (0.08, 0.15)
+    assert emulsion.latent.tau0_median.bounds == (0.05, 10.0)
+    assert emulsion.latent.tau0_sigma_ln.bounds == (0.0, 4.0)
 
 
 def test_tabular_grain_needs_thickness():
@@ -326,6 +343,19 @@ def test_kinetics_sample_loads(kinetics_data):
     assert kin.calibration is None
 
 
+def test_kinetics_revised_fields(kinetics_data):
+    """Fields added by the spec revision: halide adsorption enthalpy (phy11) and the H+/OH-
+    diffusion coefficients of the TOTH flux (phy1)."""
+    kin = KineticsFile.model_validate(kinetics_data)
+    assert kin.halides.adsorption_enthalpy.to("kJ/mol") == -45.0
+    assert kin.halides.adsorption_enthalpy.bounds == (-60.0, -30.0)
+    assert kin.transport.proton_diffusion.to("um2/s") == 8130.0
+    assert kin.transport.hydroxide_diffusion.to("um2/s") == 4600.0
+    kinetics_data["transport"]["proton_diffusion"] = _q(9.31e-5, "cm2/s")
+    kin = KineticsFile.model_validate(kinetics_data)
+    assert kin.transport.proton_diffusion.to("um2/s") == pytest.approx(9310.0, rel=1e-15)
+
+
 @pytest.mark.parametrize(
     ("section", "key", "value", "match"),
     [
@@ -335,6 +365,13 @@ def test_kinetics_sample_loads(kinetics_data):
         ("gelatin", "dry_density", _q(1.35, "g/L"), "mass density"),
         ("activity", "delta_eps", {"none": _q(0.0, "kg/mol")}, "sulfite"),
         ("barriers", "ionic_strength_ref", None, "Field required"),
+        ("halides", "adsorption_enthalpy", None, "Field required"),
+        ("halides", "adsorption_enthalpy", _q(-45.0, "L/mol"), "molar energy"),
+        ("transport", "proton_diffusion", None, "Field required"),
+        ("transport", "hydroxide_diffusion", None, "Field required"),
+        ("transport", "proton_diffusion", _q(8130.0, "um/s"), "diffusion coefficient"),
+        ("transport", "hydroxide_diffusion", _q(4600.0, "um2"), "diffusion coefficient"),
+        ("transport", "proton_diffusions", _q(8130.0, "um2/s"), "Extra inputs"),
         ("transport", "water_viscosity", {"temperature": _q([20, 18], "C"),
                                           "viscosity": _q([1.0, 1.05], "cP")}, "increasing"),
         ("transport", "water_viscosity", {"temperature": _q([18, 20], "C"),
@@ -480,6 +517,12 @@ def test_calibration_record_loads(calibration_data):
     assert record.parameters[0].interval is None
     assert record.singular_values == {"C_film": [3.0, 0.5]}
     assert not record.frozen and not record.held_out_evaluated and record.notes == []
+    stage = record.stages[0]
+    assert stage.n_effective == 8.0 and stage.n_penalised == 0
+    parameter = record.parameters[0]
+    assert parameter.conditional_on_other_block is True and parameter.prior_dominated is False
+    assert record.thresholds == {} and record.pair_statuses == []
+    assert record.split_registry_sha256 is None and record.metrics_code_sha256 is None
 
 
 @pytest.mark.parametrize(
@@ -506,6 +549,156 @@ def test_calibration_parameter_interval_required_key(calibration_data):
     calibration_data["parameters"].append(dict(calibration_data["parameters"][0]))
     with pytest.raises(ValidationError, match="duplicate parameter"):
         CalibrationRecord.model_validate(calibration_data)
+
+
+_HASH_A = "a" * 64
+_HASH_B = "b" * 64
+
+
+@pytest.mark.parametrize(
+    ("change", "match"),
+    [
+        ({"n_effective": None}, "Field required"),
+        ({"n_effective": -1.0}, "greater than or equal to 0"),
+        ({"n_effective": float("nan")}, "finite number"),
+        ({"n_penalised": -1}, "greater than or equal to 0"),
+        ({"n_penalised": 1.5}, "valid integer"),
+    ],
+)
+def test_stage_record_counts(calibration_data, change, match):
+    stage = calibration_data["stages"][0]
+    for key, value in change.items():
+        if value is None:
+            del stage[key]
+        else:
+            stage[key] = value
+    with pytest.raises(ValidationError, match=match):
+        StageRecord.model_validate(stage)
+
+
+def test_stage_record_penalised_count_kept(calibration_data):
+    stage = StageRecord.model_validate({**calibration_data["stages"][0], "n_penalised": 3})
+    assert stage.n_penalised == 3
+
+
+def test_parameter_result_flags(calibration_data):
+    entry = {
+        **calibration_data["parameters"][0],
+        "conditional_on_other_block": False,
+        "prior_dominated": True,
+    }
+    result = ParameterResult.model_validate(entry)
+    assert result.conditional_on_other_block is False and result.prior_dominated is True
+    with pytest.raises(ValidationError, match="Extra inputs"):
+        ParameterResult.model_validate({**entry, "conditional": True})
+
+
+def _pair(**change) -> dict:
+    return {
+        "material_id": "kodak/t-max-100",
+        "developer_id": "xtol",
+        "tier": "held_out",
+        "status": "validated",
+        "headline": 0.04,
+        "baseline_headline": 0.06,
+        "thresholds_sha256": _HASH_A,
+        **change,
+    }
+
+
+def test_pair_status_loads():
+    status = PairStatus.model_validate(_pair())
+    assert status.failed_metrics == []
+    assert status.after_unblinding is False and status.post_hoc_thresholds is False
+    training = PairStatus.model_validate(
+        _pair(tier="training", status="failed", headline=None, baseline_headline=None,
+              failed_metrics=["ci_curve_rms: 0.041 > 0.03"])
+    )  # fmt: skip
+    assert training.failed_metrics == ["ci_curve_rms: 0.041 > 0.03"]
+    predicted = PairStatus.model_validate(
+        _pair(developer_id="rodinal", tier="predicted", status="predicted", headline=None,
+              baseline_headline=None)
+    )  # fmt: skip
+    assert predicted.status == "predicted"
+    # A held-out headline that could not be computed is None (spec D1 8.2: never skipped,
+    # the pair fails with a reason).
+    failed = PairStatus.model_validate(
+        _pair(status="failed", headline=None, failed_metrics=["ci_curve: no CI solution"])
+    )
+    assert failed.headline is None
+
+
+@pytest.mark.parametrize(
+    ("change", "match"),
+    [
+        ({"tier": "predicted"}, "tier 'predicted' if and only if status 'predicted'"),
+        ({"status": "predicted"}, "tier 'predicted' if and only if status 'predicted'"),
+        ({"tier": "training"}, "headline: only for held-out pairs"),
+        ({"tier": "training", "headline": None}, "baseline_headline: only for held-out"),
+        ({"status": "failed"}, "a failed pair needs failed_metrics"),
+        ({"failed_metrics": ["x"]}, "failed_metrics: only allowed when status is 'failed'"),
+        ({"tier": "within"}, "tier"),
+        ({"status": "pass"}, "status"),
+        ({"headline": float("inf")}, "finite number"),
+        ({"thresholds_sha256": "PLACEHOLDER"}, "hexadecimal"),
+        ({"material_id": " "}, "must not be empty"),
+    ],
+)
+def test_pair_status_rejects(change, match):
+    with pytest.raises(ValidationError, match=match):
+        PairStatus.model_validate(_pair(**change))
+
+
+def _frozen(calibration_data) -> dict:
+    return {
+        **calibration_data,
+        "frozen": True,
+        "thresholds": {"characteristic_rms": {"training": 0.03, "held_out": 0.06}},
+        "split_registry_sha256": _HASH_A,
+        "metrics_code_sha256": _HASH_B,
+    }
+
+
+def test_calibration_record_frozen(calibration_data):
+    record = CalibrationRecord.model_validate(
+        {**_frozen(calibration_data), "held_out_evaluated": True, "pair_statuses": [_pair()]}
+    )
+    assert record.frozen and record.held_out_evaluated
+    assert record.thresholds["characteristic_rms"]["held_out"] == 0.06
+    assert record.split_registry_sha256 == _HASH_A and record.metrics_code_sha256 == _HASH_B
+    assert record.pair_statuses[0].tier == "held_out"
+
+
+@pytest.mark.parametrize(
+    ("change", "match"),
+    [
+        ({"thresholds": {}}, "frozen requires thresholds"),
+        ({"split_registry_sha256": None}, "frozen requires split_registry_sha256"),
+        ({"metrics_code_sha256": None}, "frozen requires metrics_code_sha256"),
+        ({"split_registry_sha256": "abc"}, "hexadecimal"),
+    ],
+)
+def test_calibration_record_frozen_rejects(calibration_data, change, match):
+    with pytest.raises(ValidationError, match=match):
+        CalibrationRecord.model_validate({**_frozen(calibration_data), **change})
+
+
+def test_calibration_record_frozen_needs_no_penalised_residuals(calibration_data):
+    calibration_data["stages"][0]["n_penalised"] = 2
+    CalibrationRecord.model_validate(calibration_data)  # allowed before freezing
+    with pytest.raises(ValidationError, match=r"stages\[0\].n_penalised must be 0"):
+        CalibrationRecord.model_validate(_frozen(calibration_data))
+
+
+def test_calibration_record_pair_statuses_keyed_by_thresholds(calibration_data):
+    frozen = _pair()
+    post_hoc = _pair(thresholds_sha256=_HASH_B, after_unblinding=True, post_hoc_thresholds=True)
+    record = CalibrationRecord.model_validate(
+        {**calibration_data, "pair_statuses": [frozen, post_hoc]}
+    )
+    assert [s.post_hoc_thresholds for s in record.pair_statuses] == [False, True]
+    with pytest.raises(ValidationError, match="duplicate pair status"):
+        CalibrationRecord.model_validate({**calibration_data, "pair_statuses": [frozen, frozen]})
 
 
 # --------------------------------------------------------------------------------------
