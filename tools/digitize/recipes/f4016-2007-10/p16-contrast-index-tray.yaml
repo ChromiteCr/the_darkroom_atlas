@@ -100,7 +100,7 @@ curves:
     temperature: 20 C
     agitation: tray, sheets (continuous agitation, rotating the sheets 90 degrees as they are
       interleaved, per p. 3)
-    format: not stated (the figure is not split by format)
+    format: sheets (the figure does not say, the tray table on p. 3 is for sheets only)
     densitometry: diffuse visual
 - output: ci-tray-xtol-1-1
   quantity: contrast_index
@@ -127,7 +127,7 @@ curves:
     temperature: 20 C
     agitation: tray, sheets (continuous agitation, rotating the sheets 90 degrees as they are
       interleaved, per p. 3)
-    format: not stated (the figure is not split by format)
+    format: sheets (the figure does not say, the tray table on p. 3 is for sheets only)
     densitometry: diffuse visual
 notes:
 - 'Cross-check of p9-contrast-index-tray.yaml against the same figure in the October 2007 combined

@@ -63,7 +63,7 @@ curves:
       dilution: stock
       temperature: 20 C
       agitation: tray, sheets (continuous agitation, rotating the sheets 90 degrees as they are interleaved, per p. 3)
-      format: not stated (the figure is not split by format)
+      format: sheets (the figure does not say, the tray table on p. 3 is for sheets only)
       densitometry: diffuse visual
   - output: ci-tray-xtol-1-1
     quantity: contrast_index
@@ -75,7 +75,7 @@ curves:
       dilution: 1+1 (printed 1:1)
       temperature: 20 C
       agitation: tray, sheets (continuous agitation, rotating the sheets 90 degrees as they are interleaved, per p. 3)
-      format: not stated (the figure is not split by format)
+      format: sheets (the figure does not say, the tray table on p. 3 is for sheets only)
       densitometry: diffuse visual
 notes:
   - >-
@@ -84,7 +84,7 @@ notes:
     measurements at those times. Every curve runs from contrast index 0.56 to 0.82.
   - >-
     F-4016 (2018) never states its contrast aim. The CI 0.56 end of each curve agrees with
-    the matching 20 C time table on pp. 3-4 to within 0.2 min (see tables.yaml), and J-86
+    the matching 20 C time table on pp. 3-4 to within about 0.2 min (see tables.yaml), and J-86
     p. 2 states that the T-MAX developer times aim at CI 0.56 for films other than
     T-MAX 400.
   - >-

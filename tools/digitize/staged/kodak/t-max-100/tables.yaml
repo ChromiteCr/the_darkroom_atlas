@@ -276,7 +276,7 @@ development_times:
   contrast_aim: 'F-4016 states no contrast index: the times aim at "a contrast appropriate for printing
     with a diffusion enlarger" (p. 2). J-86 p. 2 states that its T-MAX developer times aim at CI 0.56
     for films other than T-MAX 400, and the CI 0.56 ends of the p. 9 contrast-index curves agree with
-    the 20 C times to within 0.2 min'
+    the 20 C times to within about 0.2 min'
   tank: small tank (8- or 16-ounce), rolls
   agitation: initial agitation of 5 to 7 inversion cycles in 5 seconds, then the same at 30-second intervals
     for the rest of the development time (p. 2)
@@ -361,7 +361,7 @@ development_times:
   contrast_aim: 'F-4016 states no contrast index: the times aim at "a contrast appropriate for printing
     with a diffusion enlarger" (p. 2). J-86 p. 2 states that its T-MAX developer times aim at CI 0.56
     for films other than T-MAX 400, and the CI 0.56 ends of the p. 9 contrast-index curves agree with
-    the 20 C times to within 0.2 min'
+    the 20 C times to within about 0.2 min'
   tank: large tank (1/2 to 3 1/2 gallon), rolls
   agitation: 'continuous for the first 15 to 30 seconds by raising and lowering the basket, rack or spindle
     1/2 inch, none for the rest of the first minute, then once per minute: lift out, tilt about 30 degrees,
@@ -404,7 +404,7 @@ development_times:
   contrast_aim: 'F-4016 states no contrast index: the times aim at "a contrast appropriate for printing
     with a diffusion enlarger" (p. 2). J-86 p. 2 states that its T-MAX developer times aim at CI 0.56
     for films other than T-MAX 400, and the CI 0.56 ends of the p. 9 contrast-index curves agree with
-    the 20 C times to within 0.2 min'
+    the 20 C times to within about 0.2 min'
   tank: large tank (1/2 to 3 1/2 gallon), sheets
   agitation: 'continuous for the first 15 to 30 seconds by raising and lowering the basket, rack or spindle
     1/2 inch, none for the rest of the first minute, then once per minute: lift out, tilt about 30 degrees,
@@ -443,7 +443,7 @@ development_times:
   contrast_aim: 'F-4016 states no contrast index: the times aim at "a contrast appropriate for printing
     with a diffusion enlarger" (p. 2). J-86 p. 2 states that its T-MAX developer times aim at CI 0.56
     for films other than T-MAX 400, and the CI 0.56 ends of the p. 9 contrast-index curves agree with
-    the 20 C times to within 0.2 min'
+    the 20 C times to within about 0.2 min'
   tank: tray, sheets
   agitation: continuous agitation, rotating the sheets 90 degrees as they are interleaved; prewetting
     may improve uniformity (p. 3)
@@ -486,7 +486,7 @@ development_times:
   contrast_aim: 'F-4016 states no contrast index: the times aim at "a contrast appropriate for printing
     with a diffusion enlarger" (p. 2). J-86 p. 2 states that its T-MAX developer times aim at CI 0.56
     for films other than T-MAX 400, and the CI 0.56 ends of the p. 9 contrast-index curves agree with
-    the 20 C times to within 0.2 min'
+    the 20 C times to within about 0.2 min'
   tank: rotary tube, rolls
   agitation: not stated in F-4016
   unit: min
@@ -565,7 +565,7 @@ development_times:
   contrast_aim: 'F-4016 states no contrast index: the times aim at "a contrast appropriate for printing
     with a diffusion enlarger" (p. 2). J-86 p. 2 states that its T-MAX developer times aim at CI 0.56
     for films other than T-MAX 400, and the CI 0.56 ends of the p. 9 contrast-index curves agree with
-    the 20 C times to within 0.2 min'
+    the 20 C times to within about 0.2 min'
   tank: rotary tube, sheets
   agitation: not stated in F-4016
   unit: min
