@@ -122,6 +122,8 @@ def _summary(run) -> None:
     for curve in result.curves:
         s = curve.stats
         dropped = f"dup {s.duplicates}, same-x {s.same_x}, backtrack {s.backtracking}"
+        if curve.edge_dropped:
+            dropped += f", on frame edge {curve.edge_dropped}"
         print(
             f"  {curve.spec.output}: {len(curve.x)} pts ({curve.method}, paths "
             f"{list(curve.paths)}; {dropped}); x {curve.x[0]:g}..{curve.x[-1]:g}, "

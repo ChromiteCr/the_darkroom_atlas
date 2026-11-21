@@ -79,6 +79,23 @@ facts:
   page: '2'
   statement: J-86 development times aim at a contrast index of 0.60 for T-MAX 400 Film and 0.56 for the
     other films (so 0.56 for T-MAX 100 in T-MAX and T-MAX RS developers)
+- id: characteristic-vs-contrast-index-curves
+  value: [0.035, 0.065]
+  unit: '1'
+  source: f4016-2018-06
+  page: 8 and 9 (unnumbered back page)
+  where: Characteristic Curves (p. 8) against Contrast Index Curves (p. 9)
+  statement: 'Not a printed number but a cross-check between two F-4016 figures, which disagree. The contrast
+    index read off each p. 8 characteristic curve whose development time lies within the span of the matching
+    p. 9 contrast-index curve is 0.035 to 0.065 higher than that curve gives at the same time: D-76 small tank
+    7.5 min 0.694 against 0.658; T-MAX small tank 10 min 0.683 against 0.640 and 12 min 0.778 against 0.713;
+    T-MAX RS large tank 10.5 min 0.659 against 0.614, 13 min 0.736 against 0.691 and 15 min 0.795 against
+    0.760. The gap is far beyond the reading errors (CI +/-0.003, density +/-0.016), and both figures were read
+    from their vector paths, so the inconsistency is in the publication; a model fitted to both cannot match
+    them closer than about 0.04 CI. The remaining characteristic curves (D-76 6 and 10 min, T-MAX 6 and 7 min,
+    T-MAX RS 8 min) lie outside their contrast-index curve''s span and were not compared. Computed with
+    tools/digitize/contrast.py (the collinear 0.2/2.2 contrast-index construction, centred on the density at the
+    curve''s left end) from the staged CSVs; the same figures appear unchanged in the October 2007 edition'
 - id: short-development-warning
   value: 5
   unit: min

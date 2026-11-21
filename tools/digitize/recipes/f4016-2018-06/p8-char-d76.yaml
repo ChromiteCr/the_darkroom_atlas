@@ -78,6 +78,15 @@ curves:
     conditions:
       <<: *d76
       time: 7.5min
+      ci_cross_check: >-
+        F-4016 disagrees with itself here. The contrast index read off this curve is 0.694,
+        but the small-tank D-76 contrast-index curve on p. 9 gives 0.658 at 7.5 min, 0.036
+        lower. Every characteristic curve whose time lies within the span of its contrast-
+        index curve reads 0.035 to 0.065 higher than that curve, well beyond the reading
+        errors (CI +/-0.003, density +/-0.016), so the inconsistency is in F-4016 itself and
+        a fit cannot match both figures closer than about 0.04 CI. Numbers from
+        tools/digitize/contrast.py (collinear 0.2/2.2 construction centred on the density at
+        the curve's left end)
   - output: char-d76-10min
     quantity: characteristic_curve
     legend: 10 min

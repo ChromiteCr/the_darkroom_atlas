@@ -5,6 +5,7 @@ last group writes a tiny PDF in memory and runs only when pdfminer.six is instal
 (``uv run --group digitize pytest tests/tools``).
 """
 
+import dataclasses
 import math
 
 import numpy as np
@@ -13,6 +14,7 @@ from PIL import Image, ImageDraw
 
 from darkroom_atlas.data.library import Library
 from tools.digitize.calibrate import Axis, Reference, axis_from_pairs
+from tools.digitize.contrast import chord_index, contrast_index
 from tools.digitize.figure import DigitizeError, assemble, find_phrase, has_bar
 from tools.digitize.geometry import Op, flatten_cubic, flatten_subpath, polyline_deviation
 from tools.digitize.page import Char, Page, VectorPath, group_words
@@ -472,6 +474,97 @@ def test_annotation_needs_a_single_styled_path():
                 }
             ]
         )
+
+
+def test_legend_reassigned_selects_by_the_printed_legend_and_says_so():
+    # The printed legend is "wrong": the solid line is staged under another name, but its
+    # path is still selected and style-checked through the printed "solid line" entry.
+    recipe = _recipe()
+    curves = [c.model_dump() for c in recipe.curves]
+    curves[0]["output"] = "reassigned"
+    curves[0]["legend_reassigned"] = "assigned to the other criterion because the legend is swapped"
+    result = run_recipe(_recipe(curves=curves), _chart())
+    curve = result.curves[0]
+    np.testing.assert_allclose(np.column_stack([curve.x, curve.y]), SOLID_DATA, atol=1e-4)
+    text = csv_text(result, curve, "r.yaml")
+    assert (
+        '(curve: the line the printed legend labels "solid line", assigned to the other '
+        "criterion because the legend is swapped)"
+    ) in text
+
+
+def test_legend_reassigned_needs_a_legend():
+    with pytest.raises(ValueError, match="legend_reassigned"):
+        _recipe(
+            curves=[
+                {
+                    "output": "x", "quantity": "q", "legend_reassigned": "why",
+                    "style": {"width": 0.72}, "conditions": {},
+                }
+            ]
+        )  # fmt: skip
+
+
+def _chart_with_solid_running_into_the_top() -> Page:
+    """The synthetic chart, with the solid curve continued until it meets the frame top."""
+    page = _chart()
+    paths = _Paths()
+    paths.items = [p for p in page.paths if not (p.line_width == 0.72 and p.dash == ())]
+    pts = [(_px(x), _py(y)) for x, y in [*SOLID_DATA, (1.8, 4.0)]]
+    paths.add([[Op("m", (pts[0],)), *[Op("l", (p,)) for p in pts[1:]]]], width=0.72)
+    paths.line((200.0, 132.0), (225.0, 132.0), width=0.72)  # the solid legend sample
+    items = tuple(dataclasses.replace(p, index=i) for i, p in enumerate(paths.items))
+    return Page(number=1, width=400.0, height=400.0, paths=items, chars=page.chars)
+
+
+def test_drop_on_frame_edge_removes_only_the_end_vertex_on_that_edge():
+    recipe = _recipe()
+    curves = [c.model_dump() for c in recipe.curves]
+    curves[0]["drop_on_frame_edge"] = ["top"]
+    curves[0]["drop_on_frame_edge_reason"] = "the line stops where it meets the frame"
+    result = run_recipe(_recipe(curves=curves), _chart_with_solid_running_into_the_top())
+    solid = result.curves[0]
+    assert solid.edge_dropped == 1
+    np.testing.assert_allclose(np.column_stack([solid.x, solid.y]), SOLID_DATA, atol=1e-4)
+    # Without the option the frame-edge vertex is kept.
+    curves[0]["drop_on_frame_edge"] = []
+    curves[0]["expect"]["x_span"] = [-1.5, 1.8]
+    kept = run_recipe(_recipe(curves=curves), _chart_with_solid_running_into_the_top())
+    assert kept.curves[0].edge_dropped == 0
+    assert (kept.curves[0].x[-1], kept.curves[0].y[-1]) == pytest.approx((1.8, 4.0))
+
+
+def test_drop_on_frame_edge_must_find_a_vertex_and_needs_a_reason():
+    recipe = _recipe()
+    curves = [c.model_dump() for c in recipe.curves]
+    curves[0]["drop_on_frame_edge"] = ["top"]
+    with pytest.raises(ValueError, match="drop_on_frame_edge_reason"):
+        _recipe(curves=curves)
+    curves[0]["drop_on_frame_edge_reason"] = "why"
+    with pytest.raises(DigitizeError, match="no path ends on those edges"):
+        run_recipe(_recipe(curves=curves), _chart())
+
+
+# --------------------------------------------------------------------------------------
+# Contrast index (tools/digitize/contrast.py)
+# --------------------------------------------------------------------------------------
+
+
+def test_contrast_index_of_a_straight_line_from_the_fog_corner_is_its_slope():
+    # Flat at fog 0.2 up to log H = -2, then a straight line of gradient 0.6.
+    x = np.array([-4.0, -2.0, 1.5])
+    y = np.array([0.2, 0.2, 0.2 + 0.6 * 3.5])
+    assert contrast_index(x, y) == pytest.approx(0.6, abs=1e-6)
+    assert chord_index(x, y) == pytest.approx(0.6, abs=1e-6)
+
+
+def test_contrast_index_ignores_a_curved_toe_below_the_inner_mark():
+    # A toe that bends inside the 0.2 circle does not change the result much; the collinear
+    # chord is between the toe gradient and the straight-line gradient.
+    x = np.linspace(-4.0, 1.5, 551)
+    y = 0.2 + 0.6 * np.logaddexp(0.0, 4.0 * (x + 2.0)) / 4.0
+    ci = contrast_index(x, y)
+    assert 0.5 < ci < 0.6
 
 
 # --------------------------------------------------------------------------------------

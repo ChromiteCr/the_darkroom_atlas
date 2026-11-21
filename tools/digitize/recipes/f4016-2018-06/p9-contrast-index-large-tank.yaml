@@ -77,6 +77,17 @@ curves:
       agitation: large tank (the figure gives no interval, the large-tank procedure on p. 3 agitates once per minute after continuous agitation for the first 15 to 30 seconds)
       format: not stated (the figure is not split by format)
       densitometry: diffuse visual
+      ci_cross_check: >-
+        F-4016 disagrees with itself here. The p. 8 characteristic curves read a higher
+        contrast index than this curve at the same time: 10.5 min 0.659 against 0.614
+        (+0.045), 13 min 0.736 against 0.691 (+0.046), 15 min 0.795 against 0.760 (+0.035)
+        (characteristic curve against this curve). The 8 min curve lies outside this curve's
+        span (8.7 to 16.5 min) and is not compared. Every characteristic curve whose time
+        lies within the span of its contrast-index curve reads 0.035 to 0.065 higher than
+        that curve, well beyond the reading errors (CI +/-0.003, density +/-0.016), so the
+        inconsistency is in F-4016 itself and a fit cannot match both figures closer than
+        about 0.04 CI. Numbers from tools/digitize/contrast.py (collinear 0.2/2.2
+        construction centred on the density at the curve's left end)
   - output: ci-large-tank-xtol
     quantity: contrast_index
     legend: XTOL

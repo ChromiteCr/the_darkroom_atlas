@@ -87,22 +87,48 @@ curves:
     conditions:
       <<: *td
       time: 10min
+      ci_cross_check: >-
+        F-4016 disagrees with itself here. The contrast index read off this curve is 0.683,
+        but the small-tank T-MAX contrast-index curve on p. 9 gives 0.640 at 10 min, 0.043
+        lower. Every characteristic curve whose time lies within the span of its contrast-
+        index curve reads 0.035 to 0.065 higher than that curve, well beyond the reading
+        errors (CI +/-0.003, density +/-0.016), so the inconsistency is in F-4016 itself and
+        a fit cannot match both figures closer than about 0.04 CI. Numbers from
+        tools/digitize/contrast.py (collinear 0.2/2.2 construction centred on the density at
+        the curve's left end)
   - output: char-tmax-dev-12min
     quantity: characteristic_curve
     legend: 12 min
     style: {width: 0.72, dash: []}
-    expect: {paths: 1, x_span: [-3.15, 0.39], tolerance: [0.01, 0.01]}
+    drop_on_frame_edge: [top]
+    drop_on_frame_edge_reason: &ceiling_reason >-
+      the printed line runs into the top edge of the frame (density 3.0) near log exposure
+      0.39 and stops there; that end vertex is where the line leaves the plotted range, not
+      a reading
+    expect: {paths: 1, x_span: [-3.15, 0.37], tolerance: [0.01, 0.01]}
     conditions:
       <<: *td
       time: 12min
+      ci_cross_check: >-
+        F-4016 disagrees with itself here. The contrast index read off this curve is 0.778,
+        but the small-tank T-MAX contrast-index curve on p. 9 gives 0.713 at 12 min, 0.065
+        lower. Every characteristic curve whose time lies within the span of its contrast-
+        index curve reads 0.035 to 0.065 higher than that curve, well beyond the reading
+        errors (CI +/-0.003, density +/-0.016), so the inconsistency is in F-4016 itself and
+        a fit cannot match both figures closer than about 0.04 CI. Numbers from
+        tools/digitize/contrast.py (collinear 0.2/2.2 construction centred on the density at
+        the curve's left end)
       plot_ceiling: >-
         the curve leaves the chart through the top of the frame (density 3.0) near log
-        exposure 0.39. Its last point is where it meets the frame edge, not the end of the
-        measured curve
+        exposure 0.39. The vertex where the line meets the frame edge is dropped, so the
+        last point (log exposure 0.37, density 2.98) is the last vertex inside the frame,
+        not the end of the measured curve
 notes:
   - >-
-    The 12-minute curve ends at the top edge of the frame (density 3.0); the published
-    curve continues off the chart and is not available beyond that point.
+    The 12-minute curve runs into the top edge of the frame (density 3.0); the published
+    curve continues off the chart and is not available beyond that point. The vertex on the
+    frame edge is dropped (drop_on_frame_edge); until 2026-11-21 it was kept as the last
+    point (0.3873, 3.0001).
   - >-
     The 12-minute curve is a solid path of 18 operators (lines and Bezier curves); the
     other three are polylines of 136 points. The digitised points are the path vertices

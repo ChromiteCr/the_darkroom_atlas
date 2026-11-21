@@ -4,7 +4,7 @@
 # y_unit: 1
 # origin: datasheet
 # ref: Kodak Alaris, KODAK PROFESSIONAL T-MAX 100 Film (Technical Data / Black-and-White Film), Publication F-4016, June 2018 (p. 1 "June 2018"; back page "Revised 6-18"), p. 8, figure "Characteristic Curves (bottom), KODAK PROFESSIONAL T-MAX 100 Film" (curve: 12 min); https://kodakprofessional.com/sites/default/files/wysiwyg/pro/resources/f4016_TMax_100.pdf (sha256 00518d7d1e296d6065f6e41ea3db999e5d8714679fb3d2b76d9a49eb207113be); digitised from the PDF's vector paths by tools/digitize/recipes/f4016-2018-06/p8-char-tmax-dev.yaml; estimated error x +/-0.0198 log10(lux*s), y +/-0.0119
-# conditions: developer=t-max-dev; dilution=not stated in the figure; time=12min; temperature=20 C; agitation=small tank (the caption gives no interval, the small-tank procedure on p. 2 agitates 5 to 7 inversion cycles in 5 seconds at 30-second intervals); format=not stated (the figure is not split by format); densitometry=diffuse visual; exposure=daylight (no exposure time given); plot_ceiling=the curve leaves the chart through the top of the frame (density 3.0) near log exposure 0.39. Its last point is where it meets the frame edge, not the end of the measured curve
+# conditions: developer=t-max-dev; dilution=not stated in the figure; time=12min; temperature=20 C; agitation=small tank (the caption gives no interval, the small-tank procedure on p. 2 agitates 5 to 7 inversion cycles in 5 seconds at 30-second intervals); format=not stated (the figure is not split by format); densitometry=diffuse visual; exposure=daylight (no exposure time given); ci_cross_check=F-4016 disagrees with itself here. The contrast index read off this curve is 0.778, but the small-tank T-MAX contrast-index curve on p. 9 gives 0.713 at 12 min, 0.065 lower. Every characteristic curve whose time lies within the span of its contrast- index curve reads 0.035 to 0.065 higher than that curve, well beyond the reading errors (CI +/-0.003, density +/-0.016), so the inconsistency is in F-4016 itself and a fit cannot match both figures closer than about 0.04 CI. Numbers from tools/digitize/contrast.py (collinear 0.2/2.2 construction centred on the density at the curve's left end); plot_ceiling=the curve leaves the chart through the top of the frame (density 3.0) near log exposure 0.39. The vertex where the line meets the frame edge is dropped, so the last point (log exposure 0.37, density 2.98) is the last vertex inside the frame, not the end of the measured curve
 -3.1500,0.2960
 -3.0796,0.2988
 -3.0175,0.3014
@@ -98,4 +98,3 @@
 0.2987,2.8774
 0.3335,2.9256
 0.3717,2.9786
-0.3873,3.0001

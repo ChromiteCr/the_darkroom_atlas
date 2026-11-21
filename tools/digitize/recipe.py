@@ -155,10 +155,21 @@ class CurveSpec(_Strict):
     # How far left of the legend text the sample line may end (pt). Right-aligned legend
     # text with a short label ("8 min") can sit further from its sample than the default.
     legend_max_gap_pt: float = Field(default=12.0, gt=0, le=40)
+    # When the printed legend is wrong: ``legend`` still names the printed entry whose
+    # sample selects (and style-checks) the path, and this says which quantity the curve
+    # is assigned to instead and why. The text goes into the CSV's ref.
+    legend_reassigned: str | None = None
     style: Style | None = None
     raster: RasterSpec | None = None
     monotonic: Literal["strict", "drop-backtracking"] = "strict"
     monotonic_reason: str | None = None
+    # Frame edges where a path that runs into the edge and stops there has its end vertices
+    # (those within FRAME_EDGE_TOLERANCE_PT of the edge) dropped: such a vertex marks where
+    # the drawn line leaves the plotted range, not a reading. Interior vertices are kept.
+    drop_on_frame_edge: list[Literal["left", "right", "bottom", "top"]] = Field(
+        default_factory=list
+    )
+    drop_on_frame_edge_reason: str | None = None
     expect: Expect = Field(default_factory=Expect)
     conditions: dict[str, str]
     note: str | None = None
@@ -171,6 +182,13 @@ class CurveSpec(_Strict):
             raise ValueError("annotation selects one vector path: it needs style and paths: 1")
         if self.monotonic == "drop-backtracking" and not self.monotonic_reason:
             raise ValueError("monotonic: drop-backtracking needs a monotonic_reason")
+        if self.legend_reassigned is not None and self.legend is None:
+            raise ValueError("legend_reassigned needs the printed legend entry in legend")
+        if self.drop_on_frame_edge:
+            if self.style is None:
+                raise ValueError("drop_on_frame_edge applies to vector curves only")
+            if not self.drop_on_frame_edge_reason:
+                raise ValueError("drop_on_frame_edge needs a drop_on_frame_edge_reason")
         for key, value in self.conditions.items():
             if ";" in value or "=" in key or "\n" in value:
                 raise ValueError(f"conditions[{key!r}] must not contain ';', '=' or newlines")
@@ -246,6 +264,7 @@ class CurveResult:
     paths: tuple[int, ...]
     stats: AssembleStats
     stroke_pt: float
+    edge_dropped: int = 0  # end vertices dropped on a frame edge (drop_on_frame_edge)
 
 
 @dataclass(frozen=True)
@@ -349,14 +368,61 @@ def _vector_curve(page, recipe, curve, x_axis, y_axis, skip, legend_paths) -> Cu
         )
     tol = recipe.flatten_tolerance_pt
     polylines = [poly for p in chosen for poly in p.polylines(tol)]
+    polylines, edge_dropped = _drop_on_frame_edge(polylines, frame, curve.drop_on_frame_edge)
+    if curve.drop_on_frame_edge and edge_dropped == 0:
+        raise DigitizeError(
+            f"curve {curve.output!r}: drop_on_frame_edge {curve.drop_on_frame_edge} is set but "
+            "no path ends on those edges"
+        )
     data = to_data(polylines, x_axis, y_axis)
     xs, ys, stats = assemble(data, tuple(recipe.decimals), curve.monotonic)
     stroke = max(p.line_width for p in chosen)
     error_x = x_axis.width_to_axis(stroke + tol) + x_axis.residual_max
     error_y = y_axis.width_to_axis(stroke + tol) + y_axis.residual_max
     return CurveResult(
-        curve, xs, ys, error_x, error_y, "vector", tuple(p.index for p in chosen), stats, stroke
+        curve,
+        xs,
+        ys,
+        error_x,
+        error_y,
+        "vector",
+        tuple(p.index for p in chosen),
+        stats,
+        stroke,
+        edge_dropped,
     )
+
+
+# How close (pt) an end vertex must be to a frame edge to count as lying on it.
+FRAME_EDGE_TOLERANCE_PT = 0.05
+
+
+def _drop_on_frame_edge(
+    polylines: list[np.ndarray], frame: BBox, edges: list[str]
+) -> tuple[list[np.ndarray], int]:
+    """Drop the leading and trailing vertices of each polyline that lie on ``edges``."""
+    if not edges:
+        return polylines, 0
+    x0, y0, x1, y1 = frame
+    where = {"left": (0, x0), "right": (0, x1), "bottom": (1, y0), "top": (1, y1)}
+
+    def on_edge(point: np.ndarray) -> bool:
+        return any(
+            abs(point[axis] - at) <= FRAME_EDGE_TOLERANCE_PT
+            for axis, at in (where[e] for e in edges)
+        )
+
+    out, dropped = [], 0
+    for poly in polylines:
+        start, end = 0, len(poly)
+        while start < end and on_edge(poly[start]):
+            start += 1
+        while end > start and on_edge(poly[end - 1]):
+            end -= 1
+        dropped += len(poly) - (end - start)
+        if end - start >= 1:
+            out.append(poly[start:end])
+    return out, dropped
 
 
 def _raster_curve(recipe, curve, gray, page_height, x_axis, y_axis) -> CurveResult:
@@ -464,6 +530,11 @@ def citation(recipe: Recipe, curve: CurveSpec) -> str:
     pub = recipe.publication
     label = curve.legend or curve.annotation
     which = f" (curve: {label})" if label else ""
+    if curve.legend_reassigned is not None:
+        which = (
+            f' (curve: the line the printed legend labels "{curve.legend}", '
+            f"{curve.legend_reassigned})"
+        )
     return (
         f"{pub.publisher}, {pub.title}, Publication {pub.number}, {pub.edition}, "
         f'p. {recipe.printed_page}, figure "{recipe.figure}"{which}'

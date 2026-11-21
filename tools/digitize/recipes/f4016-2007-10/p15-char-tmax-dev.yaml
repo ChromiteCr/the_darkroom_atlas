@@ -159,11 +159,15 @@ curves:
   style:
     width: 0.72
     dash: []
+  drop_on_frame_edge: [top]
+  drop_on_frame_edge_reason: the printed line runs into the top edge of the frame (density 3.0)
+    near log exposure 0.39 and stops there; that end vertex is where the line leaves the plotted
+    range, not a reading
   expect:
     paths: 1
     x_span:
     - -3.15
-    - 0.39
+    - 0.37
     tolerance:
     - 0.01
     - 0.01
@@ -178,8 +182,9 @@ curves:
     densitometry: diffuse visual
     exposure: daylight (no exposure time given)
     plot_ceiling: the curve leaves the chart through the top of the frame (density 3.0) near log
-      exposure 0.39. Its last point is where it meets the frame edge, not the end of the measured
-      curve
+      exposure 0.39. The vertex where the line meets the frame edge is dropped, so the last point
+      (log exposure 0.37, density 2.98) is the last vertex inside the frame, not the end of the
+      measured curve
 notes:
 - 'Cross-check of p8-char-tmax-dev.yaml against the same figure in the October 2007 combined F-4016
   (kodak.com copy archived at web.archive.org). Region: white box path #44; frame: path #60; legend
