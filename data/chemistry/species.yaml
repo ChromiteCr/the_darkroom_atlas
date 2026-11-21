@@ -1,2 +1,592 @@
+# Chemical species of the D1 black-and-white chain (spec D1 2.3.1, 2.3.7, 5.2).
+#
+# Two kinds of entry:
+# * ingredient: weighed into a bath; dissolves into components (dissolves_to, mol/mol), adds
+#   `toth` mol of proton excess per mol relative to the components' reference states, and
+#   brings Na+/K+ (cations) and spectator ions (spectator_charge) that only enter the ionic
+#   strength. Each spectator entry here is one ion per formula unit, so its value is both the
+#   ion's charge and the charge per mol of ingredient.
+# * component: transported and reacted. Its molar_mass is that of the reference state, so a
+#   bath may also weigh a component directly (dissolves_to {self: 1}, toth 0, no cations).
+#   acid_base lists the states most protonated first; the reference state has
+#   `reference_protons` fewer protons than the most protonated one.
+#
+# Diffusion coefficients are in water at 20 C. The proton excess TOTH is not a species here: a
+# working solution carries it as a separate total (spec D1 2.3.2, 2.4.8).
+#
+# Source tags follow spec D1 0.2. Report abbreviations: DEV = docs/research/d1/
+# developer-formulas.md, TMX = t-max-developer.md, KIN = development-kinetics.md.
 schema_version: 1
-species: []
+species:
+  # ------------------------------------------------------------------------------------
+  # Components (spec D1 2.3.7)
+  # ------------------------------------------------------------------------------------
+  - id: sulfite
+    name: sulfite (S(IV) total)
+    formula: SO3(2-)
+    molar_mass: {value: 80.06, unit: g/mol, source: literature, ref: "SO3 2- formula mass"}
+    roles: [preservative, buffer, solvent]
+    kind: component
+    acid_base:
+      charge_most_protonated: 0
+      reference_protons: 2
+      pka:
+        - {value: 1.86, unit: "1", source: literature, ref: "Goldberg & Parker, J. Res. NBS 90, 341 (1985); DEV 6.2"}
+        - {value: 7.19, unit: "1", source: literature, ref: "Goldberg & Parker 1985; DEV 6.2"}
+      ionisation_enthalpy:
+        - {value: 0.0, unit: kJ/mol, source: assumed, note: "irrelevant above pH 4"}
+        - {value: -3.65, unit: kJ/mol, source: literature, ref: "Goldberg & Parker 1985; DEV 6.2"}
+      activity_class: sulfite
+    diffusion_coefficient: {value: 1030, unit: um2/s, source: assumed, note: "Nernst-Hartley for Na2SO3 (the bulk electrolyte, so the salt value applies) from recalled ionic D (DEV 6.3), scaled to 20 C"}
+    gel_diffusion_ratio: {value: 0.5, unit: "1", source: assumed, bounds: [0.3, 0.8], note: "Iwano KBr 0.8 at 8 % and 0.55 at 20 % gelatin (KIN 3.2), extrapolated to the 30-45 wt % swollen emulsion (spec D1 2.3.7 note)"}
+
+  - id: borate
+    name: borate (boric acid + borate total)
+    formula: B(OH)3
+    molar_mass: {value: 61.83, unit: g/mol, source: literature, ref: "B(OH)3 formula mass; DEV 6.2"}
+    roles: [buffer]
+    kind: component
+    acid_base:
+      charge_most_protonated: 0
+      reference_protons: 0
+      pka:
+        - {value: 9.235, unit: "1", source: literature, ref: "Manov, DeLollis & Acree, J. Res. NBS 33, 287 (1944), equation at 25 C; DEV 6.2", note: "the manov_boric law gives pK(T); polyborates neglected (assumed, DEV 6.2)"}
+      temperature_law: manov_boric
+      activity_class: borate
+    diffusion_coefficient: {value: 1030, unit: um2/s, source: assumed, note: "no value found; taken equal to sulfite (spec D1 2.3.7)"}
+    gel_diffusion_ratio: {value: 0.5, unit: "1", source: assumed, bounds: [0.3, 0.8], note: "salt value (spec D1 2.3.7 note)"}
+
+  - id: hydroquinone
+    name: hydroquinone
+    formula: C6H6O2
+    cas: 123-31-9
+    molar_mass: {value: 110.11, unit: g/mol, source: literature, ref: "PubChem; DEV 6.1"}
+    roles: [developing_agent]
+    kind: component
+    acid_base:
+      charge_most_protonated: 0
+      reference_protons: 0
+      pka:
+        - {value: 9.85, unit: "1", source: literature, ref: "IUPAC pKa set, Baxendale & Hardy, Trans. Faraday Soc. 49, 1140 (1953); DEV 6.1"}
+        - {value: 11.45, unit: "1", source: literature, ref: "IUPAC pKa set 11.39-11.56 (20-26 C), midpoint; DEV 6.1", uncertainty: 0.1}
+      ionisation_enthalpy:
+        - {value: 0.0, unit: kJ/mol, source: assumed, note: "organic agents: temperature effect is in the apparent activation energy (spec D1 2.3.3)"}
+        - {value: 0.0, unit: kJ/mol, source: assumed, note: "as above"}
+      activity_class: organic
+    diffusion_coefficient: {value: 855, unit: um2/s, source: assumed, note: "Wilke-Chang/Hayduk-Laudie mean at 20 C with recalled Le Bas increments, DEV 6.3"}
+    gel_diffusion_ratio: {value: 0.10, unit: "1", source: literature, ref: "Iwano 1970 Table 5; KIN 3.2"}
+    developing_agent: {role: regenerator, kinetic_class: hydroquinone, active_state: 2, product_sulfonated: true}
+
+  - id: metol
+    name: metol base, 4-(methylamino)phenol
+    formula: C7H9NO
+    cas: 150-75-4
+    molar_mass: {value: 123.15, unit: g/mol, source: literature, ref: "DEV 6.1"}
+    roles: [developing_agent]
+    kind: component
+    acid_base:
+      charge_most_protonated: 1
+      reference_protons: 1
+      pka:
+        - {value: 5.9, unit: "1", source: literature, ref: "IUPAC pKa set, Fieser, JACS 52, 4915 (1930); DEV 6.1"}
+        - {value: 10.25, unit: "1", source: assumed, note: "phenol pKa not found; estimate 10.1-10.4 by analogy with p-aminophenol, DEV 6.1"}
+      ionisation_enthalpy:
+        - {value: 0.0, unit: kJ/mol, source: assumed, note: "spec D1 2.3.3"}
+        - {value: 0.0, unit: kJ/mol, source: assumed, note: "spec D1 2.3.3"}
+      activity_class: organic
+    diffusion_coefficient: {value: 740, unit: um2/s, source: assumed, note: "Wilke-Chang/Hayduk-Laudie mean at 20 C, DEV 6.3"}
+    gel_diffusion_ratio: {value: 0.13, unit: "1", source: literature, ref: "Iwano 1970; KIN 3.2"}
+    developing_agent: {role: eta, kinetic_class: metol, active_state: 2, product_sulfonated: true}
+
+  - id: p-aminophenol
+    name: p-aminophenol
+    formula: C6H7NO
+    cas: 123-30-8
+    molar_mass: {value: 109.13, unit: g/mol, source: literature, ref: "DEV 6.1"}
+    roles: [developing_agent]
+    kind: component
+    acid_base:
+      charge_most_protonated: 1
+      reference_protons: 1
+      pka:
+        - {value: 5.48, unit: "1", source: literature, ref: "IUPAC pKa set, de Courville, Compt. Rend. C 262, 1196 (1966); DEV 6.1"}
+        - {value: 10.46, unit: "1", source: literature, ref: "IUPAC pKa set, Epstein et al., JACS 86, 3075 (1964); DEV 6.1"}
+      ionisation_enthalpy:
+        - {value: 0.0, unit: kJ/mol, source: assumed, note: "spec D1 2.3.3"}
+        - {value: 0.0, unit: kJ/mol, source: assumed, note: "spec D1 2.3.3"}
+      activity_class: organic
+    diffusion_coefficient: {value: 825, unit: um2/s, source: assumed, note: "Wilke-Chang/Hayduk-Laudie mean at 20 C, DEV 6.3"}
+    gel_diffusion_ratio: {value: 0.12, unit: "1", source: assumed, note: "same order as hydroquinone and metol (Iwano, KIN 3.2)"}
+    developing_agent: {role: single, kinetic_class: p-aminophenol, active_state: 2, product_sulfonated: true}
+
+  - id: dimezone-s
+    name: Dimezone S, 4-hydroxymethyl-4-methyl-1-phenyl-3-pyrazolidinone
+    formula: C11H14N2O2
+    cas: 13047-13-7
+    molar_mass: {value: 206.24, unit: g/mol, source: literature, ref: "PubChem; DEV 6.1"}
+    roles: [developing_agent]
+    kind: component
+    acid_base:
+      charge_most_protonated: 0
+      reference_protons: 0
+      pka:
+        - {value: 8.5, unit: "1", source: assumed, bounds: [7.5, 9.5], note: "PLACEHOLDER; acid pKa conflict 9.48 (Cauzzo & Mazzucato 1963) vs 7.57 (Tabak et al. 1966) for Phenidone, none for Dimezone S (DEV 6.1, 7 item 12); fitted as kinetics.yaml agents.pyrazolidone.pka"}
+      ionisation_enthalpy:
+        - {value: 0.0, unit: kJ/mol, source: assumed, note: "spec D1 2.3.3"}
+      activity_class: organic
+    diffusion_coefficient: {value: 555, unit: um2/s, source: assumed, note: "Wilke-Chang/Hayduk-Laudie mean at 20 C, DEV 6.3"}
+    gel_diffusion_ratio: {value: 0.2, unit: "1", source: assumed, bounds: [0.1, 0.3], note: "prior, KIN 3.2"}
+    developing_agent: {role: eta, kinetic_class: pyrazolidone, active_state: 1, product_sulfonated: false}
+
+  - id: phenidone
+    name: Phenidone, 1-phenyl-3-pyrazolidinone
+    formula: C9H10N2O
+    cas: 92-43-3
+    molar_mass: {value: 162.19, unit: g/mol, source: literature, ref: "DEV 6.1"}
+    roles: [developing_agent]
+    kind: component
+    acid_base:
+      charge_most_protonated: 0
+      reference_protons: 0
+      pka:
+        - {value: 8.5, unit: "1", source: assumed, bounds: [7.5, 9.5], note: "PLACEHOLDER; shares the pyrazolidone class pKa (kinetics.yaml agents.pyrazolidone.pka); 9.48 vs 7.57 unresolved, DEV 6.1"}
+      ionisation_enthalpy:
+        - {value: 0.0, unit: kJ/mol, source: assumed, note: "spec D1 2.3.3"}
+      activity_class: organic
+    diffusion_coefficient: {value: 650, unit: um2/s, source: assumed, note: "Wilke-Chang/Hayduk-Laudie mean at 20 C, DEV 6.3"}
+    gel_diffusion_ratio: {value: 0.2, unit: "1", source: assumed, note: "as dimezone-s, KIN 3.2 prior"}
+    developing_agent: {role: eta, kinetic_class: pyrazolidone, active_state: 1, product_sulfonated: false}
+
+  - id: methylphenidone
+    name: 4-methyl-1-phenyl-3-pyrazolidinone
+    formula: C10H12N2O
+    cas: 2654-57-1
+    molar_mass: {value: 176.21, unit: g/mol, source: literature, ref: "DEV 6.1"}
+    roles: [developing_agent]
+    kind: component
+    acid_base:
+      charge_most_protonated: 0
+      reference_protons: 0
+      pka:
+        - {value: 8.5, unit: "1", source: assumed, bounds: [7.5, 9.5], note: "PLACEHOLDER; shares the pyrazolidone class pKa (kinetics.yaml agents.pyrazolidone.pka); acid pKa not found, DEV 6.1"}
+      ionisation_enthalpy:
+        - {value: 0.0, unit: kJ/mol, source: assumed, note: "spec D1 2.3.3"}
+      activity_class: organic
+    diffusion_coefficient: {value: 605, unit: um2/s, source: assumed, note: "Wilke-Chang/Hayduk-Laudie mean at 20 C, DEV 6.3"}
+    gel_diffusion_ratio: {value: 0.2, unit: "1", source: assumed, note: "as dimezone-s, KIN 3.2 prior"}
+    developing_agent: {role: eta, kinetic_class: pyrazolidone, active_state: 1, product_sulfonated: false}
+
+  - id: ascorbate
+    name: isoascorbate (erythorbic acid total)
+    formula: C6H8O6
+    molar_mass: {value: 176.12, unit: g/mol, source: literature, ref: "C6H8O6 formula mass (as L-ascorbic acid); DEV 6.1"}
+    roles: [developing_agent]
+    kind: component
+    acid_base:
+      charge_most_protonated: 0
+      reference_protons: 0
+      pka:
+        - {value: 4.04, unit: "1", source: assumed, note: "L-ascorbic acid, Khan & Martell, JACS 89, 7104 (1967) and JACS 91, 4668 (1969), 25 C, I 0.1 KNO3 (literature, DEV 6.1); applied to isoascorbic acid (assumed)"}
+        - {value: 11.34, unit: "1", source: assumed, note: "as above"}
+      ionisation_enthalpy:
+        - {value: 0.0, unit: kJ/mol, source: assumed, note: "spec D1 2.3.3"}
+        - {value: 0.0, unit: kJ/mol, source: assumed, note: "spec D1 2.3.3"}
+      activity_class: organic
+    diffusion_coefficient: {value: 710, unit: um2/s, source: assumed, note: "Wilke-Chang/Hayduk-Laudie mean at 20 C, DEV 6.3"}
+    gel_diffusion_ratio: {value: 0.2, unit: "1", source: assumed, bounds: [0.1, 0.3], note: "prior, KIN 3.2"}
+    developing_agent: {role: regenerator, kinetic_class: ascorbate, active_state: 1, product_sulfonated: false}
+
+  - id: diethanolamine
+    name: diethanolamine
+    formula: C4H11NO2
+    cas: 111-42-2
+    molar_mass: {value: 105.14, unit: g/mol, source: literature, ref: "DEV 6.2"}
+    roles: [buffer, alkali]
+    kind: component
+    acid_base:
+      charge_most_protonated: 1
+      reference_protons: 1
+      pka:
+        - {value: 8.883, unit: "1", source: literature, ref: "IUPAC pKa set ('Reliable'), Bower, Robinson & Bates, J. Res. NBS 66A, 71 (1962); DEV 6.2"}
+      temperature_law: linear
+      dpka_dt:
+        - {value: -0.025, unit: 1/K, source: literature, ref: "derived: slope of 9.133/9.005/8.883/8.759 at 15/20/25/30 C, Bower, Robinson & Bates 1962; DEV 6.2"}
+      activity_class: amine
+    diffusion_coefficient: {value: 785, unit: um2/s, source: assumed, note: "Wilke-Chang/Hayduk-Laudie mean at 20 C, DEV 6.3"}
+    gel_diffusion_ratio: {value: 0.4, unit: "1", source: assumed, bounds: [0.2, 0.8], note: "by reference to Iwano's HCHO (KIN 3.2)"}
+
+  - id: ethanolamine
+    name: ethanolamine (MEA)
+    formula: C2H7NO
+    cas: 141-43-5
+    molar_mass: {value: 61.08, unit: g/mol, source: literature, ref: "DEV 6.2"}
+    roles: [buffer, alkali]
+    kind: component
+    acid_base:
+      charge_most_protonated: 1
+      reference_protons: 1
+      pka:
+        - {value: 9.498, unit: "1", source: literature, ref: "IUPAC pKa set ('Reliable'), Bates & Pinching, J. Res. NBS 46, 349 (1951); DEV 6.2"}
+      temperature_law: linear
+      dpka_dt:
+        - {value: -0.030, unit: 1/K, source: literature, ref: "derived: (9.498 - 9.647)/5 K at 25/20 C, Bates & Pinching 1951; DEV 6.2"}
+      activity_class: amine
+    diffusion_coefficient: {value: 1090, unit: um2/s, source: assumed, note: "Wilke-Chang/Hayduk-Laudie mean at 20 C, DEV 6.3"}
+    gel_diffusion_ratio: {value: 0.4, unit: "1", source: assumed, note: "as diethanolamine"}
+
+  - id: methylethanolamine
+    name: 2-(methylamino)ethanol (MMEA)
+    formula: C3H9NO
+    cas: 109-83-1
+    molar_mass: {value: 75.11, unit: g/mol, source: literature, ref: "PubChem; TMX 2.4"}
+    roles: [buffer, alkali]
+    kind: component
+    acid_base:
+      charge_most_protonated: 1
+      reference_protons: 1
+      pka:
+        - {value: 9.82, unit: "1", source: literature, ref: "IUPAC pKa set ('Approximate'): 9.77 Douheret & Pariaud, J. Chim. Phys. 59, 1013 (1962); 9.88 Christensen et al., J. Chem. Soc. A 1969, 1212; mean; TMX 2.4"}
+      temperature_law: linear
+      dpka_dt:
+        - {value: -0.028, unit: 1/K, source: assumed, note: "between the diethanolamine and ethanolamine slopes (spec D1 2.3.7)"}
+      activity_class: amine
+    diffusion_coefficient: {value: 1090, unit: um2/s, source: assumed, note: "taken equal to ethanolamine (spec D1 2.3.7)"}
+    gel_diffusion_ratio: {value: 0.4, unit: "1", source: assumed, note: "as diethanolamine"}
+
+  - id: dtpa
+    name: DTPA, pentetic acid (total)
+    formula: C14H23N3O10
+    cas: 67-43-6
+    molar_mass: {value: 393.35, unit: g/mol, source: literature, ref: "DEV 6.2"}
+    roles: [other]
+    kind: component
+    acid_base:
+      charge_most_protonated: 0
+      reference_protons: 0
+      pka:
+        - {value: 1.8, unit: "1", source: assumed, note: "recalled/secondary per DEV 6.2 (Martell & Smith, Critical Stability Constants; 25 C, I 0.1)"}
+        - {value: 2.6, unit: "1", source: assumed, note: "recalled/secondary per DEV 6.2"}
+        - {value: 4.3, unit: "1", source: assumed, note: "recalled/secondary per DEV 6.2"}
+        - {value: 8.6, unit: "1", source: assumed, note: "recalled/secondary per DEV 6.2"}
+        - {value: 10.5, unit: "1", source: assumed, note: "recalled/secondary per DEV 6.2"}
+      ionisation_enthalpy:
+        - {value: 0.0, unit: kJ/mol, source: assumed, note: "spec D1 2.3.7"}
+        - {value: 0.0, unit: kJ/mol, source: assumed, note: "spec D1 2.3.7"}
+        - {value: 0.0, unit: kJ/mol, source: assumed, note: "spec D1 2.3.7"}
+        - {value: 0.0, unit: kJ/mol, source: assumed, note: "spec D1 2.3.7"}
+        - {value: 0.0, unit: kJ/mol, source: assumed, note: "spec D1 2.3.7"}
+      activity_class: organic
+    diffusion_coefficient: {value: 555, unit: um2/s, source: assumed, note: "spec D1 2.3.7"}
+    gel_diffusion_ratio: {value: 0.2, unit: "1", source: assumed, note: "spec D1 2.3.7"}
+
+  - id: hedta
+    name: HEDTA, N-(2-hydroxyethyl)ethylenediaminetriacetic acid (total)
+    formula: C10H18N2O7
+    cas: 150-39-0
+    molar_mass: {value: 278.26, unit: g/mol, source: literature, ref: "DEV 6.2"}
+    roles: [other]
+    kind: component
+    acid_base:
+      charge_most_protonated: 0
+      reference_protons: 0
+      pka:
+        - {value: 2.6, unit: "1", source: assumed, note: "recalled/secondary per DEV 6.2 (Martell & Smith)"}
+        - {value: 5.4, unit: "1", source: assumed, note: "recalled/secondary per DEV 6.2"}
+        - {value: 9.8, unit: "1", source: assumed, note: "recalled/secondary per DEV 6.2"}
+      ionisation_enthalpy:
+        - {value: 0.0, unit: kJ/mol, source: assumed, note: "spec D1 2.3.7"}
+        - {value: 0.0, unit: kJ/mol, source: assumed, note: "spec D1 2.3.7"}
+        - {value: 0.0, unit: kJ/mol, source: assumed, note: "spec D1 2.3.7"}
+      activity_class: organic
+    diffusion_coefficient: {value: 555, unit: um2/s, source: assumed, note: "spec D1 2.3.7"}
+    gel_diffusion_ratio: {value: 0.2, unit: "1", source: assumed, note: "spec D1 2.3.7"}
+
+  - id: bromide
+    name: bromide ion
+    formula: Br(-)
+    molar_mass: {value: 79.904, unit: g/mol, source: literature, ref: "Br standard atomic weight"}
+    roles: [restrainer]
+    kind: component
+    diffusion_coefficient: {value: 1816, unit: um2/s, source: assumed, note: "tracer value 2.080e-5 cm2/s at 25 C (DEV 6.3, recalled) scaled to 20 C by T/eta (spec D1 2.3.7); not the NaBr salt value"}
+    gel_diffusion_ratio: {value: 0.5, unit: "1", source: assumed, bounds: [0.3, 0.8], note: "salt value (spec D1 2.3.7 note)"}
+
+  - id: iodide
+    name: iodide ion
+    formula: I(-)
+    molar_mass: {value: 126.904, unit: g/mol, source: literature, ref: "I standard atomic weight"}
+    roles: [restrainer]
+    kind: component
+    diffusion_coefficient: {value: 1786, unit: um2/s, source: assumed, note: "tracer value 2.045e-5 cm2/s at 25 C (recalled) scaled to 20 C by T/eta (spec D1 2.3.7)"}
+    gel_diffusion_ratio: {value: 0.47, unit: "1", source: assumed, bounds: [0.3, 0.8], note: "salt value 0.5 times the Iwano KI/KBr ratio 0.94 (KIN 3.2, literature)"}
+
+  - id: silver
+    name: dissolved silver(I) (sulfite complexes)
+    formula: Ag(I)
+    molar_mass: {value: 107.868, unit: g/mol, source: literature, ref: "Ag standard atomic weight"}
+    roles: [other]
+    kind: component
+    diffusion_coefficient: {value: 1030, unit: um2/s, source: assumed, note: "taken equal to sulfite (spec D1 2.3.7)"}
+    gel_diffusion_ratio: {value: 0.5, unit: "1", source: assumed, bounds: [0.3, 0.8], note: "salt value (spec D1 2.3.7 note)"}
+
+  - id: gelatin
+    name: gelatin amine groups (immobile buffer)
+    molar_mass: {value: 2083.3, unit: g/mol, source: literature, ref: "derived: 1 / (4.8e-4 mol/g) groups per gram, Iwano 1970; KIN 3.2", note: "gelatin mass per mol of groups; the code takes T_gel from kinetics.yaml gelatin.groups_per_gram"}
+    roles: [buffer]
+    kind: component
+    immobile: true
+    acid_base:
+      charge_most_protonated: 1
+      reference_protons: 1
+      pka:
+        - {value: 10.5, unit: "1", source: assumed, bounds: [9.5, 11.5], note: "spec D1 2.3.7; also kinetics.yaml gelatin.pka"}
+      ionisation_enthalpy:
+        - {value: 0.0, unit: kJ/mol, source: assumed, note: "spec D1 2.3.7"}
+      activity_class: none
+
+  # ------------------------------------------------------------------------------------
+  # Ingredients (spec D1 2.3.1)
+  # ------------------------------------------------------------------------------------
+  - id: sodium-sulfite
+    name: sodium sulfite, anhydrous
+    formula: Na2SO3
+    cas: 7757-83-7
+    molar_mass: {value: 126.04, unit: g/mol, source: literature, ref: "PubChem; DEV 6.2"}
+    roles: [preservative]
+    kind: ingredient
+    dissolves_to: {sulfite: 1}
+    toth: 0
+    cations: {Na: 2}
+
+  - id: potassium-sulfite
+    name: potassium sulfite, anhydrous
+    formula: K2SO3
+    cas: 10117-38-1
+    molar_mass: {value: 158.26, unit: g/mol, source: literature, ref: "PubChem; DEV 6.2"}
+    roles: [preservative]
+    kind: ingredient
+    dissolves_to: {sulfite: 1}
+    toth: 0
+    cations: {K: 2}
+
+  - id: sodium-metabisulfite
+    name: sodium metabisulfite
+    formula: Na2S2O5
+    cas: 7681-57-4
+    molar_mass: {value: 190.11, unit: g/mol, source: literature, ref: "PubChem; DEV 6.2"}
+    roles: [preservative, acid]
+    kind: ingredient
+    dissolves_to: {sulfite: 2}
+    toth: 2
+    cations: {Na: 2}
+
+  - id: potassium-metabisulfite
+    name: potassium metabisulfite
+    formula: K2S2O5
+    cas: 16731-55-8
+    molar_mass: {value: 222.33, unit: g/mol, source: literature, ref: "PubChem; DEV 6.2"}
+    roles: [preservative, acid]
+    kind: ingredient
+    dissolves_to: {sulfite: 2}
+    toth: 2
+    cations: {K: 2}
+
+  - id: sodium-bisulfite
+    name: sodium bisulfite (sodium hydrogen sulfite)
+    formula: NaHSO3
+    cas: 7631-90-5
+    molar_mass: {value: 104.06, unit: g/mol, source: literature, ref: "PubChem; TMX 3.2"}
+    roles: [preservative, acid]
+    kind: ingredient
+    dissolves_to: {sulfite: 1}
+    toth: 1
+    cations: {Na: 1}
+
+  - id: sulfur-dioxide
+    name: sulfur dioxide (as in amine-SO2 adducts)
+    formula: SO2
+    cas: 7446-09-5
+    molar_mass: {value: 64.07, unit: g/mol, source: literature, ref: "SO2 formula mass; DEV 6.2"}
+    roles: [preservative, acid]
+    kind: ingredient
+    dissolves_to: {sulfite: 1}
+    toth: 2
+
+  - id: borax-decahydrate
+    name: borax decahydrate
+    formula: Na2B4O7.10H2O
+    cas: 1303-96-4
+    molar_mass: {value: 381.37, unit: g/mol, source: literature, ref: "PubChem; DEV 6.2"}
+    roles: [alkali, buffer]
+    kind: ingredient
+    dissolves_to: {borate: 4}
+    toth: -2
+    cations: {Na: 2}
+
+  - id: borax-pentahydrate
+    name: borax pentahydrate
+    formula: Na2B4O7.5H2O
+    cas: 12179-04-3
+    molar_mass: {value: 291.29, unit: g/mol, source: literature, ref: "PubChem; DEV 6.2"}
+    roles: [alkali, buffer]
+    kind: ingredient
+    dissolves_to: {borate: 4}
+    toth: -2
+    cations: {Na: 2}
+
+  - id: sodium-metaborate-tetrahydrate
+    name: sodium metaborate tetrahydrate ("8 mol" grade)
+    formula: NaBO2.4H2O
+    cas: 10555-76-7
+    molar_mass: {value: 137.86, unit: g/mol, source: literature, ref: "PubChem; DEV 6.2"}
+    roles: [alkali, buffer]
+    kind: ingredient
+    dissolves_to: {borate: 1}
+    toth: -1
+    cations: {Na: 1}
+
+  - id: boric-oxide
+    name: diboron trioxide
+    formula: B2O3
+    cas: 1303-86-2
+    molar_mass: {value: 69.62, unit: g/mol, source: literature, ref: "PubChem; DEV 6.2"}
+    roles: [buffer, acid]
+    kind: ingredient
+    dissolves_to: {borate: 2}
+    toth: 0
+
+  - id: boric-acid
+    name: boric acid
+    formula: H3BO3
+    cas: 10043-35-3
+    molar_mass: {value: 61.83, unit: g/mol, source: literature, ref: "H3BO3 formula mass; DEV 6.2"}
+    roles: [buffer, acid]
+    kind: ingredient
+    dissolves_to: {borate: 1}
+    toth: 0
+
+  - id: metol-sulfate
+    name: metol sulfate (Elon), bis(4-hydroxy-N-methylanilinium) sulfate
+    formula: (C7H9NO)2.H2SO4
+    cas: 55-55-0
+    molar_mass: {value: 344.39, unit: g/mol, source: literature, ref: "PubChem; DEV 6.1"}
+    roles: [developing_agent]
+    kind: ingredient
+    dissolves_to: {metol: 2}
+    toth: 2
+    spectator_charge: {SO4: -2}
+
+  - id: p-aminophenol-hydrochloride
+    name: p-aminophenol hydrochloride
+    formula: C6H8ClNO
+    cas: 51-78-5
+    molar_mass: {value: 145.59, unit: g/mol, source: literature, ref: "PubChem; DEV 6.1"}
+    roles: [developing_agent]
+    kind: ingredient
+    dissolves_to: {p-aminophenol: 1}
+    toth: 1
+    spectator_charge: {Cl: -1}
+
+  - id: ascorbic-acid
+    name: L-ascorbic acid
+    formula: C6H8O6
+    cas: 50-81-7
+    molar_mass: {value: 176.12, unit: g/mol, source: literature, ref: "C6H8O6 formula mass; DEV 6.1"}
+    roles: [developing_agent]
+    kind: ingredient
+    dissolves_to: {ascorbate: 1}
+    toth: 0
+    # Treated as the isoascorbate component (same pK values, spec D1 2.3.7).
+
+  - id: sodium-erythorbate
+    name: sodium erythorbate (isoascorbate), anhydrous
+    formula: C6H7NaO6
+    cas: 6381-77-7
+    molar_mass: {value: 198.11, unit: g/mol, source: literature, ref: "PubChem; DEV 6.1"}
+    roles: [developing_agent]
+    kind: ingredient
+    dissolves_to: {ascorbate: 1}
+    toth: -1
+    cations: {Na: 1}
+
+  - id: sodium-erythorbate-monohydrate
+    name: sodium erythorbate (isoascorbate) monohydrate
+    formula: C6H7NaO6.H2O
+    molar_mass: {value: 216.12, unit: g/mol, source: literature, ref: "derived: anhydrous 198.11 (PubChem) + H2O; DEV 6.1"}
+    roles: [developing_agent]
+    kind: ingredient
+    dissolves_to: {ascorbate: 1}
+    toth: -1
+    cations: {Na: 1}
+
+  - id: dtpa-pentasodium
+    name: DTPA pentasodium salt
+    formula: C14H18N3Na5O10
+    cas: 140-01-2
+    molar_mass: {value: 503.26, unit: g/mol, source: literature, ref: "derived: C14H18N3Na5O10 formula mass; DEV 6.2"}
+    roles: [other]
+    kind: ingredient
+    dissolves_to: {dtpa: 1}
+    toth: -5
+    cations: {Na: 5}
+
+  - id: hedta-trisodium
+    name: HEDTA trisodium salt (active of Dissolvine H-40)
+    formula: C10H15N2Na3O7
+    cas: 139-89-9
+    molar_mass: {value: 344.20, unit: g/mol, source: literature, ref: "derived: C10H15N2Na3O7 formula mass; CAS from PSI SDS; DEV 6.2"}
+    roles: [other]
+    kind: ingredient
+    dissolves_to: {hedta: 1}
+    toth: -3
+    cations: {Na: 3}
+
+  - id: potassium-bromide
+    name: potassium bromide
+    formula: KBr
+    cas: 7758-02-3
+    molar_mass: {value: 119.00, unit: g/mol, source: literature, ref: "KBr formula mass; DEV 6.2"}
+    roles: [restrainer]
+    kind: ingredient
+    dissolves_to: {bromide: 1}
+    toth: 0
+    cations: {K: 1}
+
+  - id: sodium-bromide
+    name: sodium bromide
+    formula: NaBr
+    cas: 7647-15-6
+    molar_mass: {value: 102.89, unit: g/mol, source: literature, ref: "NaBr formula mass; DEV 6.2"}
+    roles: [restrainer]
+    kind: ingredient
+    dissolves_to: {bromide: 1}
+    toth: 0
+    cations: {Na: 1}
+
+  - id: potassium-hydroxide
+    name: potassium hydroxide
+    formula: KOH
+    cas: 1310-58-3
+    molar_mass: {value: 56.11, unit: g/mol, source: literature, ref: "KOH formula mass; DEV 6.2"}
+    roles: [alkali]
+    kind: ingredient
+    toth: -1
+    cations: {K: 1}
+
+  - id: sodium-hydroxide
+    name: sodium hydroxide
+    formula: NaOH
+    cas: 1310-73-2
+    molar_mass: {value: 40.00, unit: g/mol, source: literature, ref: "NaOH formula mass; DEV 6.2"}
+    roles: [alkali]
+    kind: ingredient
+    toth: -1
+    cations: {Na: 1}
+
+  - id: diethylene-glycol
+    name: diethylene glycol (2,2'-oxydiethanol)
+    formula: C4H10O3
+    cas: 111-46-6
+    molar_mass: {value: 106.12, unit: g/mol, source: literature, ref: "PubChem; DEV 6.2"}
+    roles: [other]
+    kind: ingredient
+    # Non-ionising and not transported (spec D1 2.3.1).
