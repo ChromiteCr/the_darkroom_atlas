@@ -1,0 +1,333 @@
+# KODAK PROFESSIONAL HC-110 Developer
+#
+# Development times, capacity, replenishment, mixing, storage and agitation facts, restricted to what
+# concerns KODAK PROFESSIONAL TRI-X 400 (400TX, material kodak/tri-x-400) and
+# KODAK PROFESSIONAL T-MAX 100 (100TMX, material kodak/t-max-100).
+#
+# Every block names its source (a key of `sources`, with edition, URL and sha256), the printed page and
+# the table or passage. Times keep the printed text ("6¾", "4½†", "NR", "—") next to decimal minutes;
+# NR (not recommended), "—" (no time given) and unreadable cells are null. Table cells were read from
+# the PDF text layer with stacked fractions merged (tools/digitize/textrows.py) and checked cell by cell
+# against the rendered pages. `bold` is kept only where the publication defines bold type. Rows with
+# `material: null` name an older product and must not be attached to a current film. See
+# tools/digitize/staged/developers/README.md.
+schema_version: 1
+developer: hc-110
+name: KODAK PROFESSIONAL HC-110 Developer
+films:
+  kodak/tri-x-400: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+  kodak/t-max-100: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+sources:
+  j24-2017-12:
+    publisher: Kodak Alaris
+    number: J-24
+    title: KODAK PROFESSIONAL HC-110 Developer (Technical Data / Chemicals)
+    edition: December 2017 (back cover "Revised 12-17"); 8 pages
+    url: https://kodakprofessional.com/sites/default/files/wysiwyg/pro/chemistry/j24.pdf
+    pdf: .cache/datasheets/pdf/j24-2017-12.pdf
+    sha256: e66818bc246a63db1f7667a703c32d9eeb9ea4cd4c73908f913023f2828171ce
+notes:
+- 'no characteristic or contrast-index curves: every page was scanned for curve-like vector paths and embedded images
+  and rendered; J-24 has tables and text only'
+- Only the current-product rows (PROFESSIONAL T-MAX 100; PROFESSIONAL TRI-X 400 Film / 400TX) are kept. The older-product
+  rows T-MAX 100 Professional / TMX and TRI-X Pan / TX (dilutions A and B) are left out, as are TRI-X 320 / 320TXP
+  and all other films. 400TX has no dilution A row.
+- The P3200 tables (p. 5) and the graphic-arts table (p. 6) do not concern the two films.
+facts:
+- id: form
+  value: highly concentrated liquid
+  unit: null
+  source: j24-2017-12
+  page: '1'
+  where: introduction
+  statement: highly concentrated liquid developer for replenished and non-replenished systems, replenished with
+    KODAK PROFESSIONAL HC-110 Developer Replenisher. No formula is published. Because of its viscosity, pour slowly,
+    let it drain down the measure, measure small amounts to 0.5 mL (or with a syringe), rinse the measure at least
+    five times into the mix, and mix for several minutes.
+- id: stock-solution
+  value: 1 part concentrate + 3 parts water
+  unit: volume ratio
+  source: j24-2017-12
+  page: '1'
+  where: PREPARING WORKING SOLUTIONS
+  statement: to prepare stock solution, dilute one part concentrate with three parts water; mix stock or working
+    solutions between 10 and 32 C (50 and 90 F); working solutions made from stock or from concentrate have the
+    same photographic characteristics
+- id: dilutions
+  source: j24-2017-12
+  page: '2'
+  where: tables PREPARING WORKING SOLUTIONS FROM STOCK SOLUTION and ... FROM CONCENTRATE, last columns ("Ratio of
+    Stock Solution to Water", "Ratio of Concentrate to Water")
+  unit: parts stock (or concentrate) to parts water, by volume
+  rows:
+  - {dilution: A, stock_to_water: '1:3', concentrate_to_water: '1:15'}
+  - {dilution: B, stock_to_water: '1:7', concentrate_to_water: '1:31'}
+  - {dilution: C, stock_to_water: '1:4', concentrate_to_water: '1:19'}
+  - {dilution: D, stock_to_water: '1:9', concentrate_to_water: '1:39'}
+  - {dilution: E, stock_to_water: '1:11', concentrate_to_water: '1:47'}
+  - {dilution: F, stock_to_water: '1:19', concentrate_to_water: '1:79'}
+  example_dilution_b_1_litre: {from_stock: 125 mL stock + 875 mL water, from_concentrate: 31 mL concentrate + 969
+      mL water}
+  note: '"1:7" means one part stock to seven parts water (eight parts in all), as the volume columns show (for 1
+    L, 125 mL + 875 mL). With stock = 1 part concentrate in 4, B from stock is 1 part concentrate in 32, the same
+    as 1:31 from concentrate. The stock table prints "4.38 mL" of water for 5 L of B and the concentrate table prints
+    "828 L (28 fl oz)" of concentrate for 13.3 L of A; these look like misprints for 4.38 L and 828 mL and are not
+    used.'
+- id: concentrate-versions
+  value: null
+  unit: null
+  source: j24-2017-12
+  page: 1-8
+  statement: the December 2017 edition describes a single concentrate and does not distinguish an older and a newer
+    HC-110 concentrate; no such distinction is recorded here
+- id: contrast-aim
+  value: null
+  unit: '1'
+  source: j24-2017-12
+  page: '3'
+  where: DEVELOPMENT TIMES, first paragraph
+  statement: no contrast-index number is printed. The times are meant to give negatives with contrast suitable for
+    printing with a diffusion enlarger (or by contact) on normal-contrast paper; for a condenser enlarger decrease
+    the time by approximately 30 percent.
+- id: condenser-enlarger-reduction
+  value: 30
+  unit: percent shorter development
+  source: j24-2017-12
+  page: '3'
+  where: DEVELOPMENT TIMES, first paragraph
+  statement: decrease the development time by approximately 30 percent for printing with a condenser enlarger
+- id: short-development-warning
+  value: 5
+  unit: min
+  source: j24-2017-12
+  page: 3-4
+  where: footnote 2 of the sheet table; Note under the roll table
+  statement: tank-development times shorter than 5 minutes may produce unsatisfactory uniformity
+- {id: working-solution-ph, value: null, unit: null, source: j24-2017-12, page: 1-8, statement: not stated}
+- id: storage-life-unused
+  source: j24-2017-12
+  page: '8'
+  where: STORAGE LIFE (MONTHS) OF UNUSED SOLUTIONS (stored at 18 to 24 C)
+  unit: months
+  rows:
+  - {solution: developer stock solution, full_tightly_closed: 6, half_filled_tightly_closed: 2, tank_with_floating_lid: 2}
+  - {solution: working solution dilution A, full_tightly_closed: 6, half_filled_tightly_closed: 2, tank_with_floating_lid: 2}
+  - {solution: dilution B, full_tightly_closed: 3, half_filled_tightly_closed: 1, tank_with_floating_lid: 1}
+  - {solution: dilution C, full_tightly_closed: 6, half_filled_tightly_closed: 2, tank_with_floating_lid: 2}
+  - {solution: dilution D, full_tightly_closed: 3, half_filled_tightly_closed: 1, tank_with_floating_lid: 1}
+  - {solution: dilution E, full_tightly_closed: 2, half_filled_tightly_closed: 1, tank_with_floating_lid: 1}
+  - {solution: dilution F, full_tightly_closed: null, half_filled_tightly_closed: null, tank_with_floating_lid: null,
+    printed: NR}
+  - {solution: replenisher stock solution, full_tightly_closed: 6, half_filled_tightly_closed: 2, tank_with_floating_lid: 2}
+  note: the concentrate itself has no storage entry
+- id: capacity
+  source: j24-2017-12
+  page: '7'
+  where: CAPACITY OF DEVELOPER WORKING SOLUTIONS
+  statement: discard the developer after processing the number of sheets (or equivalent) listed
+  rows:
+  - {dilution: A, tray_8x10_per_gallon: 20, tray_20x25cm_per_litre: 5, tank_unreplenished_8x10_per_gallon: 40, tank_unreplenished_20x25cm_per_litre: 10}
+  - {dilution: B, tray_8x10_per_gallon: 10, tray_20x25cm_per_litre: 2.5, tank_unreplenished_8x10_per_gallon: 20,
+    tank_unreplenished_20x25cm_per_litre: 5}
+  - {dilution: C, tray_8x10_per_gallon: 15, tray_20x25cm_per_litre: 4, tank_unreplenished_8x10_per_gallon: 30, tank_unreplenished_20x25cm_per_litre: 8}
+  - {dilution: D, tray_8x10_per_gallon: 8, tray_20x25cm_per_litre: 2, tank_unreplenished_8x10_per_gallon: 15, tank_unreplenished_20x25cm_per_litre: 4}
+  - {dilution: E, tray_8x10_per_gallon: 5, tray_20x25cm_per_litre: 1.5, tank_unreplenished_8x10_per_gallon: 10,
+    tank_unreplenished_20x25cm_per_litre: 3}
+  - {dilution: F, tray_8x10_per_gallon: 2, tray_20x25cm_per_litre: 1, tank_unreplenished_8x10_per_gallon: null,
+    tank_unreplenished_20x25cm_per_litre: null, printed_tank: NR}
+  note: the table gives no time-compensation rule
+- id: replenisher-preparation
+  source: j24-2017-12
+  page: '7'
+  where: REPLENISHMENT, General; table PREPARING REPLENISHER SOLUTIONS
+  statement: replenisher stock = the 16-ounce (473 mL) replenisher concentrate made up to 3.8 litres (1 gallon)
+    with water; stored at 18 to 24 C for up to 6 months full or 2 months half-full
+  working_replenisher:
+  - {dilution: A, replenisher_stock_parts: '1', water_parts: none}
+  - {dilution: B, replenisher_stock_parts: '2', water_parts: '1'}
+  - {dilution: C, replenisher_stock_parts: '1', water_parts: none}
+  - {dilution: D, replenisher_stock_parts: '1', water_parts: '1'}
+  - {dilution: E, replenisher_stock_parts: '8', water_parts: '11'}
+  - {dilution: F, replenisher_stock_parts: —, water_parts: —, note: dilution F is very dilute; replenishing it is
+      not recommended}
+- id: replenishment-rate
+  value: 22
+  unit: mL of replenisher solution per 8 x 10-inch sheet, 135-36 roll or 120 roll (or equivalent)
+  source: j24-2017-12
+  page: '7'
+  where: Replenishment Rate
+  statement: add 22 mL (3/4 fluid ounce) per sheet or roll and stir or recirculate; with an average 10-second drain
+    into the stop bath this usually matches carry-out; raise the rate if negatives become thin or low in contrast,
+    lower it if they become dense or contrasty; cover tanks with floating lids when idle
+- id: replenished-tank-discard
+  source: j24-2017-12
+  page: '7'
+  where: Process Control
+  statement: with process control strips a tank solution can be used up to one month; without strips discard it
+    after two weeks of replenishment, after adding replenisher equal to the original working volume, or after fifty
+    20.3 x 25.4 cm sheets per litre (two hundred 8 x 10-inch sheets per gallon)
+agitation:
+- id: small-tank-rolls
+  source: j24-2017-12
+  page: '4'
+  where: roll-film table column heading and footnote 1
+  applies_to: roll-film "Small Tank" columns
+  interval_s: 30
+  statement: '"Manual Agitation at 30-Second Intervals"; footnote 1: development on a reel in a small roll-film
+    tank. J-24 does not describe the motion, the number of inversions or the duration of each agitation.'
+- id: large-tank-rolls
+  source: j24-2017-12
+  page: '4'
+  where: roll-film table column heading and footnote 2
+  applies_to: roll-film "Large Tank" columns
+  interval_s: 60
+  statement: '"Manual Agitation at 1-Minute Intervals"; footnote 2: development of several reels in a basket. The
+    motion is not described.'
+- id: tray-sheets
+  source: j24-2017-12
+  page: '3'
+  where: sheet-film table column heading and footnote 1
+  applies_to: sheet-film "Tray" columns
+  statement: '"Continuous Agitation"; footnote 1: prewet the film in clean water at 20 C (68 F) for 1 to 2 minutes
+    with agitation so that each sheet is thoroughly wet'
+- id: large-tank-sheets
+  source: j24-2017-12
+  page: '3'
+  where: sheet-film table column heading
+  applies_to: sheet-film "Large Tank" columns
+  interval_s: 60
+  statement: '"Manual Agitation at 1-Minute Intervals"; the motion is not described'
+- id: gaseous-burst
+  source: j24-2017-12
+  page: 3-4
+  where: footnote 3 of the sheet and roll tables
+  applies_to: only the rows marked with footnote 3 (EKTAPAN, Commercial, PLUS-X Pan Professional / PXT, TRI-X Pan
+    Professional / TXT sheets; PLUS-X Pan Professional / PXP rolls) - none of the rows kept here
+  burst_duration_s: 1
+  interval_s: 10
+  statement: the tray (sheet) or tank (roll) times also apply to gaseous-burst agitation with a 1-second burst every
+    10 seconds at enough pressure to lift the solution level 16 mm (5/8 inch)
+- id: rotary-tube
+  source: j24-2017-12
+  page: '6'
+  where: rotary-tube table, footnote 1
+  statement: development in a rotary-tube processor with continuous agitation (no speed or reversal interval is
+    given)
+development_times:
+- id: roll-dilution-b-small-tank
+  source: j24-2017-12
+  page: '4'
+  table: DEVELOPMENT TIMES FOR KODAK ROLL FILMS - Development Time (Minutes) - DILUTION B
+  column_group: Small Tank, Manual Agitation at 30-Second Intervals
+  dilution: B
+  note: the 24 C column heading is printed "24°F" with "(75°F)" beneath it; it is the 24 C (75 F) column. "PROFFESSIONAL"
+    is misspelt as printed. The 400TX row has no dilution A entry.
+  tank: small tank
+  agitation: 'Manual Agitation at 30-Second Intervals; footnote 1: development on a reel in a small roll-film tank'
+  agitation_ref: small-tank-rolls
+  unit: min
+  temperature_c: [18, 20, 21, 22, 24]
+  temperature_f: [65, 68, 70, 72, 75]
+  rows:
+  - film_as_printed: PROFESSIONAL T-MAX 100
+    material: kodak/t-max-100
+    format: roll
+    printed: [6½, '6', 5½, '5', '4']
+    minutes: [6.5, 6.0, 5.5, 5.0, 4.0]
+  - film_as_printed: PROFFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: roll
+    printed: [4½, 3¾, 3½, '3', 2½]
+    minutes: [4.5, 3.75, 3.5, 3.0, 2.5]
+- id: roll-dilution-b-large-tank
+  source: j24-2017-12
+  page: '4'
+  table: DEVELOPMENT TIMES FOR KODAK ROLL FILMS - Development Time (Minutes) - DILUTION B
+  column_group: Large Tank, Manual Agitation at 1-Minute Intervals
+  dilution: B
+  note: the 24 C column heading is printed "24°F" with "(75°F)" beneath it; it is the 24 C (75 F) column. "PROFFESSIONAL"
+    is misspelt as printed. The 400TX row has no dilution A entry.
+  tank: large tank
+  agitation: 'Manual Agitation at 1-Minute Intervals; footnote 2: development of several reels in a basket'
+  agitation_ref: large-tank-rolls
+  unit: min
+  temperature_c: [18, 20, 21, 22, 24]
+  temperature_f: [65, 68, 70, 72, 75]
+  rows:
+  - film_as_printed: PROFESSIONAL T-MAX 100
+    material: kodak/t-max-100
+    format: roll
+    printed: [7½, 6½, '6', 5¼, 4½]
+    minutes: [7.5, 6.5, 6.0, 5.25, 4.5]
+  - film_as_printed: PROFFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: roll
+    printed: ['5', 4½, '4', 3½, '3']
+    minutes: [5.0, 4.5, 4.0, 3.5, 3.0]
+- id: sheet-dilution-b-tray
+  source: j24-2017-12
+  page: '3'
+  table: DEVELOPMENT TIMES FOR KODAK SHEET FILMS - Development Time (Minutes) - DILUTION B
+  column_group: Tray, Continuous Agitation
+  dilution: B
+  note: the 24 C column heading is printed "24°F" with "(75°F)" beneath it; it is the 24 C (75 F) column
+  tank: tray
+  agitation: 'Continuous Agitation; footnote 1: prewet 1 to 2 minutes at 20 C'
+  agitation_ref: tray-sheets
+  unit: min
+  temperature_c: [18, 20, 21, 22, 24]
+  temperature_f: [65, 68, 70, 72, 75]
+  rows:
+  - film_as_printed: PROFESSIONAL T-MAX 100
+    material: kodak/t-max-100
+    format: sheet
+    printed: [6¼, 5½, 4¾, 4½, 3¾]
+    minutes: [6.25, 5.5, 4.75, 4.5, 3.75]
+- id: sheet-dilution-b-large-tank
+  source: j24-2017-12
+  page: '3'
+  table: DEVELOPMENT TIMES FOR KODAK SHEET FILMS - Development Time (Minutes) - DILUTION B
+  column_group: Large Tank, Manual Agitation at 1-Minute Intervals
+  dilution: B
+  note: the 24 C column heading is printed "24°F" with "(75°F)" beneath it; it is the 24 C (75 F) column
+  tank: large tank
+  agitation: Manual Agitation at 1-Minute Intervals
+  agitation_ref: large-tank-sheets
+  unit: min
+  temperature_c: [18, 20, 21, 22, 24]
+  temperature_f: [65, 68, 70, 72, 75]
+  rows:
+  - film_as_printed: PROFESSIONAL T-MAX 100
+    material: kodak/t-max-100
+    format: sheet
+    printed: [7½, 6½, '6', 5¼, 4½]
+    minutes: [7.5, 6.5, 6.0, 5.25, 4.5]
+- id: rotary-tube-dilution-b
+  source: j24-2017-12
+  page: '6'
+  table: DEVELOPMENT TIMES FOR KODAK FILMS IN ROTARY TUBES
+  column_group: Development Time (Minutes), Dilution B
+  tank: rotary tube
+  dilution: B
+  agitation: 'footnote 1: development in a rotary-tube processor with continuous agitation'
+  agitation_ref: rotary-tube
+  note: the 24 C column heading is printed "24°F" with "(75°F)" beneath it; it is the 24 C (75 F) column
+  unit: min
+  temperature_c: [18, 20, 21, 22, 24]
+  temperature_f: [65, 68, 70, 72, 75]
+  rows:
+  - film_as_printed: PROFESSIONAL T-MAX 100
+    material: kodak/t-max-100
+    format: roll
+    printed: ['7', 5¾, 5¼, 4¾, '4']
+    minutes: [7.0, 5.75, 5.25, 4.75, 4.0]
+  - film_as_printed: PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: roll
+    printed: [4½, 3¾, 3½, '3', 2½]
+    minutes: [4.5, 3.75, 3.5, 3.0, 2.5]
+  - film_as_printed: PROFESSIONAL T-MAX 100
+    material: kodak/t-max-100
+    format: sheet
+    printed: ['7', 5¾, 5¼, 4¾, '4']
+    minutes: [7.0, 5.75, 5.25, 4.75, 4.0]

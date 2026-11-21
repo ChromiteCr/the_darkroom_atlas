@@ -1,0 +1,1134 @@
+# KODAK PROFESSIONAL XTOL Developer
+#
+# Development times, capacity, replenishment, mixing, storage and agitation facts, restricted to what
+# concerns KODAK PROFESSIONAL TRI-X 400 (400TX, material kodak/tri-x-400) and
+# KODAK PROFESSIONAL T-MAX 100 (100TMX, material kodak/t-max-100).
+#
+# Every block names its source (a key of `sources`, with edition, URL and sha256), the printed page and
+# the table or passage. Times keep the printed text ("6¾", "4½†", "NR", "—") next to decimal minutes;
+# NR (not recommended), "—" (no time given) and unreadable cells are null. Table cells were read from
+# the PDF text layer with stacked fractions merged (tools/digitize/textrows.py) and checked cell by cell
+# against the rendered pages. `bold` is kept only where the publication defines bold type. Rows with
+# `material: null` name an older product and must not be attached to a current film. See
+# tools/digitize/staged/developers/README.md.
+schema_version: 1
+developer: xtol
+name: KODAK PROFESSIONAL XTOL Developer
+films:
+  kodak/tri-x-400: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+  kodak/t-max-100: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+sources:
+  j109-2018-02:
+    publisher: Kodak Alaris
+    number: J-109
+    title: KODAK PROFESSIONAL XTOL Developer (Technical Data / Chemical)
+    edition: February 2018 (back cover "Revised 02/2018"); 16 pages
+    url: https://kodakprofessional.com/sites/default/files/wysiwyg/pro/chemistry/J-109_Feb_2018.pdf
+    pdf: .cache/datasheets/pdf/j109-2018-02.pdf
+    sha256: 10baa7d8875eb6abceda8a7020e07f67a1fa8281f244ddb489feb67785838f87
+notes:
+- 'no characteristic or contrast-index curves: every page was scanned for curve-like vector paths and embedded images
+  and rendered; the only images are the Kodak Alaris logos and the back-cover rule (pp. 1, 16)'
+- Only the TRI-X 400 / 400TX and T-MAX 100 / 100TMX rows are kept; 400TX appears in Tables 1-4 only (roll film),
+  100TMX in Tables 1-8. Other films (including TRI-X 320 / 320TXP) are left out.
+facts:
+- id: form
+  value: two-part powder (Part A, Part B)
+  unit: null
+  source: j109-2018-02
+  page: '1'
+  where: introduction and FEATURES
+  statement: ascorbic acid-based black-and-white film developer, no hydroquinone, two-part powder; one solution
+    serves as both developer and replenisher. No formula is published.
+- id: mixing
+  source: j109-2018-02
+  page: '1'
+  where: MIXING INSTRUCTIONS
+  start_water:
+  - {final_volume_l: 2, start_water_l: 1.6}
+  - {final_volume_l: 5, start_water_l: 4}
+  - {final_volume_l: 25, start_water_l: 20}
+  - {final_volume_l: 50, start_water_l: 40}
+  statement: start with about 75 percent of the final volume of water at normal room temperature, about 18 to 30
+    C (65 to 85 F); with stirring add Part A until dissolved (the solution may look tawny or copper-coloured), then
+    Part B until dissolved (the tint clears); add water to 2, 5, 25 or 50 litres; stir until uniform
+  note: SIZES AVAILABLE on the same page lists packages to make 1, 5 and 50 litres (CAT 859 0176, 875 1752, 818
+    4517), while the mixing table lists 2, 5, 25 and 50 litres; both are recorded as printed
+- id: specific-gravity-and-ph
+  value: {specific_gravity: 1.085, specific_gravity_tolerance: 0.003, measured_at_c: 25, measured_at_tolerance_c: 0.3,
+    ph: 8.2, ph_tolerance: 0.05}
+  unit: specific gravity (1); temperature C; pH
+  source: j109-2018-02
+  page: '1'
+  where: MIXING INSTRUCTIONS, last paragraph
+  statement: 'printed: "the specific gravity of the working tank solution is 1.085 ± 0.003 measured at 77 ± 0.5°F
+    (25 ± 0.3°C) at pH 8.2 ± 0.05."'
+  note: the sentence ties the gravity to a pH; it is the only pH value in J-109, and it is given for the full-strength
+    working tank solution, not for the 1:1 dilution
+- id: dilution-1-1-definition
+  value: 1 part developer + 1 part water
+  unit: volume ratio
+  source: j109-2018-02
+  page: '2'
+  where: Using Diluted Developer
+  statement: dilute XTOL Developer 1:1 with water "(developer:water)" for one-shot (single-use) processing; 1:1
+    gives slightly greater film speed, enhanced sharpness and shadow detail and slightly more grain; use diluted
+    developer only once, do not replenish or reuse it
+- id: dilution-1-1-minimum-stock
+  value: 100
+  unit: mL of full-strength developer per 135-36 or 120 roll (80 square inches, 516 cm2)
+  source: j109-2018-02
+  page: '2'
+  where: Using Diluted Developer
+  statement: always start with at least 100 mL (3.5 fluid ounces) of full-strength developer to prepare the diluted
+    solution for each roll; for example 4 rolls at 1:1 need at least 800 mL even if the equipment allows less solution
+- id: hard-water-note
+  value: 200
+  unit: ppm CaCO3
+  source: j109-2018-02
+  page: '2'
+  where: Using Diluted Developer, Note
+  statement: with exceptionally hard water (above 200 ppm of CaCO3) conditioned water may be needed to avoid cloudiness
+    at higher dilutions
+- id: capacity-full-strength-unreplenished
+  value: 15
+  unit: 135-36 or 120 rolls (or 80 square inches each) per litre, with time compensation
+  source: j109-2018-02
+  page: '2'
+  where: Using Full-Strength Developer
+  statement: capacity with normal unreplenished processing is approximately 15 rolls per litre with time compensation;
+    discard after 15 rolls per litre
+- id: time-compensation
+  source: j109-2018-02
+  page: '2'
+  where: table "Time Compensation for KODAK PROFESSIONAL XTOL Developer"
+  film_size: 135-36 or 120 rolls (80 square inches or equivalent)
+  rows:
+  - {rolls_per_litre: 1 to 5, printed: Use normal development time, increase_percent: 0}
+  - {rolls_per_litre: 6 to 10, printed: Increase normal development time by 15 percent, increase_percent: 15}
+  - rolls_per_litre: 11 to 15
+    printed: Increase adjusted development time by 15 percent
+    increase_percent: 15
+    note: applied to the already adjusted time
+  footnote: 80 square inches = one 135-36 or 120 roll, four 4 x 5-inch sheets, or one 8 x 10-inch sheet; 160 square
+    inches = one 220 roll
+- id: storage-life-unused
+  source: j109-2018-02
+  page: '2'
+  where: STORAGE LIFE OF UNUSED SOLUTIONS
+  rows:
+  - {container: full tightly closed container, printed: 6 months}
+  - {container: partially filled tightly closed container, printed: At least 2 months}
+  - container: replenisher tank with floating lid
+    printed: Indefinitely if new solution is added to replaced that used by the processor
+  note: the 1:1 dilution is mixed just before use and discarded after one batch (p. 2 Note)
+- id: replenishment-rate
+  value: 70
+  unit: mL of XTOL Developer per 135-36 or 120 roll (80 square inches, 516 cm2)
+  source: j109-2018-02
+  page: '4'
+  where: Replenishment
+  statement: replenish full-strength systems only (not diluted developer), using XTOL Developer itself as the replenisher;
+    adjust the rate up or down in 10 mL increments with Process Control Strips; use the lowest rate that keeps the
+    process in control
+- id: preseasoning
+  source: j109-2018-02
+  page: 2, 4
+  where: Using Seasoned Developer (p. 2); Starting (Preseasoning) a Fresh Working Tank Solution (p. 4)
+  starters:
+  - 6.5 mL of KODAK Developer Starting Solution (CAT 146 6382) per litre
+  - 1 mL of KODAK EKTACHROME R-3 First Developer II Starter per litre
+  - 1.2 mL of KODAK PROFESSIONAL First Developer Starter, Process E-6 per litre
+  statement: without preseasoning a fresh tank, initial development times are about 10 percent shorter than the
+    tables, approaching the table times as the tank reaches a steady state
+- id: unpreseasoned-tank-time-offset
+  value: -10
+  unit: percent (initial development time relative to the tables)
+  source: j109-2018-02
+  page: '4'
+  where: Starting (Preseasoning) a Fresh Working Tank Solution
+  statement: about 10 percent shorter than those in the tables
+- id: nominal-speed-marking
+  value: null
+  unit: null
+  source: j109-2018-02
+  page: '5'
+  where: Development Tables, introduction
+  statement: data for nominal film speeds are in bold face type. The bold flags in development_times rows were read
+    from the font of each cell (WhitneyK-Semibold in the text layer) and checked on the rendered pages.
+- id: short-development-warning
+  source: j109-2018-02
+  page: 6, 8, 11, 13-15
+  where: Important box above each table
+  rows:
+  - {tables: Table 1 (small tanks), minutes: 5}
+  - {tables: Tables 2 to 8, minutes: 4}
+  statement: development times shorter than this may produce unsatisfactory uniformity
+- id: contrast-aim
+  value: null
+  unit: '1'
+  source: j109-2018-02
+  page: 6-15
+  statement: J-109 prints no single contrast-index aim; every development-time row carries its own CI (0.52 to 0.82
+    for the films kept here)
+agitation:
+- id: small-tank-rolls
+  source: j109-2018-02
+  page: '3'
+  where: Agitating Rolls in Small Tanks
+  applies_to: Table 1 (small tanks)
+  interval_s: 30
+  agitation_duration_s: 5
+  cycles_per_agitation: 2 to 5, depending on the contrast needed and the type of tank
+  initial_agitation: up to 5 cycles depending on results; for KODAK PROFESSIONAL T-MAX Films 5 to 7 cycles in 5
+    seconds; the tank then stands for the rest of the first 30 seconds
+  cycle_definition: invertible tank - upside down and back upright; non-invertible tank - slide back and forth over
+    10 inches (25.4 cm); reel-handle tanks - rotate the reel back and forth about one-half turn at one cycle per
+    second during initial and subsequent agitation
+  procedure: same step sequence as J-78 (fill tank, drop reel, attach top, tap from about 1 inch / 2.5 cm, initial
+    agitation; steps 2 to 4 take about 7 to 20 seconds)
+- id: tray-sheets
+  source: j109-2018-02
+  page: '3'
+  where: Agitating Sheet Film in Trays
+  applies_to: Table 5 (trays)
+  presoak: even a single sheet is presoaked in water at developer temperature, rocking occasionally for about 1
+    minute
+  single_sheet: raise the left side of the tray about 3/4 inch (2 cm), lower; near side; right side; near side again;
+    the cycle takes about 8 seconds; agitate continuously
+  two_to_six_sheets: presoak and cycle the stack twice, then interleave from bottom to top until development is
+    complete; drain each sheet for the same time going in and out
+- id: large-tank-seasoned
+  source: j109-2018-02
+  page: '4'
+  where: LARGE-TANK (REPLENISHED) PROCESSING
+  applies_to: Tables 3 and 7 (Large Tank, Seasoned Developer)
+  method: nitrogen burst
+  burst_duration_s: 2
+  interval_s: 10
+  statement: nitrogen-burst agitation cycle of two seconds at 10-second intervals
+- id: large-tank-fresh
+  source: j109-2018-02
+  page: '4'
+  where: LARGE-TANK (REPLENISHED) PROCESSING
+  applies_to: Tables 4 and 8 (Large Tank, Fresh Developer)
+  method: manual
+  interval_s: 60
+  statement: manual agitation at 1-minute intervals. J-109 does not describe the manual large-tank motion itself.
+- id: agitation-sensitivity
+  source: j109-2018-02
+  page: '4'
+  where: LARGE-TANK (REPLENISHED) PROCESSING
+  statement: significantly more agitation may require slightly shorter development times; less agitation may require
+    longer times
+- id: rotary-tube
+  source: j109-2018-02
+  page: 2, 8, 14
+  where: SMALL-TANK, TRAY, AND ROTARY-TUBE PROCESSING; Tables 2 and 6
+  statement: J-109 gives no rotary-tube agitation procedure (no speed or reversal interval). It notes only that
+    some rotary-tube processors allow replenishment.
+development_times:
+- id: table1-small-tank-full-strength
+  source: j109-2018-02
+  page: '6'
+  table: 'Table 1: Processing Roll Films in Small Tanks'
+  column_group: Small Tank, Full Strength Developer
+  tank: small tank
+  developer_state: fresh
+  agitation: small-tank procedure of p. 3 (30-second intervals)
+  agitation_ref: small-tank-rolls
+  dilution: full strength
+  unit: min
+  temperature_c: [18, 20, 21, 24, 27]
+  temperature_f: [65, 68, 70, 75, 80]
+  rows:
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: '135'
+    ei: 400/800
+    ci: 0.56
+    nominal_speed_bold: true
+    printed: ['8', '7', 6¼, 4¾, —]
+    minutes: [8.0, 7.0, 6.25, 4.75, null]
+    bold: [true, true, true, true, false]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: '135'
+    ei: '1600'
+    ci: 0.72
+    printed: [11¼, 9¾, 8¾, 6¾, —]
+    minutes: [11.25, 9.75, 8.75, 6.75, null]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: '135'
+    ei: '3200'
+    ci: 0.82
+    printed: [—, 11½, 10½, '8', —]
+    minutes: [null, 11.5, 10.5, 8.0, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: 25/50
+    ci: 0.52
+    printed: [8¼, 6¾, '6', 4¾, —]
+    minutes: [8.25, 6.75, 6.0, 4.75, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: 100/200
+    ci: 0.56
+    nominal_speed_bold: true
+    printed: [8¾, 7½, 6½, '5', —]
+    minutes: [8.75, 7.5, 6.5, 5.0, null]
+    bold: [true, true, true, true, false]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '200'
+    ci: 0.62
+    printed: [9¾, '8', 7¼, 5½, —]
+    minutes: [9.75, 8.0, 7.25, 5.5, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '400'
+    ci: 0.72
+    printed: [11½, 9½, 8½, 6½, —]
+    minutes: [11.5, 9.5, 8.5, 6.5, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '800'
+    ci: 0.82
+    printed: [12¾, 10½, 9½, 7¼, —]
+    minutes: [12.75, 10.5, 9.5, 7.25, null]
+- id: table1-small-tank-1-1
+  source: j109-2018-02
+  page: '6'
+  table: 'Table 1: Processing Roll Films in Small Tanks'
+  column_group: Small Tank, 1:1 Developer
+  tank: small tank
+  developer_state: fresh
+  agitation: small-tank procedure of p. 3 (30-second intervals)
+  agitation_ref: small-tank-rolls
+  dilution: 1:1 (developer:water)
+  unit: min
+  temperature_c: [20, 21, 24, 27]
+  temperature_f: [68, 70, 75, 80]
+  rows:
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: '135'
+    ei: 400/800
+    ci: 0.56
+    nominal_speed_bold: true
+    printed: ['9', 8½, 7¼, —]
+    minutes: [9.0, 8.5, 7.25, null]
+    bold: [true, true, true, false]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: '135'
+    ei: '1600'
+    ci: 0.72
+    printed: [13¼, 12¼, 10½, —]
+    minutes: [13.25, 12.25, 10.5, null]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: '135'
+    ei: '3200'
+    ci: 0.82
+    printed: [15½, 14½, 12¼, —]
+    minutes: [15.5, 14.5, 12.25, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: 25/50
+    ci: 0.52
+    printed: ['9', '8', 6¼, 4¾]
+    minutes: [9.0, 8.0, 6.25, 4.75]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: 100/200
+    ci: 0.56
+    nominal_speed_bold: true
+    printed: [9½, 8½, 6½, '5']
+    minutes: [9.5, 8.5, 6.5, 5.0]
+    bold: [true, true, true, true]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '200'
+    ci: 0.62
+    printed: [10½, 9½, 7¼, 5½]
+    minutes: [10.5, 9.5, 7.25, 5.5]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '400'
+    ci: 0.72
+    printed: [12¼, 10¾, 8¼, 6¼]
+    minutes: [12.25, 10.75, 8.25, 6.25]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '800'
+    ci: 0.82
+    printed: [13¼, 11¾, '9', '7']
+    minutes: [13.25, 11.75, 9.0, 7.0]
+- id: table2-rotary-tube-fresh-full-strength
+  source: j109-2018-02
+  page: '8'
+  table: 'Table 2: Processing Roll Films in Rotary Tubes'
+  column_group: Rotary Tube, Fresh, Full Strength Developer
+  tank: rotary tube
+  agitation: not described in J-109
+  agitation_ref: rotary-tube
+  dilution: full strength
+  developer_state: fresh
+  unit: min
+  temperature_c: [18, 20, 21, 24]
+  temperature_f: [65, 68, 70, 75]
+  rows:
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: 100/200
+    ci: 0.52
+    printed: [7¼, 6¼, 5¾, 4¼]
+    minutes: [7.25, 6.25, 5.75, 4.25]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: 400/800
+    ci: 0.56
+    nominal_speed_bold: true
+    printed: ['8', '7', 6¼, 4¾]
+    minutes: [8.0, 7.0, 6.25, 4.75]
+    bold: [true, true, true, true]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: '800'
+    ci: 0.62
+    printed: [9¼, '8', 7¼, 5½]
+    minutes: [9.25, 8.0, 7.25, 5.5]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: '1600'
+    ci: 0.72
+    printed: [11¼, 9¾, 8¾, 6¾]
+    minutes: [11.25, 9.75, 8.75, 6.75]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: '3200'
+    ci: 0.82
+    printed: [—, 11½, 10½, '8']
+    minutes: [null, 11.5, 10.5, 8.0]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: 25/50
+    ci: 0.52
+    printed: [8¼, 6¾, '6', 4¾]
+    minutes: [8.25, 6.75, 6.0, 4.75]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: 100/200
+    ci: 0.56
+    nominal_speed_bold: true
+    printed: [8¾, 7¼, 6½, '5']
+    minutes: [8.75, 7.25, 6.5, 5.0]
+    bold: [true, true, true, false]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '200'
+    ci: 0.62
+    printed: [9¾, '8', 7¼, 5½]
+    minutes: [9.75, 8.0, 7.25, 5.5]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '400'
+    ci: 0.72
+    printed: [11½, 9½, 8½, 6½]
+    minutes: [11.5, 9.5, 8.5, 6.5]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '800'
+    ci: 0.82
+    printed: [12¾, 10½, 9½, 7¼]
+    minutes: [12.75, 10.5, 9.5, 7.25]
+- id: table2-rotary-tube-fresh-1-1
+  source: j109-2018-02
+  page: '8'
+  table: 'Table 2: Processing Roll Films in Rotary Tubes'
+  column_group: Rotary Tube, Fresh 1:1 Developer
+  tank: rotary tube
+  agitation: not described in J-109
+  agitation_ref: rotary-tube
+  dilution: 1:1 (developer:water)
+  developer_state: fresh
+  unit: min
+  temperature_c: [20, 21, 24, 27]
+  temperature_f: [68, 70, 75, 80]
+  rows:
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: 100/200
+    ci: 0.52
+    printed: [—, —, —, —]
+    minutes: [null, null, null, null]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: 400/800
+    ci: 0.56
+    nominal_speed_bold: true
+    printed: ['9', 8½, 7¼, —]
+    minutes: [9.0, 8.5, 7.25, null]
+    bold: [true, true, true, false]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: '800'
+    ci: 0.62
+    printed: [—, —, —, —]
+    minutes: [null, null, null, null]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: '1600'
+    ci: 0.72
+    printed: [13¼, 12¼, 10½, —]
+    minutes: [13.25, 12.25, 10.5, null]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: '3200'
+    ci: 0.82
+    printed: [15½, 14½, 12¼, —]
+    minutes: [15.5, 14.5, 12.25, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: 25/50
+    ci: 0.52
+    printed: ['9', '8', 6¼, 4¾]
+    minutes: [9.0, 8.0, 6.25, 4.75]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: 100/200
+    ci: 0.56
+    nominal_speed_bold: true
+    printed: [9¾, 8¾, 6¾, '5']
+    minutes: [9.75, 8.75, 6.75, 5.0]
+    bold: [true, true, true, true]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '200'
+    ci: 0.62
+    printed: [10½, 9½, 7¼, 5½]
+    minutes: [10.5, 9.5, 7.25, 5.5]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '400'
+    ci: 0.72
+    printed: [12¼, 10¾, 8¼, 6¼]
+    minutes: [12.25, 10.75, 8.25, 6.25]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '800'
+    ci: 0.82
+    printed: [13¼, 11¾, '9', '7']
+    minutes: [13.25, 11.75, 9.0, 7.0]
+- id: table2-rotary-tube-seasoned
+  source: j109-2018-02
+  page: '8'
+  table: 'Table 2: Processing Roll Films in Rotary Tubes'
+  column_group: Rotary Tube, Seasoned (Replenished) Developer
+  tank: rotary tube
+  agitation: not described in J-109
+  agitation_ref: rotary-tube
+  dilution: full strength
+  developer_state: seasoned (replenished)
+  unit: min
+  temperature_c: [18, 20, 21, 24]
+  temperature_f: [65, 68, 70, 75]
+  rows:
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: 100/200
+    ci: 0.52
+    printed: ['9', 7½, 6¾, '5']
+    minutes: [9.0, 7.5, 6.75, 5.0]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: 400/800
+    ci: 0.56
+    nominal_speed_bold: true
+    printed: ['10', 8½, 7½, 5½]
+    minutes: [10.0, 8.5, 7.5, 5.5]
+    bold: [true, true, true, true]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: '800'
+    ci: 0.62
+    printed: [11¾, 9¾, 8¾, 6½]
+    minutes: [11.75, 9.75, 8.75, 6.5]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: '1600'
+    ci: 0.72
+    printed: [14½, 12¼, 10¾, '8']
+    minutes: [14.5, 12.25, 10.75, 8.0]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: '3200'
+    ci: 0.82
+    printed: [—, 14¾, '13', 9¾]
+    minutes: [null, 14.75, 13.0, 9.75]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: 25/50
+    ci: 0.52
+    printed: ['10', 8¼, 7¼, 5½]
+    minutes: [10.0, 8.25, 7.25, 5.5]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: 100/200
+    ci: 0.56
+    nominal_speed_bold: true
+    printed: ['11', '9', '8', '6']
+    minutes: [11.0, 9.0, 8.0, 6.0]
+    bold: [true, true, true, true]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '200'
+    ci: 0.62
+    printed: [12¼, '10', 8¾, 6½]
+    minutes: [12.25, 10.0, 8.75, 6.5]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '400'
+    ci: 0.72
+    printed: [14¾, '12', 10½, 7¾]
+    minutes: [14.75, 12.0, 10.5, 7.75]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '800'
+    ci: 0.82
+    printed: [16½, 13½, 11¾, 8¾]
+    minutes: [16.5, 13.5, 11.75, 8.75]
+- id: table3-large-tank-seasoned
+  source: j109-2018-02
+  page: '11'
+  table: 'Table 3: Processing Roll Films in Large Tanks with Seasoned (Replenished) Developer'
+  column_group: Large Tank with Seasoned (Replenished) Developer
+  tank: large tank
+  dilution: full strength
+  developer_state: seasoned (replenished)
+  agitation: nitrogen burst, 2 seconds at 10-second intervals (p. 4)
+  agitation_ref: large-tank-seasoned
+  unit: min
+  temperature_c: [18, 20, 21, 24, 27]
+  temperature_f: [65, 68, 70, 75, 80]
+  rows:
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: 100/200
+    ci: 0.52
+    printed: ['9', 7½, 6¾, '5', —]
+    minutes: [9.0, 7.5, 6.75, 5.0, null]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: 400/800
+    ci: 0.56
+    nominal_speed_bold: true
+    printed: ['10', 8½, 7½, 5½, —]
+    minutes: [10.0, 8.5, 7.5, 5.5, null]
+    bold: [true, true, true, true, false]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: '800'
+    ci: 0.62
+    printed: [11½, 9¾, 8¾, 6½, —]
+    minutes: [11.5, 9.75, 8.75, 6.5, null]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: '1600'
+    ci: 0.72
+    printed: ['14', 11¾, 10½, 7¾, —]
+    minutes: [14.0, 11.75, 10.5, 7.75, null]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: '3200'
+    ci: 0.82
+    printed: [—, '14', 12½, 9¼, —]
+    minutes: [null, 14.0, 12.5, 9.25, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: 25/50
+    ci: 0.52
+    printed: ['10', 8¼, 7¼, 5½, —]
+    minutes: [10.0, 8.25, 7.25, 5.5, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '100'
+    ci: 0.56
+    nominal_speed_bold: true
+    printed: [10¾, '9', 7¾, 5¾, —]
+    minutes: [10.75, 9.0, 7.75, 5.75, null]
+    bold: [true, true, true, true, true]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '200'
+    ci: 0.62
+    printed: ['12', 9¾, 8¾, 6½, —]
+    minutes: [12.0, 9.75, 8.75, 6.5, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '400'
+    ci: 0.72
+    printed: ['14', 11½, 10¼, 7½, —]
+    minutes: [14.0, 11.5, 10.25, 7.5, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '800'
+    ci: 0.82
+    printed: [15¾, '13', 11½, 8½, —]
+    minutes: [15.75, 13.0, 11.5, 8.5, null]
+- id: table4-large-tank-fresh
+  source: j109-2018-02
+  page: '13'
+  table: 'Table 4: Processing Roll Films in Large Tanks with Fresh Developer'
+  column_group: Large Tanks with Fresh Developer
+  tank: large tank
+  dilution: full strength
+  developer_state: fresh
+  agitation: manual agitation at 1-minute intervals (p. 4)
+  agitation_ref: large-tank-fresh
+  unit: min
+  temperature_c: [18, 20, 21, 24, 27]
+  temperature_f: [65, 68, 70, 75, 80]
+  rows:
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '100'
+    ci: 0.56
+    nominal_speed_bold: true
+    printed: [9½, 8¼, 7¼, 5½, —]
+    minutes: [9.5, 8.25, 7.25, 5.5, null]
+    bold: [true, true, true, true, false]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '200'
+    ci: 0.62
+    printed: [—, —, —, —, —]
+    minutes: [null, null, null, null, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '400'
+    ci: 0.72
+    printed: [—, —, —, 7¼, —]
+    minutes: [null, null, null, 7.25, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: 135/120
+    ei: '800'
+    ci: 0.82
+    printed: [—, —, —, —, —]
+    minutes: [null, null, null, null, null]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: 400/800
+    ci: 0.56
+    nominal_speed_bold: true
+    printed: [9¼, '8', 7¼, 5½, —]
+    minutes: [9.25, 8.0, 7.25, 5.5, null]
+    bold: [true, true, true, true, false]
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: '160'
+    ci: 0.72
+    printed: [12¾, '11', 9¾, 7½, —]
+    minutes: [12.75, 11.0, 9.75, 7.5, null]
+    note: printed EI is "160" in both the text layer and the rendered page; 1600 is presumably meant (CI 0.72 is
+      the EI 1600 aim in Tables 1-3); kept as printed
+  - film_as_printed: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+    material: kodak/tri-x-400
+    format: 135/120
+    ei: '3200'
+    ci: 0.82
+    printed: [15¼, '13', 11¾, '9', —]
+    minutes: [15.25, 13.0, 11.75, 9.0, null]
+- id: table5-tray-sheets-full-strength
+  source: j109-2018-02
+  page: '14'
+  table: 'Table 5: Processing Sheet Films in Trays'
+  column_group: Fresh, Full Strength Developer in Trays
+  tank: tray
+  developer_state: fresh
+  agitation: continuous (tray procedure of p. 3)
+  agitation_ref: tray-sheets
+  dilution: full strength
+  unit: min
+  temperature_c: [18, 20, 21, 24, 27]
+  temperature_f: [65, 68, 70, 75, 80]
+  rows:
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '100'
+    ci: 0.56
+    nominal_speed_bold: true
+    printed: ['8', 6¾, '6', 4½, —]
+    minutes: [8.0, 6.75, 6.0, 4.5, null]
+    bold: [true, true, true, true, false]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '200'
+    ci: 0.62
+    printed: [—, 7¼, —, '5', —]
+    minutes: [null, 7.25, null, 5.0, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '400'
+    ci: 0.72
+    printed: [—, 9½, 8½, 6½, —]
+    minutes: [null, 9.5, 8.5, 6.5, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '800'
+    ci: 0.82
+    printed: [—, —, —, 7¼, —]
+    minutes: [null, null, null, 7.25, null]
+- id: table5-tray-sheets-1-1
+  source: j109-2018-02
+  page: '14'
+  table: 'Table 5: Processing Sheet Films in Trays'
+  column_group: Fresh 1:1 Developer in Trays
+  tank: tray
+  developer_state: fresh
+  agitation: continuous (tray procedure of p. 3)
+  agitation_ref: tray-sheets
+  dilution: 1:1 (developer:water)
+  unit: min
+  temperature_c: [20, 21, 24, 27]
+  temperature_f: [68, 70, 75, 80]
+  rows:
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '100'
+    ci: 0.56
+    nominal_speed_bold: true
+    printed: ['9', '8', '6', —]
+    minutes: [9.0, 8.0, 6.0, null]
+    bold: [true, true, true, false]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '200'
+    ci: 0.62
+    printed: [—, —, —, —]
+    minutes: [null, null, null, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '400'
+    ci: 0.72
+    printed: [—, —, —, —]
+    minutes: [null, null, null, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '800'
+    ci: 0.82
+    printed: [—, —, —, —]
+    minutes: [null, null, null, null]
+- id: table6-rotary-tube-sheets-fresh
+  source: j109-2018-02
+  page: '14'
+  table: 'Table 6: Processing Sheet Films in Rotary Tubes'
+  column_group: Fresh Developer
+  tank: rotary tube
+  agitation: not described in J-109
+  agitation_ref: rotary-tube
+  dilution: full strength
+  developer_state: fresh
+  unit: min
+  temperature_c: [18, 20, 21, 24]
+  temperature_f: [65, 68, 70, 75]
+  rows:
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: 25/50
+    ci: 0.52
+    printed: [8¼, 6¾, '6', 4¾]
+    minutes: [8.25, 6.75, 6.0, 4.75]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: 100/200
+    ci: 0.56
+    nominal_speed_bold: true
+    printed: [8¾, 7¼, 6½, '5']
+    minutes: [8.75, 7.25, 6.5, 5.0]
+    bold: [true, true, true, true]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '200'
+    ci: 0.62
+    printed: [9¾, '8', 7¼, 5½]
+    minutes: [9.75, 8.0, 7.25, 5.5]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '400'
+    ci: 0.72
+    printed: [11½, 9½, 8½, 6½]
+    minutes: [11.5, 9.5, 8.5, 6.5]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '800'
+    ci: 0.82
+    printed: [12¾, 10½, 9½, 7¼]
+    minutes: [12.75, 10.5, 9.5, 7.25]
+- id: table6-rotary-tube-sheets-1-1
+  source: j109-2018-02
+  page: '14'
+  table: 'Table 6: Processing Sheet Films in Rotary Tubes'
+  column_group: 1:1 Developer
+  tank: rotary tube
+  agitation: not described in J-109
+  agitation_ref: rotary-tube
+  dilution: 1:1 (developer:water)
+  developer_state: fresh
+  unit: min
+  temperature_c: [20, 21, 24, 27]
+  temperature_f: [68, 70, 75, 80]
+  rows:
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: 25/50
+    ci: 0.52
+    printed: [—, —, —, —]
+    minutes: [null, null, null, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: 100/200
+    ci: 0.56
+    nominal_speed_bold: true
+    printed: [9¾, '9', 7¾, —]
+    minutes: [9.75, 9.0, 7.75, null]
+    bold: [true, true, true, false]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '200'
+    ci: 0.62
+    printed: [—, —, —, —]
+    minutes: [null, null, null, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '400'
+    ci: 0.72
+    printed: [—, —, —, —]
+    minutes: [null, null, null, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '800'
+    ci: 0.82
+    printed: [—, —, —, —]
+    minutes: [null, null, null, null]
+- id: table6-rotary-tube-sheets-replenished
+  source: j109-2018-02
+  page: '14'
+  table: 'Table 6: Processing Sheet Films in Rotary Tubes'
+  column_group: Replenished Developer
+  tank: rotary tube
+  agitation: not described in J-109
+  agitation_ref: rotary-tube
+  dilution: full strength
+  developer_state: replenished
+  unit: min
+  temperature_c: [18, 20, 21, 24]
+  temperature_f: [65, 68, 70, 75]
+  rows:
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: 25/50
+    ci: 0.52
+    printed: ['10', 8¼, 7¼, 5½]
+    minutes: [10.0, 8.25, 7.25, 5.5]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: 100/200
+    ci: 0.56
+    nominal_speed_bold: true
+    printed: ['11', '9', '8', '6']
+    minutes: [11.0, 9.0, 8.0, 6.0]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '200'
+    ci: 0.62
+    printed: [12¼, '10', 8¾, 6½]
+    minutes: [12.25, 10.0, 8.75, 6.5]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '400'
+    ci: 0.72
+    printed: [14¾, '12', 10½, 7¾]
+    minutes: [14.75, 12.0, 10.5, 7.75]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '800'
+    ci: 0.82
+    printed: [16½, 13½, 11¾, 8¾]
+    minutes: [16.5, 13.5, 11.75, 8.75]
+- id: table7-large-tank-seasoned-sheets
+  source: j109-2018-02
+  page: '15'
+  table: 'Table 7: Processing Sheet Films in Large Tanks with Seasoned (Replenished) Developer'
+  column_group: Seasoned Developer in Large Tanks
+  tank: large tank
+  dilution: full strength
+  developer_state: seasoned (replenished)
+  agitation: nitrogen burst, 2 seconds at 10-second intervals (p. 4)
+  agitation_ref: large-tank-seasoned
+  unit: min
+  temperature_c: [18, 20, 21, 24, 27]
+  temperature_f: [65, 68, 70, 75, 80]
+  rows:
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: 25/50
+    ci: 0.52
+    printed: ['10', 8¼, 7¼, 5½, —]
+    minutes: [10.0, 8.25, 7.25, 5.5, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '100'
+    ci: 0.56
+    nominal_speed_bold: true
+    printed: [10¾, '9', 7¾, 5¾, —]
+    minutes: [10.75, 9.0, 7.75, 5.75, null]
+    bold: [true, true, true, true, true]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '200'
+    ci: 0.62
+    printed: ['12', 9¾, 8¾, 6½, —]
+    minutes: [12.0, 9.75, 8.75, 6.5, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '400'
+    ci: 0.72
+    printed: ['14', 11½, 10¼, 7½, —]
+    minutes: [14.0, 11.5, 10.25, 7.5, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '800'
+    ci: 0.82
+    printed: [15¾, '13', 11½, 8½, —]
+    minutes: [15.75, 13.0, 11.5, 8.5, null]
+- id: table8-large-tank-fresh-sheets
+  source: j109-2018-02
+  page: '15'
+  table: 'Table 8: Processing Sheet Films in Large Tanks with Fresh Developer'
+  column_group: Fresh Developer in Large Tanks
+  tank: large tank
+  dilution: full strength
+  developer_state: fresh
+  agitation: manual agitation at 1-minute intervals (p. 4)
+  agitation_ref: large-tank-fresh
+  unit: min
+  temperature_c: [18, 20, 21, 24, 27]
+  temperature_f: [65, 68, 70, 75, 80]
+  rows:
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '100'
+    ci: 0.56
+    nominal_speed_bold: true
+    printed: [9½, 8¼, 7¼, 5½, —]
+    minutes: [9.5, 8.25, 7.25, 5.5, null]
+    bold: [true, true, true, true, false]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '200'
+    ci: 0.62
+    printed: [—, —, —, —, —]
+    minutes: [null, null, null, null, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '400'
+    ci: 0.72
+    printed: [—, —, —, 7¼, —]
+    minutes: [null, null, null, 7.25, null]
+  - film_as_printed: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+    material: kodak/t-max-100
+    format: sheet
+    ei: '800'
+    ci: 0.82
+    printed: [—, —, —, —, —]
+    minutes: [null, null, null, null, null]

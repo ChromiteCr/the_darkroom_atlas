@@ -1,0 +1,527 @@
+# KODAK Developer D-76
+#
+# Development times, capacity, replenishment, mixing, storage and agitation facts, restricted to what
+# concerns KODAK PROFESSIONAL TRI-X 400 (400TX, material kodak/tri-x-400) and
+# KODAK PROFESSIONAL T-MAX 100 (100TMX, material kodak/t-max-100).
+#
+# Every block names its source (a key of `sources`, with edition, URL and sha256), the printed page and
+# the table or passage. Times keep the printed text ("6¾", "4½†", "NR", "—") next to decimal minutes;
+# NR (not recommended), "—" (no time given) and unreadable cells are null. Table cells were read from
+# the PDF text layer with stacked fractions merged (tools/digitize/textrows.py) and checked cell by cell
+# against the rendered pages. `bold` is kept only where the publication defines bold type. Rows with
+# `material: null` name an older product and must not be attached to a current film. See
+# tools/digitize/staged/developers/README.md.
+schema_version: 1
+developer: d-76
+name: KODAK Developer D-76
+films:
+  kodak/tri-x-400: KODAK PROFESSIONAL TRI-X 400 Film / 400TX
+  kodak/t-max-100: KODAK PROFESSIONAL T-MAX 100 Film / 100TMX
+sources:
+  j78-2017-12:
+    publisher: Kodak Alaris
+    number: J-78
+    title: KODAK Developer D-76 (Technical Data / Chemicals)
+    edition: December 2017 (back cover "Revised 12-17", © 2017 Kodak Alaris Inc.); 7 pages
+    url: https://web.archive.org/web/20211017161519id_/https://imaging.kodakalaris.com/sites/default/files/files/resources/j78.pdf
+    original_url: https://imaging.kodakalaris.com/sites/default/files/files/resources/j78.pdf
+    retrieved: 2026-11-21 from the Wayback Machine capture of 2021-10-17 (the 2016 capture of the older imaging.kodakalaris.com/sites/prod/...
+      path holds the © 2002 edition and was not used)
+    pdf: .cache/datasheets/pdf/j78-2017-12.pdf
+    sha256: d1998e9e3807bb8b4c1969ce44e5f9d7750f8043e5a19142a99b83eb546d9915
+notes:
+- 'no characteristic or contrast-index curves: every page was scanned for curve-like vector paths and embedded images
+  and rendered; J-78 has tables and text only'
+- J-78 names only older products (T-MAX 100 Professional, TRI-X Pan); their rows are kept with material null. TRI-X
+  Pan Professional, T-MAX 400, T-MAX P3200 and other films are left out.
+- J-78 prints no formula, mixing procedure, pH or contrast-index aim.
+facts:
+- id: film-rows-are-legacy-names
+  value: null
+  unit: null
+  source: j78-2017-12
+  page: 3-5
+  where: every development-time table
+  statement: J-78 (December 2017) names only the older products "T-MAX 100 Professional" and "TRI-X Pan" (with "TRI-X
+    Pan Professional" for the 320-speed film). It has no row for KODAK PROFESSIONAL T-MAX 100 Film / 100TMX or KODAK
+    PROFESSIONAL TRI-X 400 Film / 400TX. The rows below are therefore kept with material null. Their times do not
+    match the current film publications (small tank, full strength, 20 C - J-78 T-MAX 100 Professional 9 min against
+    F-4016 100TMX 6 1/2 min; J-78 TRI-X Pan 8 min against F-4017 400TX 6 3/4 min), so the film publications govern
+    for the current films.
+- id: contrast-aim
+  value: null
+  unit: '1'
+  source: j78-2017-12
+  page: '2'
+  where: DEVELOPMENT TIMES, first paragraph
+  statement: no contrast index aim is printed. The times are starting-point recommendations; if negatives are consistently
+    too low in contrast increase the time by 10 to 15 percent, if too contrasty decrease it by 10 to 15 percent.
+- id: contrast-adjustment-percent
+  value: [10, 15]
+  unit: percent
+  source: j78-2017-12
+  page: '2'
+  where: DEVELOPMENT TIMES, first paragraph
+  statement: increase or decrease the development time "slightly (10 to 15 percent)" when negatives are consistently
+    too low or too high in contrast
+- id: short-development-warning
+  value: 5
+  unit: min
+  source: j78-2017-12
+  page: '3'
+  where: notes under the roll-film tables
+  statement: tank development times shorter than 5 minutes may produce poor uniformity
+- id: dilution-1-1-definition
+  value: null
+  unit: null
+  source: j78-2017-12
+  page: 2, 5
+  where: DEVELOPMENT TIMES (p. 2); text under the storage table (p. 5)
+  statement: J-78 writes only "Developer D-76 diluted 1:1"; it does not say in words which volumes the two numbers
+    refer to. It says to dilute just before use, to check that no air bubbles are in the diluted solution, to discard
+    it after processing the batch, and not to reuse or replenish it.
+- id: dilution-1-1-minimum-volume
+  value: 473
+  unit: mL per 135-36 roll
+  source: j78-2017-12
+  page: '2'
+  where: DEVELOPMENT TIMES, second paragraph
+  statement: develop one 135-36 roll (80 square inches; the text prints "135-3 roll") in 473 mL (16 ounces) or two
+    rolls together in 946 mL (one quart) of diluted developer. If one 135-36 roll is processed in a 237 mL (8-ounce)
+    tank or two 135-36 rolls in a 473 mL (16-ounce) tank, increase the development time by 10 percent.
+- id: dilution-1-1-two-rolls-16-ounce-tank
+  value: 10
+  unit: percent longer development
+  source: j78-2017-12
+  page: '5'
+  where: text under the storage and capacity table
+  statement: to extend the useful capacity of D-76 diluted 1:1 when processing two 36-exposure rolls in a 16-ounce
+    tank, increase the recommended time by about 10 percent
+- id: mixing-instructions
+  value: null
+  unit: null
+  source: j78-2017-12
+  page: '6'
+  where: SIZES AVAILABLE
+  statement: the December 2017 edition prints no mixing instructions and no formula. It lists packages "To make
+    1 quart", "1/2 gallon", "1 gallon" and "10 gallons" of Developer D-76 (CAT 146 4791, 146 4809, 146 4817, 146
+    4825) and "To make 1 gallon" of Replenisher D-76R (CAT 146 4833).
+- {id: working-solution-ph, value: null, unit: null, source: j78-2017-12, page: 1-7, statement: not stated}
+- id: capacity-without-replenishment
+  source: j78-2017-12
+  page: '5'
+  where: STORAGE LIFE AND CAPACITY table, column "Useful Capacity Per Gallon (Litre)"
+  unit: count per US gallon (count per litre in parentheses)
+  rows:
+  - solution: Developer D-76
+    sheets_8x10_in_tray:
+      printed: 16 (4)2
+      per_gallon: 16
+      per_litre: 4
+      footnotes: [2]
+    rolls_135_36_or_120_in_tank:
+      printed: 16 (4)23
+      per_gallon: 16
+      per_litre: 4
+      footnotes: [2, 3]
+  - solution: Developer D-76 (1:1)
+    sheets_8x10_in_tray:
+      printed: 8 (2)
+      per_gallon: 8
+      per_litre: 2
+      footnotes: []
+    rolls_135_36_or_120_in_tank:
+      printed: 8 (2)2
+      per_gallon: 8
+      per_litre: 2
+      footnotes: [2]
+  - solution: Replenisher D-76R
+    sheets_8x10_in_tray:
+      printed: NA
+      per_gallon: null
+      per_litre: null
+      footnotes: []
+    rolls_135_36_or_120_in_tank:
+      printed: NA
+      per_gallon: null
+      per_litre: null
+      footnotes: []
+  footnotes:
+    '2': With time compensation; increase the development time by 15 percent after every four 8 x 10-inch sheets
+      or 4 rolls per gallon processed.
+    '3': After you develop each batch, you can add replenisher to extend the capacity of the developer to 120 sheets
+      per gallon. Do not increase development times if you use replenisher.
+  note: the trailing digits in the printed cells are superscript footnote marks (checked on the rendered page),
+    not part of the numbers
+- id: time-compensation
+  value: 15
+  unit: percent longer development per 4 rolls (or four 8 x 10-inch sheets) per gallon processed
+  source: j78-2017-12
+  page: '5'
+  where: footnote 2 of the STORAGE LIFE AND CAPACITY table
+  statement: with time compensation, increase the development time by 15 percent after every four 8 x 10-inch sheets
+    or 4 rolls per gallon processed
+- id: storage-life
+  source: j78-2017-12
+  page: '5'
+  where: STORAGE LIFE AND CAPACITY table, columns "Storage Life"
+  rows:
+  - {solution: Developer D-76, stock_full_bottle: 6 months, stock_half_filled_bottle: 2 months, working_in_tray: 24
+      hours, working_in_tank_with_floating_lid: 1 month}
+  - {solution: 'Developer D-76 (1:1)', stock_full_bottle: NA, stock_half_filled_bottle: NA, working_in_tray: 24
+      hours, working_in_tank_with_floating_lid: NA}
+  - {solution: Replenisher D-76R, stock_full_bottle: 6 months, stock_half_filled_bottle: 2 months, working_in_tray: NA,
+    working_in_tank_with_floating_lid: NA}
+  note: '"Tank" carries footnote 1, "With floating lid." NA = not applicable.'
+- id: replenishment-standard
+  value: [22.2, 29.6]
+  unit: mL of Replenisher D-76R per 135-36 or 120 roll or 8 x 10-inch sheet (or equivalent)
+  source: j78-2017-12
+  page: '6'
+  where: REPLENISHMENT, last paragraph
+  statement: for films other than T-MAX Professional Films, replenish full-strength D-76 with Replenisher D-76R
+    at 22.2 to 29.6 mL (3/4 to 1 fluid ounce) per roll or sheet, without increasing the development time; the rate
+    usually covers carry-out and chemical depletion; make up larger losses with fresh working-strength developer;
+    stir or recirculate after each addition
+- id: replenishment-modified-for-t-max-films
+  value: 70
+  unit: mL of modified replenisher per 135-36 or 120 roll or 8 x 10-inch sheet (or equivalent)
+  source: j78-2017-12
+  page: '6'
+  where: REPLENISHMENT, Using a Modified Replenisher
+  statement: for KODAK T-MAX Professional Films mix Developer D-76 and Replenisher D-76R as packaged, then combine
+    5 parts of Developer D-76 with 1 part of Replenisher D-76R (this avoids a small speed loss and a contrast increase
+    as the developer seasons). Starting-point rate 70 mL (2 1/2 fluid ounces) per roll or sheet, adjusted with Black-and-White
+    Film Process Control Strips. Do not store the mixed modified replenisher longer than 4 weeks; with low utilization
+    (more than 1 month to turn over the tank) discard the developer after 1 month.
+- id: replenished-developer-discard
+  value: 9600
+  unit: square inches of film per 3.8 litres (1 gallon)
+  source: j78-2017-12
+  page: '6'
+  where: REPLENISHMENT, Using a Modified Replenisher
+  statement: discard the developer after processing 9600 square inches of film per 3.8 litres (per gallon); the
+    capacities in rolls or sheets follow in the table "Capacity for Replenished Developer D-76"
+- id: capacity-replenished
+  source: j78-2017-12
+  page: '6'
+  where: table "Capacity for Replenished Developer D-76", Number of Rolls or Sheets per Gallon of Developer with
+    Replenishment
+  unit: count per US gallon
+  rows:
+  - {film_size: '120', per_gallon: 120}
+  - {film_size: '220', per_gallon: 60}
+  - {film_size: 135-24, per_gallon: 160}
+  - {film_size: 135-36, per_gallon: 120}
+  - {film_size: 8 x 10-inch sheets, per_gallon: 120}
+  - {film_size: 4 x 5-inch sheets, per_gallon: 480}
+- id: push-statement
+  value: null
+  unit: null
+  source: j78-2017-12
+  page: '4'
+  where: Processing "Pushed" Roll Films in a Small Tank
+  statement: for the films in the push table, exposure 1 stop faster than the rated speed is developed for the normal
+    time; the underexposure latitude is said to give better (finer-grain) results than push processing
+agitation:
+- id: small-tank-rolls
+  source: j78-2017-12
+  page: '1'
+  where: AGITATION, Agitating Rolls in a Small Tank
+  applies_to: every "Small Tank" column (footnote "With agitation at 30-second intervals")
+  interval_s: 30
+  agitation_duration_s: 5
+  cycles_per_agitation: 2 to 5, depending on the contrast needed and the type of tank
+  initial_agitation: up to 5 cycles depending on results; for KODAK T-MAX Professional Films 5 to 7 cycles in 5
+    seconds; the tank is then left to stand for the rest of the first 30 seconds
+  cycle_definition: invertible tank - turn the tank upside down and back upright; non-invertible tank - slide it
+    back and forth over 25.4 cm (10 inches); tanks with a reel-turning handle - rotate the reel back and forth through
+    about one-half turn at one cycle per second
+  procedure: fill the empty tank with developer; start the timer and drop the loaded reel in; attach the top and
+    tap the tank bottom on the bench from about 2.5 cm (1 inch) to dislodge air bubbles; give the initial agitation
+    (steps 2 to 4 take about 7 to 20 seconds); after the first 30 seconds agitate for 5 seconds at 30-second intervals
+  note: the printed text reads "up to 5 cycle"
+- id: large-tank-short-rolls
+  source: j78-2017-12
+  page: '1'
+  where: AGITATION, Agitating Short Rolls in a Large Tank
+  applies_to: every "Large Tank" roll-film column (footnote "With agitation at 1-minute intervals")
+  interval_s: 60
+  tank: typically 3.8 litres (1 gallon) or 13 litres (3 1/2 gallons); reels on a rack, basket or spindle (racks
+    hold up to 30 rolls of 35 mm or 18 rolls of 120); rolls of 1.5 m (5 feet) or less
+  initial_agitation: tap the rack sharply against the tank, then agitate continuously for the first 15 to 30 seconds
+    by raising and lowering the rack about 1 cm (1/2 inch), keeping the reels submerged; no agitation for the rest
+    of the first minute
+  each_agitation: once each minute after the first, lift the rack completely out, tilt it about 30 degrees to drain
+    for 5 to 10 seconds, reimmerse; alternate the tilt direction
+- id: tray-sheets
+  source: j78-2017-12
+  page: '2'
+  where: Agitating Sheet Film in a Tray
+  applies_to: the sheet-film "Tray" columns (footnote "With continuous agitation")
+  single_sheet: rock the tray to cover the sheet, then raise the left side about 1.9 cm (3/4 inch) and lower it,
+    raise and lower the near side, the right side, the near side again; the cycle takes about 8 seconds; agitate
+    continuously
+  two_to_six_sheets: prewet in a tray of water at developer temperature, cycling the stack twice; then transfer
+    the sheets one at a time emulsion up into the developer and interleave bottom to top continuously until development
+    is complete
+- id: large-tank-sheets
+  source: j78-2017-12
+  page: '2'
+  where: Agitating Sheet Film in a Large Tank
+  applies_to: the sheet-film "Large Tank" columns (footnote "With agitation at 1-minute intervals")
+  interval_s: 60
+  procedure: separate the hangers by at least 1 cm (1/2 inch); lower the hangers as a unit, tap them against the
+    tank rim two or three times; leave them undisturbed for the rest of the first minute; then each minute lift
+    all hangers out, tilt almost 90 degrees to the left, reimmerse, lift again and tilt almost 90 degrees to the
+    right, reimmerse (about 5 to 7 seconds), and check the spacing
+  note: the Note in the same column says each agitation cycle should take about 6 seconds
+- id: rotary-tube
+  source: j78-2017-12
+  page: '5'
+  where: Rotary-Tube Processing
+  statement: follow the agitation recommendations for your processor (no interval or speed is given)
+development_times:
+- id: roll-full-strength-small-tank
+  source: j78-2017-12
+  page: '3'
+  table: Roll Films - KODAK Developer D-76 (Full Strength) - Development Times (Minutes)
+  column_group: Small Tank
+  dilution: full strength (stock)
+  tank: small tank
+  agitation: With agitation at 30-second intervals (footnote 1)
+  agitation_ref: small-tank-rolls
+  unit: min
+  temperature_c: [18, 20, 21, 22, 24]
+  temperature_f: [65, 68, 70, 72, 75]
+  rows:
+  - film_as_printed: T-MAX 100 Professional
+    material: null
+    legacy_name: true
+    format: roll
+    printed: [10½, '9', '8', '7', '6']
+    minutes: [10.5, 9.0, 8.0, 7.0, 6.0]
+  - film_as_printed: TRI-X Pan
+    material: null
+    legacy_name: true
+    format: roll
+    printed: ['9', '8', 7v, 6½, 5½]
+    minutes: [9.0, 8.0, null, 6.5, 5.5]
+    note: the 21 C cell is printed "7v" in both the text layer and the rendered page; the value cannot be read and
+      is left null
+- id: roll-full-strength-large-tank
+  source: j78-2017-12
+  page: '3'
+  table: Roll Films - KODAK Developer D-76 (Full Strength) - Development Times (Minutes)
+  column_group: Large Tank
+  dilution: full strength (stock)
+  tank: large tank
+  agitation: With agitation at 1-minute intervals (footnote 2)
+  agitation_ref: large-tank-short-rolls
+  unit: min
+  temperature_c: [18, 20, 21, 22, 24]
+  temperature_f: [65, 68, 70, 72, 75]
+  rows:
+  - film_as_printed: T-MAX 100 Professional
+    material: null
+    legacy_name: true
+    format: roll
+    printed: [11½, '10', '9', '8', 6½]
+    minutes: [11.5, 10.0, 9.0, 8.0, 6.5]
+  - film_as_printed: TRI-X Pan
+    material: null
+    legacy_name: true
+    format: roll
+    printed: ['10', '9', '8', '7', '6']
+    minutes: [10.0, 9.0, 8.0, 7.0, 6.0]
+- id: roll-1-1-small-tank
+  source: j78-2017-12
+  page: '3'
+  table: KODAK Developer D-76 (1:1) - Development Times (Minutes)
+  column_group: Small Tank
+  dilution: 1:1 (volumes not defined in J-78)
+  tank: small tank
+  agitation: With agitation at 30-second intervals (footnote 1)
+  agitation_ref: small-tank-rolls
+  unit: min
+  temperature_c: [18, 20, 21, 22, 24]
+  temperature_f: [65, 68, 70, 72, 75]
+  rows:
+  - film_as_printed: T-MAX 100 Professional
+    material: null
+    legacy_name: true
+    format: roll
+    printed: [14½, '12', '11', '10', 8½]
+    minutes: [14.5, 12.0, 11.0, 10.0, 8.5]
+  - film_as_printed: TRI-X Pan
+    material: null
+    legacy_name: true
+    format: roll
+    printed: ['11', '10', 9½, '9', '8']
+    minutes: [11.0, 10.0, 9.5, 9.0, 8.0]
+- id: roll-1-1-large-tank
+  source: j78-2017-12
+  page: '3'
+  table: KODAK Developer D-76 (1:1) - Development Times (Minutes)
+  column_group: Large Tank
+  dilution: 1:1 (volumes not defined in J-78)
+  tank: large tank
+  agitation: With agitation at 1-minute intervals (footnote 2)
+  agitation_ref: large-tank-short-rolls
+  unit: min
+  temperature_c: [18, 20, 21, 22, 24]
+  temperature_f: [65, 68, 70, 72, 75]
+  rows:
+  - film_as_printed: T-MAX 100 Professional
+    material: null
+    legacy_name: true
+    format: roll
+    printed: [—, —, —, —, —]
+    minutes: [null, null, null, null, null]
+  - film_as_printed: TRI-X Pan
+    material: null
+    legacy_name: true
+    format: roll
+    printed: ['13', '12', '11', '10', '9']
+    minutes: [13.0, 12.0, 11.0, 10.0, 9.0]
+- id: sheet-full-strength-tray
+  source: j78-2017-12
+  page: '4'
+  table: Sheet Films - KODAK Developer D-76 (Full Strength) - Development Times (Minutes)
+  column_group: Tray
+  dilution: full strength (stock)
+  tank: tray
+  agitation: With continuous agitation (footnote 1)
+  agitation_ref: tray-sheets
+  unit: min
+  temperature_c: [18, 20, 21, 22, 24]
+  temperature_f: [65, 68, 70, 72, 75]
+  rows:
+  - film_as_printed: T-MAX 100 Professional
+    material: null
+    legacy_name: true
+    format: sheet
+    printed: [9½, '7', 6½, 5½, '5']
+    minutes: [9.5, 7.0, 6.5, 5.5, 5.0]
+- id: sheet-full-strength-large-tank
+  source: j78-2017-12
+  page: '4'
+  table: Sheet Films - KODAK Developer D-76 (Full Strength) - Development Times (Minutes)
+  column_group: Large Tank
+  dilution: full strength (stock)
+  tank: large tank
+  agitation: With agitation at 1-minute intervals (footnote 2)
+  agitation_ref: large-tank-sheets
+  unit: min
+  temperature_c: [18, 20, 21, 22, 24]
+  temperature_f: [65, 68, 70, 72, 75]
+  rows:
+  - film_as_printed: T-MAX 100 Professional
+    material: null
+    legacy_name: true
+    format: sheet
+    printed: [11½, 9½, 8½, 7½, '7']
+    minutes: [11.5, 9.5, 8.5, 7.5, 7.0]
+- id: rotary-tube-full-strength
+  source: j78-2017-12
+  page: '5'
+  table: Rotary-Tube Processing - KODAK Developer D-76 (Full Strength)
+  tank: rotary tube
+  agitation: Follow the agitation recommendations for your processor.
+  agitation_ref: rotary-tube
+  dilution: full strength (stock)
+  note: the header prints the temperature columns in the order 18, 21, 20, 22, 24 C; temperature_c keeps that printed
+    order
+  unit: min
+  temperature_c: [18, 21, 20, 22, 24]
+  temperature_f: [65, 70, 68, 72, 75]
+  rows:
+  - film_as_printed: T-MAX 100 Professional
+    material: null
+    legacy_name: true
+    format: roll
+    ei: 100/200
+    printed: [—, 6½, '6', 5½, '5']
+    minutes: [null, 6.5, 6.0, 5.5, 5.0]
+  - film_as_printed: T-MAX 100 Professional
+    material: null
+    legacy_name: true
+    format: roll
+    ei: '400'
+    printed: [—, '9', 8½, '8', '7']
+    minutes: [null, 9.0, 8.5, 8.0, 7.0]
+  - film_as_printed: T-MAX 100 Professional
+    material: null
+    legacy_name: true
+    format: roll
+    ei: '800'
+    printed: [NR, NR, NR, NR, NR]
+    minutes: [null, null, null, null, null]
+  - film_as_printed: TRI-X Pan
+    material: null
+    legacy_name: true
+    format: roll
+    ei: 400/800
+    printed: [7½, '7', '6', '5', '4']
+    minutes: [7.5, 7.0, 6.0, 5.0, 4.0]
+  - film_as_printed: TRI-X Pan
+    material: null
+    legacy_name: true
+    format: roll
+    ei: '1600'
+    printed: [—, —, '9', '8', '7']
+    minutes: [null, null, 9.0, 8.0, 7.0]
+  - film_as_printed: TRI-X Pan
+    material: null
+    legacy_name: true
+    format: roll
+    ei: '3200'
+    printed: [—, —, '11', '10', 9½]
+    minutes: [null, null, 11.0, 10.0, 9.5]
+- id: push-small-tank
+  source: j78-2017-12
+  page: '4'
+  table: Processing "Pushed" Roll Films in a Small Tank - KODAK Developer D-76 (Full Strength)
+  tank: small tank
+  agitation: small-tank procedure of p. 1 (30-second intervals)
+  agitation_ref: small-tank-rolls
+  dilution: full strength (stock)
+  note: entered by hand from the text layer and checked on the rendered page; the EI headings are shared rows of
+    the printed table (T-MAX 100 Professional under EI 200 / EI 400; TRI-X Pan under the EI 800 / EI 1600 headings
+    it shares with T-MAX 400 Professional)
+  unit: min
+  temperature_c: [20, 24]
+  temperature_f: [68, 75]
+  rows:
+  - film_as_printed: T-MAX 100 Professional
+    material: null
+    legacy_name: true
+    format: roll
+    ei: '200'
+    printed_heading: EI 200 (Normal Processing)
+    printed: ['9', '6']
+    minutes: [9.0, 6.0]
+  - film_as_printed: T-MAX 100 Professional
+    material: null
+    legacy_name: true
+    format: roll
+    ei: '400'
+    printed_heading: EI 400 (2-Stop Push Processing)
+    printed: ['11', 7½]
+    minutes: [11.0, 7.5]
+  - film_as_printed: TRI-X Pan
+    material: null
+    legacy_name: true
+    format: roll
+    ei: '800'
+    printed_heading: EI 800 (Normal Processing)
+    printed: ['8', 5½]
+    minutes: [8.0, 5.5]
+  - film_as_printed: TRI-X Pan
+    material: null
+    legacy_name: true
+    format: roll
+    ei: '1600'
+    printed_heading: EI 1600 (2-Stop Push Processing)
+    printed: ['13', '10']
+    minutes: [13.0, 10.0]
