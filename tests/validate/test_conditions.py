@@ -113,3 +113,35 @@ def test_condition_defaults_and_validation():
         Condition(**_kwargs(illuminant="D65"))
     with pytest.raises(ValueError, match="temperature_c"):
         Condition(**_kwargs(temperature_c=float("nan")))
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="spec 10 D1e: header -> Condition mapping (agitation, tank) is conditions_for, "
+    "a later task",
+)
+def test_conditions_header_parsing_to_condition(reference_kodak_dir):
+    # Spec 10 D1e: every staged char-/ci- CSV header becomes a Condition, with Kodak's
+    # Fahrenheit temperatures converted exactly (spec 6.1).
+    from darkroom_atlas.data.library import Library
+    from darkroom_atlas.validate.conditions import conditions_for
+
+    library = Library()
+    for film_dir in sorted(p for p in reference_kodak_dir.iterdir() if p.is_dir()):
+        material = f"kodak/{film_dir.name}"
+        conditions = [
+            c
+            for split in ("train", "within", "held_out")
+            for c in conditions_for(material, library, split=split)
+        ]
+        sources = " ".join(c.source for c in conditions)
+        for path in sorted(film_dir.glob("*.csv")):
+            if path.name.startswith(("char-", "ci-")):
+                assert path.name in sources, path.name
+        for c in conditions:
+            assert isinstance(c, Condition)
+            assert (
+                c.temperature_c
+                == pytest.approx(round(c.temperature_c * 1.8 + 32.0) / 1.8 - 32.0 / 1.8, abs=1e-9)
+                or float(c.temperature_c).is_integer()
+            )

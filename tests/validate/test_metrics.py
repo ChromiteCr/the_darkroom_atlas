@@ -479,3 +479,30 @@ def test_strip_result_is_read_only_and_checks_shapes():
         StripResult(_condition((60.0, 120.0)), x, [120.0, 60.0], d, d, [0, 0], [0, 0])
     with pytest.raises(ValueError, match="times_s"):
         StripResult(_condition((60.0, 120.0)), x, [60.0, math.nan], d, d, [0, 0], [0, 0])
+
+
+# ---- 12.10 CI sensitivity to D_min -----------------------------------------------------
+
+_TMAX_D76 = [f"t-max-100/char-d76-{m}min.csv" for m in ("06", "07.5", "10")]
+_TRIX_D76 = [
+    f"tri-x-400/char-{fmt}-d76-{m:02d}min.csv" for fmt in ("35mm", "120") for m in (6, 8, 10, 12)
+]
+
+
+@pytest.mark.parametrize(
+    ("files", "ranges"),
+    [
+        (_TMAX_D76, ((0.003, 0.005), (0.007, 0.011), (0.018, 0.026))),
+        (_TRIX_D76, ((0.005, 0.007), (0.011, 0.016), (0.026, 0.041))),
+    ],
+    ids=["t-max-100", "tri-x-400"],
+)
+def test_ci_sensitivity_to_dmin(read_reference, files, ranges):
+    # Spec 12.10: lowering D_min from the left-end density by 0.01 / 0.02 / 0.04 D lowers CI by
+    # the printed ranges; the ranges are given to 3 decimals, so half a unit of slack.
+    for relpath in files:
+        _, x, y = read_reference(relpath)
+        ci0 = contrast_index(x, y, float(y[0]))
+        for drop, (lo, hi) in zip((0.01, 0.02, 0.04), ranges, strict=True):
+            change = ci0 - contrast_index(x, y, float(y[0]) - drop)
+            assert lo - 5e-4 <= change <= hi + 5e-4, (relpath, drop, change)
