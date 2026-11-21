@@ -5,6 +5,7 @@ import math
 
 import numpy as np
 import pytest
+from scipy import special
 
 from darkroom_atlas.optics.halation import (
     HalationKernel,
@@ -157,3 +158,19 @@ def test_halation_rejects_non_base():
         halation_kernel(PITCH, "base")
     with pytest.raises(ValueError, match="finite"):
         halation_otf(np.array([np.inf]), TAC_135)
+
+
+def test_halation_otf_clear_base_closed_form():
+    # Brute-force Hankel transform of H in r out to 2e5 um (tail beyond: < 1e-8 here).
+    nu = np.array([0.002, 0.01])
+    r_c = CLEAR.critical_radius_um
+    expected = []
+    for f in nu:
+        total = 0.0
+        for lo, hi, n in ((0.0, r_c, 200_001), (r_c, 2e5, 4_000_001)):
+            r = np.linspace(lo, hi, n)
+            integrand = _irradiance(r, CLEAR) * 2 * math.pi * r * special.j0(2 * math.pi * f * r)
+            total += np.trapezoid(integrand, r)
+        expected.append(total)
+    np.testing.assert_allclose(halation_otf(nu, CLEAR), expected, rtol=0, atol=1e-7)
+    assert halation_otf(np.array([0.0]), CLEAR)[0] == pytest.approx(halation_fraction(CLEAR))

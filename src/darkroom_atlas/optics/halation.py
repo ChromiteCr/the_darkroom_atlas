@@ -215,6 +215,12 @@ def halation_otf(nu_per_um: np.ndarray, base: BaseOptics) -> np.ndarray:
 
     ``H^(nu) = integral 2 sin cos R T_g J0(4 pi nu t_b tan(theta)) d(theta)``, so
     ``H^(0) = f_H``.
+
+    For a clear base (``D_g + D_back == 0``) the total-reflection part uses the closed form
+    ``integral_0^{pi/2} 2 sin cos J0(2 t_b k tan) = 2 t_b k K1(2 t_b k)``, ``k = 2 pi nu``,
+    minus its ``theta < theta_c`` share. With an absorbing base the integral is done by
+    quadrature; for very small densities (well below 0.1) the integrand oscillates without
+    decaying out to large radii and ``quad`` may warn about accuracy.
     """
     _check_base(base)
     nu = np.asarray(nu_per_um, dtype=np.float64)
@@ -222,14 +228,23 @@ def halation_otf(nu_per_um: np.ndarray, base: BaseOptics) -> np.ndarray:
         raise ValueError("nu_per_um must be finite")
     theta_c = base.critical_angle_rad
     scale = 4.0 * math.pi * base.thickness_um
+    clear = base.grey_density + base.backing_density == 0.0
 
     def integrand(theta: float, frequency: float) -> float:
         return _angular(theta, base) * float(special.j0(scale * frequency * math.tan(theta)))
 
+    def clear_tir(theta: float, frequency: float) -> float:
+        return math.sin(2.0 * theta) * float(special.j0(scale * frequency * math.tan(theta)))
+
     out = np.empty(nu.shape)
     for idx, frequency in np.ndenumerate(nu):
-        value = 0.0
-        for lo, hi in ((0.0, theta_c), (theta_c, 0.5 * math.pi)):
-            value += integrate.quad(integrand, lo, hi, args=(abs(float(frequency)),), **_QUAD)[0]
+        f = abs(float(frequency))
+        value = integrate.quad(integrand, 0.0, theta_c, args=(f,), **_QUAD)[0]
+        if clear:
+            x = scale * f  # 2 t_b k
+            full = 1.0 if x == 0.0 else float(x * special.k1(x))
+            value += full - integrate.quad(clear_tir, 0.0, theta_c, args=(f,), **_QUAD)[0]
+        else:
+            value += integrate.quad(integrand, theta_c, 0.5 * math.pi, args=(f,), **_QUAD)[0]
         out[idx] = value
     return out
