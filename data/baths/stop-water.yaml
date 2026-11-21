@@ -1,0 +1,14 @@
+# Plain-water stop for the bw-mechanistic post-development steps (spec D1 2.6).
+schema_version: 1
+id: stop-water
+name: Water stop
+kind: stop
+formula_confidence: published
+components: []
+note: Plain water; the stop step reads only its neutralisation time.
+constants:
+  neutralisation_time:
+    value: 15.0
+    unit: s
+    source: assumed
+    note: "spec D1 2.6; developer diluted out within tau_s, no reference data"

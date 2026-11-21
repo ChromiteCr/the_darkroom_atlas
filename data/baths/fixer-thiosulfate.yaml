@@ -1,0 +1,22 @@
+# Thiosulfate fixer for the bw-mechanistic post-development steps (spec D1 2.6).
+# Only the first-order constants of the fix step are modelled; the composition is not used.
+schema_version: 1
+id: fixer-thiosulfate
+name: Thiosulfate fixer
+kind: fixer
+formula_confidence: published
+components: []
+note: >-
+  Composition left empty: thiosulfate is not in the species table and the fix step reads
+  only its clearing and dye-removal time constants.
+constants:
+  clearing_time_constant:
+    value: 20.0
+    unit: s
+    source: assumed
+    note: "spec D1 2.6; scaled per film by development.fixing_factor, no reference data"
+  dye_removal_time:
+    value: 60.0
+    unit: s
+    source: assumed
+    note: "spec D1 2.6; no reference data"

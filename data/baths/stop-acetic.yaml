@@ -1,0 +1,17 @@
+# Acetic-acid stop bath for the bw-mechanistic post-development steps (spec D1 2.6).
+# Only the first-order constant of the stop step is modelled; the composition is not used.
+schema_version: 1
+id: stop-acetic
+name: Acetic acid stop bath
+kind: stop
+formula_confidence: published
+components: []
+note: >-
+  Composition left empty: acetic acid is not in the species table and the stop step reads
+  only its neutralisation time.
+constants:
+  neutralisation_time:
+    value: 2.0
+    unit: s
+    source: assumed
+    note: "spec D1 2.6; developer neutralised within tau_s, no reference data"

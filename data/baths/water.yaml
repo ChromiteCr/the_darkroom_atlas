@@ -1,0 +1,19 @@
+# Running-water wash for the bw-mechanistic post-development steps (spec D1 2.6).
+schema_version: 1
+id: water
+name: Water wash
+kind: wash
+formula_confidence: published
+components: []
+note: Plain water; the wash step reads only its time constants.
+constants:
+  wash_time_constant:
+    value: 120.0
+    unit: s
+    source: assumed
+    note: "spec D1 2.6 (tau_w); residual fixer removal, no reference data"
+  wash_dye_time_constant:
+    value: 300.0
+    unit: s
+    source: assumed
+    note: "spec D1 2.6 (tau_dye,w); residual dye removal, no reference data"
