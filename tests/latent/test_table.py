@@ -161,6 +161,12 @@ def test_latent_table_rejects_bad_input(classes, kwargs, match):
         latent_table(classes, _params(), **kwargs)
 
 
+def test_latent_table_rate_overflow_raises(classes):
+    """10**400 photons overflow to inf: the build raises instead of hanging."""
+    with pytest.raises(FloatingPointError, match="overflow"):
+        latent_table(classes, _params(), 1.0, nodes=5, log10_range=(-6.0, 400.0))
+
+
 def test_latent_table_rejects_bad_layout():
     with pytest.raises(ValueError, match="evenly spaced"):
         LatentTable(np.array([0.0, 1.0, 3.0]), np.full((1, 3, 3), 1.0 / 3.0), 1.0)

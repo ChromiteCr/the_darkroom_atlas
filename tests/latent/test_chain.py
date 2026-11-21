@@ -414,6 +414,20 @@ def test_cluster_distribution_rejects_bad_input(args, kwargs, match):
         cluster_distribution(*args, _params(), **kwargs)
 
 
+@pytest.mark.parametrize(
+    ("mean_photons", "exposure_time_s", "overrides"),
+    [
+        (5.0, 1.0, {"tau0_median_s": 1e-320}),  # t / tau0 overflows
+        (1e308, 1.0, {"efficiency": 1.0, "efficiency_size_exponent": 0.0, "hole_attack": 4.0}),
+        (1e308, 1e-300, {"efficiency": 1.0, "ionic_time_s": 0.0}),
+    ],
+)
+def test_rate_overflow_raises(mean_photons, exposure_time_s, overrides):
+    """Overflowing rates raise instead of looping on a saturated squaring count."""
+    with pytest.raises(FloatingPointError, match="overflow"):
+        cluster_distribution(mean_photons, exposure_time_s, _params(**overrides), ecd_um=4.0)
+
+
 def test_zero_exposure_is_empty():
     p = cluster_distribution(0.0, 1.0, _params())
     np.testing.assert_array_equal(p, [1.0, 0.0, 0.0, 0.0, 0.0, 0.0])

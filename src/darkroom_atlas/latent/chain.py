@@ -240,6 +240,12 @@ def _site_occupancy(birth: np.ndarray, decay: np.ndarray, cap: int) -> np.ndarra
     b = np.broadcast_to(birth, shape).ravel()
     d = np.broadcast_to(decay, shape).ravel()
     exit_max = b + d  # state 1 has the largest exit rate
+    if not np.all(np.isfinite(exit_max)):
+        # An infinite rate would make the squaring count saturate and the loop never end.
+        raise FloatingPointError(
+            "latent chain rate overflow: birth or decay rate times t_exp is not finite "
+            "(check tau0_median_s, exposure time and photon counts)"
+        )
     squarings = np.zeros(b.shape, dtype=np.intp)
     big = exit_max > 1.0
     squarings[big] = np.ceil(np.log2(exit_max[big])).astype(np.intp)
@@ -286,12 +292,16 @@ def _distributions(
     tau0, weights = _tau0_nodes(params, quadrature)
     t = exposure_time_s
     electrons = np.asarray(electrons, dtype=np.float64)[..., None]  # (..., 1) = nu t
-    nu = electrons / t
-    q1 = 1.0 / (1.0 + nu * params.ionic_time_s)
-    q2 = (1.0 - q1) / (params.competing_sites - 1.0)
-    decay = t / tau0 + params.hole_attack * electrons  # (..., Q); t/inf = 0: no decay
-    site1 = _site_occupancy(electrons * q1, decay, cap)  # (..., Q, cap+1)
-    site2 = _site_occupancy(electrons * q2, decay, cap)
+    # Overflow to inf is caught as a FloatingPointError in _site_occupancy.
+    with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+        nu = electrons / t
+        q1 = 1.0 / (1.0 + nu * params.ionic_time_s)
+        q2 = (1.0 - q1) / (params.competing_sites - 1.0)
+        decay = t / tau0 + params.hole_attack * electrons  # (..., Q); t/inf = 0: no decay
+        birth1 = electrons * q1
+        birth2 = electrons * q2
+    site1 = _site_occupancy(birth1, decay, cap)  # (..., Q, cap+1)
+    site2 = _site_occupancy(birth2, decay, cap)
     # n = max(k1, k2): P(n = j) = p1(j) F2(j) + F1(j-1) p2(j), all terms >= 0.
     cdf1 = np.cumsum(site1, axis=-1)
     cdf2 = np.cumsum(site2, axis=-1)
@@ -337,5 +347,5 @@ def cluster_distribution(
     if not (math.isfinite(d) and d > 0.0):
         raise ValueError(f"ecd_um must be finite and > 0, got {ecd_um!r}")
     q = _check_quadrature(quadrature)
-    electrons = np.array([float(efficiency(params, d)) * m])
+    electrons = np.array([float(efficiency(params, d)) * m])  # python float: inf, no warning
     return _distributions(electrons, t, params, q)[0]

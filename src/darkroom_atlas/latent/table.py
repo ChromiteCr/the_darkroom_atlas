@@ -114,7 +114,8 @@ def latent_table(
 
     log10_m = np.linspace(lo, hi, int(nodes))
     eta = np.asarray(efficiency(params, classes.ecd_um))  # (K,)
-    electrons = eta[:, None] * 10.0 ** log10_m[None, :]  # (K, N_m)
+    with np.errstate(over="ignore"):  # inf electrons raise FloatingPointError in the chain
+        electrons = eta[:, None] * 10.0 ** log10_m[None, :]  # (K, N_m)
     probabilities = np.ascontiguousarray(_distributions(electrons, t, params, q))
     probabilities.flags.writeable = False
     log10_m.flags.writeable = False
