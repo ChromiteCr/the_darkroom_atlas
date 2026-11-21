@@ -176,9 +176,9 @@ def test_species_file_provenance(species):
 
 
 def test_species_file_validates_except_for_missing_kinetics():
-    """The only species-file problems allowed are references to kinetics.yaml."""
+    """The only species-file problem allowed is a kinetics.yaml that does not exist yet."""
     problems = [p for p in Library().validate() if "chemistry/species.yaml" in p]
-    other = [p for p in problems if "kinetic_class" not in p]
+    other = [p for p in problems if not ("kinetic_class" in p and "which does not exist" in p)]
     assert other == []
 
 
