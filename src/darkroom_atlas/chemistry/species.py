@@ -12,6 +12,7 @@ Temperature laws of pK (spec D1 2.3.3):
 * ``linear``: ``pK(T) = pK(25 C) + dpK/dT (T - 298.15)``.
 """
 
+import dataclasses
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -19,9 +20,11 @@ from typing import Literal
 
 import numpy as np
 
-from darkroom_atlas.data.models import AgentRole, Species
+from darkroom_atlas.data.models import AgentRole, KineticsFile, Species
 
 __all__ = [
+    "BUILTIN_COMPONENTS",
+    "DEFAULT_GELATIN_PKA",
     "GAS_CONSTANT",
     "REFERENCE_TEMPERATURE_K",
     "AcidBaseFamily",
@@ -35,6 +38,14 @@ GAS_CONSTANT = 8.314462618
 
 REFERENCE_TEMPERATURE_K = 298.15
 """Reference temperature of the tabulated pK values, 25 C (spec D1 2.3.3, 5.2)."""
+
+DEFAULT_GELATIN_PKA = 10.5
+"""pK of the gelatin amine groups when no kinetics file is given (spec D1 2.3.7, 2.4.11;
+assumed, bounds 9.5-11.5)."""
+
+BUILTIN_COMPONENTS = ("toth", "gelatin")
+"""Pseudo-components that ``component_table`` appends after the species components, in this
+order; they are not written in ``species.yaml`` (spec D1 2.3.1)."""
 
 # Manov, DeLollis & Acree 1944 boric acid law (spec D1 2.3.3; DEV 6.2).
 _MANOV_A = 2237.94
@@ -132,7 +143,9 @@ class ComponentInfo:
     """Transport and acid-base data of one component (spec D1 2.3.7, 10 D1c).
 
     ``d_water_um2_s`` is the diffusion coefficient in water at 20 C and ``gel_ratio`` is
-    ``D_gel / D_w``; both are 0 for an immobile component (gelatin).
+    ``D_gel / D_w``; both are 0 for an immobile component. The built-in ``gelatin`` is
+    immobile; the built-in ``toth`` is also marked immobile and has no D because its flux is
+    not its own but is built from the mobile families and the water ions (spec D1 2.4.8).
     """
 
     id: str
@@ -143,26 +156,65 @@ class ComponentInfo:
     agent: AgentRole | None
 
 
-def component_table(species: Mapping[str, Species]) -> dict[str, ComponentInfo]:
-    """All species of kind ``component``, by id, in the order of ``species``."""
+def _gelatin_family(pka: float) -> AcidBaseFamily:
+    # G-NH3+ (+1), G-NH2 (0) reference state, dH = 0 (spec D1 2.3.7).
+    return AcidBaseFamily("gelatin", (1, 0), (1, 0), (pka,), "van_t_hoff", (0.0,), (), "none")
+
+
+def _with_class_pka(family: AcidBaseFamily, agent: AgentRole, kinetics: KineticsFile):
+    entry = kinetics.agents.get(agent.kinetic_class)
+    if entry is None or entry.pka is None:
+        return family
+    if len(family.pka25) != 1:
+        raise ValueError(
+            f"{family.component}: kinetics.yaml agents.{agent.kinetic_class}.pka is one value, "
+            f"but the family has {len(family.pka25)} pK steps"
+        )
+    return dataclasses.replace(family, pka25=(float(entry.pka.to("1")),))
+
+
+def component_table(
+    species: Mapping[str, Species], *, kinetics: KineticsFile | None = None
+) -> dict[str, ComponentInfo]:
+    """All species of kind ``component`` in the order of ``species``, then ``toth`` and
+    ``gelatin`` (spec D1 2.3.1).
+
+    With ``kinetics``, the gelatin pK is ``kinetics.gelatin.pka`` (else
+    :data:`DEFAULT_GELATIN_PKA`), and a developing agent whose kinetic class has an
+    ``agents.<class>.pka`` takes that value as its pK (the shared pyrazolidone pK, spec D1
+    2.3.7, 2.4.11); the species-file value is then only the prior.
+    """
     table: dict[str, ComponentInfo] = {}
     for key, s in species.items():
         if s.kind != "component":
             continue
         if key != s.id:
             raise ValueError(f"species mapping key {key!r} differs from the species id {s.id!r}")
+        if s.id in BUILTIN_COMPONENTS:
+            raise ValueError(
+                f"species {s.id!r} is a built-in pseudo-component and must not be in "
+                "species.yaml (spec D1 2.3.1)"
+            )
         d_water = (
             0.0 if s.diffusion_coefficient is None else float(s.diffusion_coefficient.to("um2/s"))
         )
         gel_ratio = 0.0 if s.gel_diffusion_ratio is None else float(s.gel_diffusion_ratio.to("1"))
         if s.immobile:
             d_water, gel_ratio = 0.0, 0.0
+        family = None if s.acid_base is None else AcidBaseFamily.from_species(s)
+        if kinetics is not None and family is not None and s.developing_agent is not None:
+            family = _with_class_pka(family, s.developing_agent, kinetics)
         table[s.id] = ComponentInfo(
             id=s.id,
-            family=None if s.acid_base is None else AcidBaseFamily.from_species(s),
+            family=family,
             d_water_um2_s=d_water,
             gel_ratio=gel_ratio,
             immobile=s.immobile,
             agent=s.developing_agent,
         )
+    gel_pka = DEFAULT_GELATIN_PKA if kinetics is None else float(kinetics.gelatin.pka.to("1"))
+    table["toth"] = ComponentInfo("toth", None, 0.0, 0.0, immobile=True, agent=None)
+    table["gelatin"] = ComponentInfo(
+        "gelatin", _gelatin_family(gel_pka), 0.0, 0.0, immobile=True, agent=None
+    )
     return table

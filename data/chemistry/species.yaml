@@ -11,8 +11,10 @@
 #   acid_base lists the states most protonated first; the reference state has
 #   `reference_protons` fewer protons than the most protonated one.
 #
-# Diffusion coefficients are in water at 20 C. The proton excess TOTH is not a species here: a
-# working solution carries it as a separate total (spec D1 2.3.2, 2.4.8).
+# Diffusion coefficients are in water at 20 C. `toth` (the proton excess TOTH) and `gelatin`
+# (the immobile buffer) are not species here: they are built-in pseudo-components that
+# chemistry/species.py component_table appends, with the gelatin pK taken from kinetics.yaml
+# (spec D1 2.3.1, 2.3.7, 2.4.11).
 #
 # Source tags follow spec D1 0.2. Report abbreviations: DEV = docs/research/d1/
 # developer-formulas.md, TMX = t-max-developer.md, KIN = development-kinetics.md.
@@ -327,21 +329,6 @@ species:
     kind: component
     diffusion_coefficient: {value: 1030, unit: um2/s, source: assumed, note: "taken equal to sulfite (spec D1 2.3.7)"}
     gel_diffusion_ratio: {value: 0.5, unit: "1", source: assumed, bounds: [0.3, 0.8], note: "salt value (spec D1 2.3.7 note)"}
-
-  - id: gelatin
-    name: gelatin amine groups (immobile buffer)
-    molar_mass: {value: 2083.3, unit: g/mol, source: literature, ref: "derived: 1 / (4.8e-4 mol/g) groups per gram, Iwano 1970; KIN 3.2", note: "gelatin mass per mol of groups; the code takes T_gel from kinetics.yaml gelatin.groups_per_gram"}
-    roles: [buffer]
-    kind: component
-    immobile: true
-    acid_base:
-      charge_most_protonated: 1
-      reference_protons: 1
-      pka:
-        - {value: 10.5, unit: "1", source: assumed, bounds: [9.5, 11.5], note: "spec D1 2.3.7; also kinetics.yaml gelatin.pka"}
-      ionisation_enthalpy:
-        - {value: 0.0, unit: kJ/mol, source: assumed, note: "spec D1 2.3.7"}
-      activity_class: none
 
   # ------------------------------------------------------------------------------------
   # Ingredients (spec D1 2.3.1)

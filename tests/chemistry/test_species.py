@@ -1,11 +1,17 @@
 """Species data file and acid-base families (spec D1 2.3.1, 2.3.3, 2.3.7)."""
 
+import copy
 import math
+from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
 
+from darkroom_atlas.chemistry.speciation import make_speciation, solve_ph
 from darkroom_atlas.chemistry.species import (
+    BUILTIN_COMPONENTS,
+    DEFAULT_GELATIN_PKA,
     GAS_CONSTANT,
     AcidBaseFamily,
     ComponentInfo,
@@ -13,8 +19,11 @@ from darkroom_atlas.chemistry.species import (
     manov_boric_pka,
 )
 from darkroom_atlas.data.library import Library
-from darkroom_atlas.data.models import iter_quantities
+from darkroom_atlas.data.models import KineticsFile, iter_quantities
 from darkroom_atlas.data.provenance import Source
+
+SAMPLE_KINETICS = Path(__file__).resolve().parents[1] / "data" / "samples" / "kinetics.yaml"
+PYRAZOLIDONES = ("dimezone-s", "phenidone", "methylphenidone")
 
 # Spec D1 2.3.7: D_w (um2/s, 20 C) and r_gel per component.
 TABLE_237 = {
@@ -50,7 +59,6 @@ PKA_237 = {
     "methylethanolamine": (9.82,),
     "dtpa": (1.8, 2.6, 4.3, 8.6, 10.5),
     "hedta": (2.6, 5.4, 9.8),
-    "gelatin": (10.5,),
 }
 
 # Spec D1 2.3.5: kinetic class, role and charge of the active form.
@@ -78,8 +86,20 @@ def table(species):
     return component_table(species)
 
 
+def _kinetics(pyrazolidone_pka=None, gelatin_pka=None) -> KineticsFile:
+    """The schema sample kinetics file, with an optional class pK and gelatin pK."""
+    data = copy.deepcopy(yaml.safe_load(SAMPLE_KINETICS.read_text()))
+    if pyrazolidone_pka is not None:
+        pyr = copy.deepcopy(data["agents"]["metol"])
+        pyr["pka"] = {"value": pyrazolidone_pka, "unit": "1", "source": "assumed"}
+        data["agents"]["pyrazolidone"] = pyr
+    if gelatin_pka is not None:
+        data["gelatin"]["pka"]["value"] = gelatin_pka
+    return KineticsFile.model_validate(data)
+
+
 def test_species_file_has_every_component_of_237(table):
-    assert set(TABLE_237) | {"gelatin"} <= set(table)
+    assert set(TABLE_237) <= set(table)
     for cid, (d_w, r_gel) in TABLE_237.items():
         info = table[cid]
         assert isinstance(info, ComponentInfo)
@@ -88,18 +108,76 @@ def test_species_file_has_every_component_of_237(table):
         assert not info.immobile
 
 
+def test_builtins_are_appended_last(species, table):
+    assert "gelatin" not in species and "toth" not in species
+    assert tuple(table)[-2:] == BUILTIN_COMPONENTS == ("toth", "gelatin")
+
+
 def test_gelatin_is_immobile(table):
     gel = table["gelatin"]
-    assert gel.immobile
+    assert gel.immobile and gel.agent is None
     assert gel.d_water_um2_s == 0.0 and gel.gel_ratio == 0.0
     assert gel.family.charges == (1, 0)
     assert gel.family.protons_rel == (1, 0)
+    assert gel.family.pka25 == (DEFAULT_GELATIN_PKA,) == (10.5,)
+    # dH = 0 (spec D1 2.3.7): no temperature dependence.
+    np.testing.assert_array_equal(gel.family.pka(288.15), (10.5,))
+
+
+def test_gelatin_pka_from_kinetics(species):
+    table = component_table(species, kinetics=_kinetics(gelatin_pka=10.1))
+    assert table["gelatin"].family.pka25 == (10.1,)
+
+
+def test_toth_is_a_builtin_without_family(table):
+    toth = table["toth"]
+    assert toth.family is None and toth.agent is None and toth.immobile
+    assert toth.d_water_um2_s == 0.0 and toth.gel_ratio == 0.0
+
+
+@pytest.mark.parametrize("builtin", ["toth", "gelatin"])
+def test_builtin_id_in_species_raises(species, builtin):
+    fake = species["hydroquinone"].model_copy(update={"id": builtin})
+    with pytest.raises(ValueError, match="built-in"):
+        component_table({builtin: fake})
 
 
 def test_component_table_skips_ingredients(species, table):
     assert "sodium-sulfite" in species
     assert "sodium-sulfite" not in table
-    assert all(species[k].kind == "component" for k in table)
+    assert all(species[k].kind == "component" for k in table if k not in BUILTIN_COMPONENTS)
+
+
+def test_pyrazolidone_class_pka_reaches_the_families(species, table):
+    fitted = component_table(species, kinetics=_kinetics(pyrazolidone_pka=7.9))
+    for cid in PYRAZOLIDONES:
+        assert table[cid].family.pka25 == (8.5,), cid  # species-file prior
+        assert fitted[cid].family.pka25 == (7.9,), cid
+    # Classes without a pka keep the species-file values.
+    assert fitted["hydroquinone"].family == table["hydroquinone"].family
+    assert fitted["metol"].family == table["metol"].family
+
+
+def test_pyrazolidone_class_pka_changes_the_ph(species, table):
+    """The class pK must reach speciation: sulfite + Dimezone S at I = 0 (spec D1 2.3.4)."""
+    kin = _kinetics(pyrazolidone_pka=7.9)
+    fitted = component_table(species, kinetics=kin)
+    totals = np.array([[0.5], [0.05]])  # sulfite, dimezone-s, mol/L
+    toth = np.array([0.4])
+    ph = []
+    for t in (table, fitted):
+        fams = [t["sulfite"].family, t["dimezone-s"].family]
+        spec = make_speciation(fams, 298.15, 0.0, 0.0, kin.activity)
+        ph.append(solve_ph(spec, totals, toth)[0])
+    assert abs(ph[1] - ph[0]) > 1e-3
+
+
+def test_class_pka_on_a_multi_step_family_raises(species):
+    kin = _kinetics()
+    data = kin.model_dump(mode="json")
+    data["agents"]["hydroquinone"]["pka"] = {"value": 10.0, "unit": "1", "source": "assumed"}
+    with pytest.raises(ValueError, match="pK steps"):
+        component_table(species, kinetics=KineticsFile.model_validate(data))
 
 
 def test_pka_values_of_237(table):
