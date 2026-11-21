@@ -1,6 +1,6 @@
 # The Darkroom Atlas
 
-![version](https://img.shields.io/badge/version-D0-blue)
+![version](https://img.shields.io/badge/version-D0a-blue)
 ![last commit](https://img.shields.io/github/last-commit/ChromiteCr/the_darkroom_atlas)
 ![commit activity](https://img.shields.io/github/commit-activity/m/ChromiteCr/the_darkroom_atlas)
 ![stars](https://img.shields.io/github/stars/ChromiteCr/the_darkroom_atlas)
@@ -9,7 +9,7 @@
 
 ## 现在能做什么
 
-当前版本是 D0，只有底座，**还没有任何真实胶片或显影液**。
+当前版本是 D0a：底座，加上从 Kodak 手册提取的参考数据。**还没有任何真实胶片或显影液的模型**，D1 的物理链路正在开发。
 
 仓库里唯一的材料是"理想材料"：它线性记录 CIE XYZ，没有颗粒、没有化学、没有损失。它不是物理模型，用途是检验光谱链路（RGB 还原为光谱、光源归一化、色匹配函数、曝光对波段求和、冲洗、读出）的约定是否自洽。一张图经过它之后应当原样返回，误差小于 0.005。测光和光子数换算这些绝对光度量在往返中会整体抵消，它们由单元测试单独锚定，见 `docs/physics.md` 第 3.4 节。
 
@@ -73,6 +73,8 @@ data/reference/<材料>/*.csv      从厂商手册数字化的参考曲线
 
 曲线只从厂商手册自行数字化，不拷贝其他项目的数据，不使用有版权的汇编数据。没有出处的真实胶片或药液数据不进仓库。
 
+提取工具在 `tools/digitize/`，直接读手册 PDF 里的矢量路径，每张图一份配方文件，写明出处、PDF 哈希和误差估计，可以重跑并逐字节核对。已提取的 Tri-X 400 与 T-Max 100 曲线、冲洗时间表和显影液手册表格暂存在 `tools/digitize/staged/`，等胶片数据文件建好后移入 `data/reference/`。手册 PDF 本身不进仓库。说明见 [tools/digitize/README.md](tools/digitize/README.md)。
+
 ## 路线
 
 | 阶段 | 内容 |
@@ -93,4 +95,5 @@ data/reference/<材料>/*.csv      从厂商手册数字化的参考曲线
 
 | 版本 | 日期 | 变更内容 | 类型 |
 |------|------|----------|------|
+| D0a | 2026-11-21 | 手册曲线提取工具；Tri-X 400、T-Max 100 的特性曲线、反差指数曲线、MTF、光谱敏感度与冲洗时间表，以及 D-76、XTOL、HC-110、T-MAX 显影液手册的表格（暂存，未接入模型）；D1 调研报告 | feat |
 | D0 | 2026-11-20 | 完成底座：单位与光谱约定、带来源标签的数据模型、expose/process/readout 管线与注册表、分块与确定性随机数、运行记录、命令行；理想材料走通全流程 | milestone |
