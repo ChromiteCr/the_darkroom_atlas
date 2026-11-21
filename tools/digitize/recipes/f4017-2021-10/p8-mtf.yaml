@@ -1,0 +1,93 @@
+schema_version: 1
+publication:
+  publisher: Kodak Alaris
+  number: F-4017
+  title: KODAK PROFESSIONAL TRI-X 320 and 400 Films (Technical Data / Black-and-White Film)
+  edition: October 2021 (back cover "Revised 10-21")
+  url: https://kodakprofessional.com/sites/default/files/wysiwyg/film/f4017_trix_320400.pdf
+  file: f4017-2021-10.pdf
+  sha256: 1d86b030cf7a8502e6f1414c630fa2cda30b68df53f49bccccce73c9c6562078
+page: 8
+printed_page: "8"
+figure: Modulation Transfer Function
+caption: >-
+  Process: KODAK PROFESSIONAL Developer D-76, Large Tank. Densitometry: Diffuse Visual
+material: kodak/tri-x-400
+method: vector
+# Region: the white box around the chart (filled paths #56-#59).
+region: [42.0, 522.72, 282.0, 726.0]
+# Frame: the stroked rectangle, path #11.
+frame: [72.8, 558.22, 275.28, 711.03]
+flatten_tolerance_pt: 0.01
+decimals: [4, 4]
+x:
+  title: SPATIAL FREQUENCY (cycles/mm)
+  unit: cycles/mm
+  side: bottom
+  scale: log10
+  fit: piecewise
+  note: >-
+    The printed grid is not an exact logarithmic scale: decade lengths differ by up to
+    about 1.5 pt (1 to 10: 71.7 pt; 10 to 100: 73.2 pt), and the 600 label sits on the frame
+    edge about 2 pt right of where the 100-200 spacing puts 600. The curve is read piecewise
+    between neighbouring labelled grid lines; the least-squares residual of a single log
+    scale is reported and included in the error.
+  ticks:
+    - {label: "1", value: 1}
+    - {label: "2", value: 2}
+    - {label: "3", value: 3}
+    - {label: "4", value: 4}
+    - {label: "5", value: 5}
+    - {label: "10", value: 10}
+    - {label: "20", value: 20}
+    - {label: "50", value: 50}
+    - {label: "100", value: 100}
+    - {label: "200", value: 200}
+    - {label: "600", value: 600}
+y:
+  title: RESPONSE (%)
+  unit: "%"
+  side: left
+  scale: log10
+  fit: piecewise
+  note: Read piecewise between labelled grid lines, as for the x axis.
+  ticks:
+    - {label: "1", value: 1}
+    - {label: "2", value: 2}
+    - {label: "3", value: 3}
+    - {label: "5", value: 5}
+    - {label: "7", value: 7}
+    - {label: "10", value: 10}
+    - {label: "20", value: 20}
+    - {label: "30", value: 30}
+    - {label: "50", value: 50}
+    - {label: "70", value: 70}
+    - {label: "100", value: 100}
+    - {label: "200", value: 200}
+curves:
+  - output: mtf-d76-large-tank
+    quantity: modulation_transfer
+    style: {width: 0.719, dash: []}
+    expect: {paths: 1}
+    conditions:
+      developer: d-76
+      dilution: not stated in the figure
+      time: not stated
+      temperature: not stated
+      agitation: large tank (no interval given)
+      format: not stated
+      densitometry: diffuse visual
+      exposure: "not stated (the May 2007 edition's caption reads \"Exposure: X\")"
+      film_version: >-
+        older TRI-X Pan Film 5063 per F-4017 May 2007 p. 10 (later editions drop the note
+        but print the same figure)
+notes:
+  - >-
+    Cross-checked against the same figure on p. 7 of the February 2016 edition
+    (recipes/f4017-2016-02, identical to the last decimal) and on p. 10 of the May 2007
+    edition (recipes/f4017-2007-05, within 0.005).
+  - >-
+    F-4017 May 2007 (kodak.com copy archived at web.archive.org, p. 10) states that the
+    Modulation Transfer Function and Spectral Sensitivity "were generated using the older
+    version of this film (KODAK TRI-X Pan Fim 5063)". The 2016 and 2021 editions print the
+    same figure without that note.

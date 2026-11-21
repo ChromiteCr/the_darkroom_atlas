@@ -1,0 +1,142 @@
+# Cross-check recipe, generated from f4017-2021-10/p8-spectral-sensitivity.yaml with this
+# edition's page, frame and legend box. It stages nothing.
+schema_version: 1
+publication:
+  publisher: Eastman Kodak Company
+  number: F-4017
+  title: KODAK PROFESSIONAL TRI-X 320 and 400 Films (Technical Data / Black-and-White Film)
+  edition: May 2007
+  url: https://web.archive.org/web/20090205030656id_/http://www.kodak.com:80/global/en/professional/support/techPubs/f4017/f4017.pdf
+  file: f4017-2007-05.pdf
+  sha256: b2a9a1cabe2520630f7135563791290953892224a0b785aa2c3a5394a566be2d
+page: 10
+printed_page: '10'
+figure: Spectral Sensitivity Curves
+caption: 'Effective Exposure: 0.5 sec. Densitometry: Diffuse Visual. Footnote: *Sensitivity = reciprocal
+  of exposure (erg/cm2) required to produce specified density'
+material: kodak/tri-x-400
+method: vector
+region:
+- 316.72
+- 240.44
+- 556.72
+- 454.16
+frame:
+- 349.66
+- 296.49
+- 550.09
+- 447.8
+exclude:
+- - 357.78
+  - 304.9
+  - 444.67
+  - 328.33
+flatten_tolerance_pt: 0.01
+decimals:
+- 4
+- 4
+x:
+  title: WAVELENGTH (nm)
+  unit: nm
+  side: bottom
+  scale: linear
+  note: '250 sits on the frame''s left edge and 300-700 on grid lines (20.08-20.09 pt per 50 nm).
+    The 750 label is left out: it is half covered by the page''s white border in the rendering, and
+    the frame''s right edge where it sits is 0.44 pt short of where the grid spacing puts 750 nm.'
+  ticks:
+  - label: '250'
+    value: 250
+  - label: '300'
+    value: 300
+  - label: '350'
+    value: 350
+  - label: '400'
+    value: 400
+  - label: '450'
+    value: 450
+  - label: '500'
+    value: 500
+  - label: '550'
+    value: 550
+  - label: '600'
+    value: 600
+  - label: '650'
+    value: 650
+  - label: '700'
+    value: 700
+y:
+  title: LOG SENSITIVITY*
+  unit: log10(cm2/erg)
+  side: left
+  scale: linear
+  note: Log10 of sensitivity, where sensitivity is the reciprocal of the exposure in erg/cm2 needed
+    for the stated density; 0.0 and 4.0 sit on the frame edges, 1.0-3.0 on grid lines.
+  ticks:
+  - label: '0.0'
+    value: 0.0
+  - label: '1.0'
+    value: 1.0
+  - label: '2.0'
+    value: 2.0
+  - label: '3.0'
+    value: 3.0
+  - label: '4.0'
+    value: 4.0
+curves:
+- output: spectral-sensitivity-d0.3
+  quantity: spectral_sensitivity
+  legend: D=0.3>Gross Fog
+  style:
+    width: 0.719
+    dash:
+    - 3.2375
+    - 1.6188
+  expect:
+    paths: 1
+    x_span:
+    - 300.0
+    - 656.0
+    tolerance:
+    - 1.0
+    - 0.05
+  conditions:
+    criterion: density 0.3 above gross fog (as the legend assigns it, see legend_check)
+    exposure: effective exposure 0.5 s
+    developer: not stated in the figure
+    densitometry: diffuse visual
+    film_version: older TRI-X Pan Film 5063 per F-4017 May 2007 p. 10 (later editions drop the note
+      but print the same figure)
+    legend_check: the legend gives the dashed, lower curve to D=0.3 and the solid, upper curve to
+      D=1.0, but a lower density needs less exposure and so has the higher log sensitivity, which
+      suggests the legend is swapped. Kept as printed, not corrected
+- output: spectral-sensitivity-d1.0
+  quantity: spectral_sensitivity
+  legend: D=1.0>Gross Fog
+  style:
+    width: 0.719
+    dash: []
+  expect:
+    paths: 1
+    x_span:
+    - 300.0
+    - 668.0
+    tolerance:
+    - 1.0
+    - 0.05
+  conditions:
+    criterion: density 1.0 above gross fog (as the legend assigns it, see legend_check)
+    exposure: effective exposure 0.5 s
+    developer: not stated in the figure
+    densitometry: diffuse visual
+    film_version: older TRI-X Pan Film 5063 per F-4017 May 2007 p. 10 (later editions drop the note
+      but print the same figure)
+    legend_check: the legend gives the dashed, lower curve to D=0.3 and the solid, upper curve to
+      D=1.0, but a lower density needs less exposure and so has the higher log sensitivity, which
+      suggests the legend is swapped. Kept as printed, not corrected
+notes:
+- 'Cross-check: the same figure in the May 2007 edition (kodak.com copy archived by the Wayback Machine).
+  Its curves were drawn as separate polylines, so small differences from the 2021 paths are expected.'
+cross_check_of: tools/digitize/recipes/f4017-2021-10/p8-spectral-sensitivity.yaml
+max_difference:
+- 0.005
+- 0.005

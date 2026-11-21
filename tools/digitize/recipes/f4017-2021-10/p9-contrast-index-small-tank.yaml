@@ -1,0 +1,156 @@
+schema_version: 1
+publication:
+  publisher: Kodak Alaris
+  number: F-4017
+  title: KODAK PROFESSIONAL TRI-X 320 and 400 Films (Technical Data / Black-and-White Film)
+  edition: October 2021 (back cover "Revised 10-21")
+  url: https://kodakprofessional.com/sites/default/files/wysiwyg/film/f4017_trix_320400.pdf
+  file: f4017-2021-10.pdf
+  sha256: 1d86b030cf7a8502e6f1414c630fa2cda30b68df53f49bccccce73c9c6562078
+page: 9
+printed_page: "9"
+figure: Contrast Index Curves, KODAK PROFESSIONAL TRI-X 400 Film / 400TX, 35 mm and 120-size
+caption: >-
+  Process: Small Tank at 20°C (68°F). Densitometry: Diffuse visual
+material: kodak/tri-x-400
+method: vector
+# Region: the white box around the chart (filled paths #83-#86).
+region: [330.06, 489.0, 570.0, 729.0]
+# Frame: the stroked rectangle, path #57.
+frame: [365.92, 533.52, 550.31, 718.02]
+flatten_tolerance_pt: 0.01
+decimals: [4, 4]
+x:
+  title: DEVELOPMENT TIME (MINUTES)
+  unit: min
+  side: bottom
+  scale: linear
+  note: 0 and 30 sit on the frame's left and right edges, 5 to 25 on tick paths #59, #65-#68.
+  ticks:
+    - {label: "0", value: 0}
+    - {label: "5", value: 5}
+    - {label: "10", value: 10}
+    - {label: "15", value: 15}
+    - {label: "20", value: 20}
+    - {label: "25", value: 25}
+    - {label: "30", value: 30}
+y:
+  title: CONTRAST INDEX
+  unit: "1"
+  side: left
+  scale: linear
+  ticks:
+    - {label: "0.0", value: 0.0}
+    - {label: "0.2", value: 0.2}
+    - {label: "0.4", value: 0.4}
+    - {label: "0.6", value: 0.6}
+    - {label: "0.8", value: 0.8}
+    - {label: "1.0", value: 1.0}
+    - {label: "1.2", value: 1.2}
+# The seven curves are told apart by stroke width and dash array; each style is checked
+# against the legend sample drawn left of its legend text. D-76 (1:1) and HC-110 (B) share a
+# dash array and differ only in width (0.432 and 0.72 pt); T-MAX RS and XTOL 1:1 differ only
+# in the number of short dashes. The expected time spans agree with the independent reading
+# in docs/research/d1/datasheets.md (section 2.1).
+curves:
+  - output: ci-small-tank-d76
+    quantity: contrast_index
+    legend: D-76
+    style: {width: 0.432, dash: []}
+    expect: {paths: 1, x_span: [5.42, 10.83], tolerance: [0.03, 0.05]}
+    conditions:
+      developer: d-76
+      dilution: stock
+      temperature: 20 C
+      agitation: small tank (the figure gives no agitation interval)
+      format: 35 mm and 120-size
+      densitometry: diffuse visual
+  - output: ci-small-tank-d76-1-1
+    quantity: contrast_index
+    legend: D-76 (1:1)
+    style: {width: 0.432, dash: [6.478, 3.239]}
+    expect: {paths: 1, x_span: [5.42, 18.42], tolerance: [0.03, 0.05]}
+    conditions:
+      developer: d-76
+      dilution: 1+1 (printed 1:1)
+      temperature: 20 C
+      agitation: small tank (the figure gives no agitation interval)
+      format: 35 mm and 120-size
+      densitometry: diffuse visual
+  - output: ci-small-tank-xtol
+    quantity: contrast_index
+    legend: XTOL
+    style: {width: 0.432, dash: [6.478, 3.239, 0.99969, 3.239]}
+    expect: {paths: 1, x_span: [3.25, 14.08], tolerance: [0.03, 0.05]}
+    conditions:
+      developer: xtol
+      dilution: stock
+      temperature: 20 C
+      agitation: small tank (the figure gives no agitation interval)
+      format: 35 mm and 120-size
+      densitometry: diffuse visual
+  - output: ci-small-tank-xtol-1-1
+    quantity: contrast_index
+    legend: XTOL 1:1
+    style: {width: 0.432, dash: [16.195, 3.239, 3.239, 3.239]}
+    expect: {paths: 1, x_span: [4.33, 17.33], tolerance: [0.03, 0.05]}
+    conditions:
+      developer: xtol
+      dilution: 1+1 (printed 1:1)
+      temperature: 20 C
+      agitation: small tank (the figure gives no agitation interval)
+      format: 35 mm and 120-size
+      densitometry: diffuse visual
+  - output: ci-small-tank-hc110-b
+    quantity: contrast_index
+    legend: HC-110 (B)
+    style: {width: 0.72, dash: [6.478, 3.239]}
+    expect: {paths: 1, x_span: [3.25, 11.92], tolerance: [0.03, 0.05]}
+    conditions:
+      developer: hc-110
+      dilution: B (Kodak's dilution letter, the figure gives no ratio)
+      temperature: 20 C
+      agitation: small tank (the figure gives no agitation interval)
+      format: 35 mm and 120-size
+      densitometry: diffuse visual
+  - output: ci-small-tank-tmax-dev
+    quantity: contrast_index
+    legend: T-MAX
+    style: {width: 0.432, dash: [3.239, 1.6195]}
+    expect: {paths: 1, x_span: [5.42, 10.83], tolerance: [0.03, 0.05]}
+    conditions:
+      developer: t-max-dev
+      dilution: not stated in the figure
+      temperature: 20 C
+      agitation: small tank (the figure gives no agitation interval)
+      format: 35 mm and 120-size
+      densitometry: diffuse visual
+  - output: ci-small-tank-tmax-rs
+    quantity: contrast_index
+    legend: T-MAX RS
+    style: {width: 0.432, dash: [16.195, 3.239, 3.239, 3.239, 3.239, 3.239]}
+    expect: {paths: 1, x_span: [3.25, 13.0], tolerance: [0.03, 0.05]}
+    conditions:
+      developer: t-max-rs
+      dilution: not stated in the figure
+      temperature: 20 C
+      agitation: small tank (the figure gives no agitation interval)
+      format: 35 mm and 120-size
+      densitometry: diffuse visual
+notes:
+  - >-
+    Cross-checked against the same figure on p. 8 of the February 2016 edition
+    (recipes/f4017-2016-02, identical to the last decimal). The May 2007 edition's
+    contrast-index figure (p. 12) draws the curves with different widths and dashes and
+    is not cross-checked.
+  - >-
+    This is the only contrast-index figure for 400TX. The three contrast-index figures on
+    p. 10 (large tank, tray, rotary tube) are for TRI-X 320 Film / 320TXP sheets and are not
+    digitised here.
+  - >-
+    The small-tank procedure on p. 3 agitates at 30-second intervals, but the figure itself
+    does not say which agitation was used.
+  - >-
+    The curves have 4 to 25 vertices each and look drawn through a few test points; the
+    digitised points are those vertices (and the flattened Bezier of the D-76 curve), not
+    measurements at those times.

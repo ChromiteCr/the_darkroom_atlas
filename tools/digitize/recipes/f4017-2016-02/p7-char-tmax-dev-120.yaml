@@ -1,0 +1,189 @@
+# Cross-check recipe, generated from f4017-2021-10/p8-char-tmax-dev-120.yaml with this
+# edition's page, frame and legend box. It stages nothing.
+schema_version: 1
+publication:
+  publisher: Kodak Alaris
+  number: F-4017
+  title: KODAK PROFESSIONAL TRI-X 320 and 400 Films (Technical Data / Black-and-White Film)
+  edition: February 2016 (back cover "Revised 2-16")
+  url: https://kodakprofessional.com/sites/default/files/wysiwyg/pro/resources/f4017_TriX.pdf
+  file: f4017-2016-02.pdf
+  sha256: 51d738f4f996c98716d153bab75e41d0359637a18ea49f9be52062652b0b27d2
+page: 7
+printed_page: '7'
+figure: Characteristic Curves, KODAK PROFESSIONAL TRI-X 400 Film / 400TX, 120-size
+caption: 'Process: KODAK PROFESSIONAL T-MAX Developer, Small Tank; Agitation at 30 second intervals;
+  20°C (68°F). Densitometry: Diffuse visual'
+material: kodak/tri-x-400
+method: vector
+region:
+- 330.06
+- 226.98
+- 570.0
+- 466.98
+frame:
+- 367.17
+- 273.76
+- 551.6
+- 458.26
+exclude:
+- - 463.64
+  - 281.29
+  - 546.71
+  - 318.03
+flatten_tolerance_pt: 0.01
+decimals:
+- 4
+- 4
+x:
+  title: LOG EXPOSURE (lux-seconds)
+  unit: log10(lux*s)
+  side: bottom
+  scale: linear
+  bar_notation: true
+  note: Labels -4 to -1 are printed in bar notation (a bar over the characteristic, drawn as short
+    horizontal paths); the text layer reads them as 4.0, 3.0, 2.0, 1.0. -4 and +1 sit on the frame's
+    left and right edges, the others on tick paths.
+  ticks:
+  - label: '4.0'
+    bar: true
+    value: -4.0
+  - label: '3.0'
+    bar: true
+    value: -3.0
+  - label: '2.0'
+    bar: true
+    value: -2.0
+  - label: '1.0'
+    bar: true
+    value: -1.0
+  - label: '0.0'
+    value: 0.0
+  - label: '1.0'
+    value: 1.0
+y:
+  title: DENSITY
+  unit: '1'
+  side: left
+  scale: linear
+  ticks:
+  - label: '0.0'
+    value: 0.0
+  - label: '1.0'
+    value: 1.0
+  - label: '2.0'
+    value: 2.0
+  - label: '3.0'
+    value: 3.0
+  - label: '4.0'
+    value: 4.0
+curves:
+- output: char-120-tmax-dev-06min
+  quantity: characteristic_curve
+  legend: 6 minutes
+  style:
+    width: 0.72
+    dash: []
+  expect:
+    paths: 1
+    x_span:
+    - -3.45
+    - 0.35
+    tolerance:
+    - 0.01
+    - 0.01
+  conditions:
+    developer: t-max-dev
+    dilution: not stated in the figure
+    time: 6min
+    temperature: 20 C
+    agitation: small tank, agitation at 30 second intervals
+    format: 120-size
+    densitometry: diffuse visual
+    exposure: not stated (no illuminant or exposure time given)
+- output: char-120-tmax-dev-07min
+  quantity: characteristic_curve
+  legend: 7 minutes
+  style:
+    width: 0.72
+    dash:
+    - 3.2394
+    - 1.6197
+  expect:
+    paths: 1
+    x_span:
+    - -3.45
+    - 0.35
+    tolerance:
+    - 0.01
+    - 0.01
+  conditions:
+    developer: t-max-dev
+    dilution: not stated in the figure
+    time: 7min
+    temperature: 20 C
+    agitation: small tank, agitation at 30 second intervals
+    format: 120-size
+    densitometry: diffuse visual
+    exposure: not stated (no illuminant or exposure time given)
+- output: char-120-tmax-dev-09min
+  quantity: characteristic_curve
+  legend: 9 minutes
+  style:
+    width: 0.72
+    dash:
+    - 6.4789
+    - 3.2394
+  expect:
+    paths: 1
+    x_span:
+    - -3.45
+    - 0.35
+    tolerance:
+    - 0.01
+    - 0.01
+  conditions:
+    developer: t-max-dev
+    dilution: not stated in the figure
+    time: 9min
+    temperature: 20 C
+    agitation: small tank, agitation at 30 second intervals
+    format: 120-size
+    densitometry: diffuse visual
+    exposure: not stated (no illuminant or exposure time given)
+- output: char-120-tmax-dev-11min
+  quantity: characteristic_curve
+  legend: 11 minutes
+  style:
+    width: 0.72
+    dash:
+    - 16.197
+    - 3.2394
+    - 3.2394
+    - 3.2394
+    - 3.2394
+    - 3.2394
+  expect:
+    paths: 1
+    x_span:
+    - -3.45
+    - 0.35
+    tolerance:
+    - 0.01
+    - 0.01
+  conditions:
+    developer: t-max-dev
+    dilution: not stated in the figure
+    time: 11min
+    temperature: 20 C
+    agitation: small tank, agitation at 30 second intervals
+    format: 120-size
+    densitometry: diffuse visual
+    exposure: not stated (no illuminant or exposure time given)
+notes:
+- 'Cross-check: the same figure in the February 2016 edition. Its paths are the 2021 paths moved on
+  the page, so the curves should agree to the last decimal.'
+cross_check_of: tools/digitize/recipes/f4017-2021-10/p8-char-tmax-dev-120.yaml
+max_difference:
+- 0.0002
+- 0.0002

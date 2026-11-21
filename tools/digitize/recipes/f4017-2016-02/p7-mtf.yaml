@@ -1,0 +1,124 @@
+# Cross-check recipe, generated from f4017-2021-10/p8-mtf.yaml with this
+# edition's page, frame and legend box. It stages nothing.
+schema_version: 1
+publication:
+  publisher: Kodak Alaris
+  number: F-4017
+  title: KODAK PROFESSIONAL TRI-X 320 and 400 Films (Technical Data / Black-and-White Film)
+  edition: February 2016 (back cover "Revised 2-16")
+  url: https://kodakprofessional.com/sites/default/files/wysiwyg/pro/resources/f4017_TriX.pdf
+  file: f4017-2016-02.pdf
+  sha256: 51d738f4f996c98716d153bab75e41d0359637a18ea49f9be52062652b0b27d2
+page: 7
+printed_page: '7'
+figure: Modulation Transfer Function
+caption: 'Process: KODAK PROFESSIONAL Developer D-76, Large Tank. Densitometry: Diffuse Visual'
+material: kodak/tri-x-400
+method: vector
+region:
+- 54.01
+- 527.72
+- 294.01
+- 731.0
+frame:
+- 84.81
+- 563.22
+- 287.29
+- 716.03
+flatten_tolerance_pt: 0.01
+decimals:
+- 4
+- 4
+x:
+  title: SPATIAL FREQUENCY (cycles/mm)
+  unit: cycles/mm
+  side: bottom
+  scale: log10
+  fit: piecewise
+  note: 'The printed grid is not an exact logarithmic scale: decade lengths differ by up to about
+    1.5 pt (1 to 10: 71.7 pt; 10 to 100: 73.2 pt), and the 600 label sits on the frame edge about
+    2 pt right of where the 100-200 spacing puts 600. The curve is read piecewise between neighbouring
+    labelled grid lines; the least-squares residual of a single log scale is reported and included
+    in the error.'
+  ticks:
+  - label: '1'
+    value: 1
+  - label: '2'
+    value: 2
+  - label: '3'
+    value: 3
+  - label: '4'
+    value: 4
+  - label: '5'
+    value: 5
+  - label: '10'
+    value: 10
+  - label: '20'
+    value: 20
+  - label: '50'
+    value: 50
+  - label: '100'
+    value: 100
+  - label: '200'
+    value: 200
+  - label: '600'
+    value: 600
+y:
+  title: RESPONSE (%)
+  unit: '%'
+  side: left
+  scale: log10
+  fit: piecewise
+  note: Read piecewise between labelled grid lines, as for the x axis.
+  ticks:
+  - label: '1'
+    value: 1
+  - label: '2'
+    value: 2
+  - label: '3'
+    value: 3
+  - label: '5'
+    value: 5
+  - label: '7'
+    value: 7
+  - label: '10'
+    value: 10
+  - label: '20'
+    value: 20
+  - label: '30'
+    value: 30
+  - label: '50'
+    value: 50
+  - label: '70'
+    value: 70
+  - label: '100'
+    value: 100
+  - label: '200'
+    value: 200
+curves:
+- output: mtf-d76-large-tank
+  quantity: modulation_transfer
+  style:
+    width: 0.719
+    dash: []
+  expect:
+    paths: 1
+  conditions:
+    developer: d-76
+    dilution: not stated in the figure
+    time: not stated
+    temperature: not stated
+    agitation: large tank (no interval given)
+    format: not stated
+    densitometry: diffuse visual
+    exposure: 'not stated (the May 2007 edition''s caption reads "Exposure: X")'
+    film_version: older TRI-X Pan Film 5063 per F-4017 May 2007 p. 10 (later editions drop the note
+      but print the same figure)
+notes:
+- 'Cross-check: the same figure in the February 2016 edition. Its paths are the 2021 paths moved on
+  the page, so the curves should agree to the last decimal.'
+exclude: []
+cross_check_of: tools/digitize/recipes/f4017-2021-10/p8-mtf.yaml
+max_difference:
+- 0.0002
+- 0.0002

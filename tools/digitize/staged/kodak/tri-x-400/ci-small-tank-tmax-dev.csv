@@ -1,0 +1,11 @@
+# material: kodak/tri-x-400
+# quantity: contrast_index
+# x_unit: min
+# y_unit: 1
+# origin: datasheet
+# ref: Kodak Alaris, KODAK PROFESSIONAL TRI-X 320 and 400 Films (Technical Data / Black-and-White Film), Publication F-4017, October 2021 (back cover "Revised 10-21"), p. 9, figure "Contrast Index Curves, KODAK PROFESSIONAL TRI-X 400 Film / 400TX, 35 mm and 120-size" (curve: T-MAX); https://kodakprofessional.com/sites/default/files/wysiwyg/film/f4017_trix_320400.pdf (sha256 1d86b030cf7a8502e6f1414c630fa2cda30b68df53f49bccccce73c9c6562078); digitised from the PDF's vector paths by tools/digitize/recipes/f4017-2021-10/p9-contrast-index-small-tank.yaml; estimated error x +/-0.0720 min, y +/-0.0029
+# conditions: developer=t-max-dev; dilution=not stated in the figure; temperature=20 C; agitation=small tank (the figure gives no agitation interval); format=35 mm and 120-size; densitometry=diffuse visual
+5.4199,0.5200
+6.4995,0.5840
+8.1302,0.6810
+10.8300,0.8560

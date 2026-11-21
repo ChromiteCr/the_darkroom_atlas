@@ -1,0 +1,98 @@
+schema_version: 1
+publication:
+  publisher: Kodak Alaris
+  number: F-4017
+  title: KODAK PROFESSIONAL TRI-X 320 and 400 Films (Technical Data / Black-and-White Film)
+  edition: October 2021 (back cover "Revised 10-21")
+  url: https://kodakprofessional.com/sites/default/files/wysiwyg/film/f4017_trix_320400.pdf
+  file: f4017-2021-10.pdf
+  sha256: 1d86b030cf7a8502e6f1414c630fa2cda30b68df53f49bccccce73c9c6562078
+page: 8
+printed_page: "8"
+figure: Characteristic Curves, KODAK PROFESSIONAL TRI-X 400 Film / 400TX, 35 mm
+caption: >-
+  Process: KODAK PROFESSIONAL T-MAX Developer, Small Tank; Agitation at 30 second intervals;
+  20°C (68°F). Densitometry: Diffuse visual
+material: kodak/tri-x-400
+method: vector
+# Region: the white box FrameMaker draws around the chart (filled paths #119-#122).
+region: [318.06, 498.0, 558.0, 738.0]
+# Frame: the stroked rectangle, path #117.
+frame: [354.42, 544.02, 538.85, 728.52]
+# The legend box (path #97); nothing inside it is a curve.
+exclude:
+  - [450.89, 551.55, 533.96, 588.29]
+flatten_tolerance_pt: 0.01
+decimals: [4, 4]
+x:
+  title: LOG EXPOSURE (lux-seconds)
+  unit: log10(lux*s)
+  side: bottom
+  scale: linear
+  bar_notation: true
+  note: >-
+    Labels -4 to -1 are printed in bar notation (a bar over the characteristic, drawn as
+    paths #110, #111, #115, #116); the text layer reads them as 4.0, 3.0, 2.0, 1.0.
+    -4 and +1 sit on the frame's left and right edges, the others on tick paths #106-#109.
+  ticks:
+    - {label: "4.0", bar: true, value: -4.0}
+    - {label: "3.0", bar: true, value: -3.0}
+    - {label: "2.0", bar: true, value: -2.0}
+    - {label: "1.0", bar: true, value: -1.0}
+    - {label: "0.0", value: 0.0}
+    - {label: "1.0", value: 1.0}
+y:
+  title: DENSITY
+  unit: "1"
+  side: left
+  scale: linear
+  ticks:
+    - {label: "0.0", value: 0.0}
+    - {label: "1.0", value: 1.0}
+    - {label: "2.0", value: 2.0}
+    - {label: "3.0", value: 3.0}
+    - {label: "4.0", value: 4.0}
+curves:
+  - output: char-35mm-tmax-dev-06min
+    quantity: characteristic_curve
+    legend: 6 minutes
+    style: {width: 0.72, dash: []}
+    expect: {paths: 1, x_span: [-3.45, 0.35], tolerance: [0.01, 0.01]}
+    conditions: &tmax35
+      developer: t-max-dev
+      dilution: not stated in the figure
+      time: 6min
+      temperature: 20 C
+      agitation: small tank, agitation at 30 second intervals
+      format: 35 mm
+      densitometry: diffuse visual
+      exposure: not stated (no illuminant or exposure time given)
+  - output: char-35mm-tmax-dev-07min
+    quantity: characteristic_curve
+    legend: 7 minutes
+    style: {width: 0.72, dash: [3.2394, 1.6197]}
+    expect: {paths: 1, x_span: [-3.45, 0.35], tolerance: [0.01, 0.01]}
+    conditions:
+      <<: *tmax35
+      time: 7min
+  - output: char-35mm-tmax-dev-09min
+    quantity: characteristic_curve
+    legend: 9 minutes
+    style: {width: 0.72, dash: [6.4789, 3.2394]}
+    expect: {paths: 1, x_span: [-3.45, 0.35], tolerance: [0.01, 0.01]}
+    conditions:
+      <<: *tmax35
+      time: 9min
+  - output: char-35mm-tmax-dev-11min
+    quantity: characteristic_curve
+    legend: 11 minutes
+    style: {width: 0.72, dash: [16.197, 3.2394, 3.2394, 3.2394, 3.2394, 3.2394]}
+    expect: {paths: 1, x_span: [-3.45, 0.35], tolerance: [0.01, 0.01]}
+    conditions:
+      <<: *tmax35
+      time: 11min
+notes:
+  - >-
+    Cross-checked against the same figure on p. 7 of the February 2016 edition
+    (recipes/f4017-2016-02, identical to the last decimal) and on p. 11 of the May 2007
+    edition (recipes/f4017-2007-05, within 0.005).

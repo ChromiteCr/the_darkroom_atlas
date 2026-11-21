@@ -1,0 +1,63 @@
+# material: kodak/tri-x-400
+# quantity: modulation_transfer
+# x_unit: cycles/mm
+# y_unit: %
+# origin: datasheet
+# ref: Kodak Alaris, KODAK PROFESSIONAL TRI-X 320 and 400 Films (Technical Data / Black-and-White Film), Publication F-4017, October 2021 (back cover "Revised 10-21"), p. 8, figure "Modulation Transfer Function"; https://kodakprofessional.com/sites/default/files/wysiwyg/film/f4017_trix_320400.pdf (sha256 1d86b030cf7a8502e6f1414c630fa2cda30b68df53f49bccccce73c9c6562078); digitised from the PDF's vector paths by tools/digitize/recipes/f4017-2021-10/p8-mtf.yaml; estimated error x +/-0.0218 decades (5.1 %), y +/-0.0205 decades (4.8 %)
+# conditions: developer=d-76; dilution=not stated in the figure; time=not stated; temperature=not stated; agitation=large tank (no interval given); format=not stated; densitometry=diffuse visual; exposure=not stated (the May 2007 edition's caption reads "Exposure: X"); film_version=older TRI-X Pan Film 5063 per F-4017 May 2007 p. 10 (later editions drop the note but print the same figure)
+2.4518,106.3263
+3.1480,107.2964
+3.8930,108.2168
+4.7670,109.1423
+5.8026,110.0631
+6.3918,110.4667
+7.0384,110.8022
+7.7486,111.0471
+8.5295,111.1784
+9.3887,111.1737
+10.3171,111.0108
+11.3012,110.6685
+12.3825,110.1263
+13.5720,109.3654
+14.2113,108.8976
+14.8826,108.3688
+15.5878,107.7775
+16.3289,107.1218
+17.1079,106.4004
+17.9272,105.6121
+19.2690,104.4161
+20.6561,103.2039
+21.6207,102.4209
+22.6089,101.4624
+23.6202,100.3372
+24.6538,99.1113
+25.7090,97.7661
+26.7849,96.2906
+27.8807,94.6945
+28.9954,92.9880
+30.1279,91.1810
+31.2772,89.2837
+32.4421,87.3063
+33.6214,85.2588
+34.8139,83.1511
+36.0182,80.9930
+37.2331,78.7938
+38.4571,76.5626
+39.6888,74.3081
+40.9267,72.0388
+42.1694,69.7548
+43.4154,67.4078
+44.6630,65.0709
+45.9108,62.7509
+47.1571,60.4539
+48.4005,58.1857
+49.6392,55.9513
+50.8794,53.7554
+52.1151,51.6021
+53.3417,49.4993
+54.5575,47.4586
+55.7611,45.4688
+56.9509,43.5320
+58.1253,41.6503
+64.5678,32.6502
+71.9079,24.3586

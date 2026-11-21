@@ -1,0 +1,66 @@
+# material: kodak/tri-x-400
+# quantity: characteristic_curve
+# x_unit: log10(lux*s)
+# y_unit: 1
+# origin: datasheet
+# ref: Kodak Alaris, KODAK PROFESSIONAL TRI-X 320 and 400 Films (Technical Data / Black-and-White Film), Publication F-4017, October 2021 (back cover "Revised 10-21"), p. 9, figure "Characteristic Curves, KODAK PROFESSIONAL TRI-X 400 Film / 400TX, 35 mm" (curve: 6 minutes); https://kodakprofessional.com/sites/default/files/wysiwyg/film/f4017_trix_320400.pdf (sha256 1d86b030cf7a8502e6f1414c630fa2cda30b68df53f49bccccce73c9c6562078); digitised from the PDF's vector paths by tools/digitize/recipes/f4017-2021-10/p9-char-d76-35mm.yaml; estimated error x +/-0.0198 log10(lux*s), y +/-0.0158
+# conditions: developer=d-76; dilution=stock (the figure names no dilution); time=6min; temperature=20 C; agitation=large tank, agitation at 1 minute intervals; format=35 mm; densitometry=diffuse visual; exposure=not stated (no illuminant or exposure time given)
+-3.4500,0.2700
+-3.3795,0.2708
+-3.3175,0.2717
+-3.2491,0.2718
+-3.1828,0.2729
+-3.1182,0.2751
+-3.0555,0.2783
+-2.9944,0.2826
+-2.9348,0.2878
+-2.8766,0.2941
+-2.8198,0.3013
+-2.7642,0.3095
+-2.7097,0.3187
+-2.6563,0.3288
+-2.6037,0.3399
+-2.5519,0.3519
+-2.5008,0.3647
+-2.4502,0.3785
+-2.4002,0.3932
+-2.3505,0.4087
+-2.3010,0.4251
+-2.2517,0.4424
+-2.2024,0.4604
+-2.1531,0.4793
+-2.1035,0.4990
+-2.0537,0.5195
+-2.0036,0.5407
+-1.9529,0.5627
+-1.9016,0.5855
+-1.7967,0.6333
+-1.6882,0.6839
+-1.5751,0.7372
+-1.5499,0.7500
+-1.5249,0.7631
+-1.4999,0.7764
+-1.4056,0.8279
+-1.3120,0.8802
+-1.2189,0.9330
+-1.1260,0.9860
+-1.0329,1.0388
+-0.9394,1.0912
+-0.8452,1.1429
+-0.7977,1.1683
+-0.7499,1.1935
+-0.7249,1.2068
+-0.6999,1.2200
+-0.4883,1.3319
+-0.3810,1.3885
+-0.2730,1.4448
+-0.1644,1.5002
+-0.1099,1.5275
+-0.0554,1.5543
+-0.0008,1.5806
+0.0537,1.6064
+0.1083,1.6315
+0.1629,1.6560
+0.2175,1.6782
+0.2796,1.7021
+0.3500,1.7280

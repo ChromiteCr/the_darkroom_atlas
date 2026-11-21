@@ -1,0 +1,105 @@
+schema_version: 1
+publication:
+  publisher: Kodak Alaris
+  number: F-4017
+  title: KODAK PROFESSIONAL TRI-X 320 and 400 Films (Technical Data / Black-and-White Film)
+  edition: October 2021 (back cover "Revised 10-21")
+  url: https://kodakprofessional.com/sites/default/files/wysiwyg/film/f4017_trix_320400.pdf
+  file: f4017-2021-10.pdf
+  sha256: 1d86b030cf7a8502e6f1414c630fa2cda30b68df53f49bccccce73c9c6562078
+page: 8
+printed_page: "8"
+figure: Spectral Sensitivity Curves
+caption: >-
+  Effective Exposure: 0.5 sec. Densitometry: Diffuse Visual. Footnote: *Sensitivity =
+  reciprocal of exposure (erg/cm2) required to produce specified density
+material: kodak/tri-x-400
+method: vector
+# Region: the white box around the chart (filled paths #92-#95).
+region: [42.0, 292.98, 282.0, 506.7]
+# Frame: the stroked rectangle, path #61.
+frame: [74.94, 349.03, 275.37, 500.33]
+# The legend box (path #76).
+exclude:
+  - [83.06, 357.43, 169.96, 380.86]
+flatten_tolerance_pt: 0.01
+decimals: [4, 4]
+x:
+  title: WAVELENGTH (nm)
+  unit: nm
+  side: bottom
+  scale: linear
+  note: >-
+    250 sits on the frame's left edge and 300-700 on grid lines (20.08-20.09 pt per 50 nm).
+    The 750 label is left out: it is half covered by the page's white border in the
+    rendering, and the frame's right edge where it sits is 0.44 pt short of where the grid
+    spacing puts 750 nm.
+  ticks:
+    - {label: "250", value: 250}
+    - {label: "300", value: 300}
+    - {label: "350", value: 350}
+    - {label: "400", value: 400}
+    - {label: "450", value: 450}
+    - {label: "500", value: 500}
+    - {label: "550", value: 550}
+    - {label: "600", value: 600}
+    - {label: "650", value: 650}
+    - {label: "700", value: 700}
+y:
+  title: LOG SENSITIVITY*
+  unit: log10(cm2/erg)
+  side: left
+  scale: linear
+  note: >-
+    Log10 of sensitivity, where sensitivity is the reciprocal of the exposure in erg/cm2
+    needed for the stated density; 0.0 and 4.0 sit on the frame edges, 1.0-3.0 on grid lines.
+  ticks:
+    - {label: "0.0", value: 0.0}
+    - {label: "1.0", value: 1.0}
+    - {label: "2.0", value: 2.0}
+    - {label: "3.0", value: 3.0}
+    - {label: "4.0", value: 4.0}
+curves:
+  - output: spectral-sensitivity-d0.3
+    quantity: spectral_sensitivity
+    legend: D=0.3>Gross Fog
+    style: {width: 0.719, dash: [3.2375, 1.6188]}
+    expect: {paths: 1, x_span: [300.0, 656.0], tolerance: [1.0, 0.05]}
+    conditions: &spectral
+      criterion: density 0.3 above gross fog (as the legend assigns it, see legend_check)
+      exposure: effective exposure 0.5 s
+      developer: not stated in the figure
+      densitometry: diffuse visual
+      film_version: >-
+        older TRI-X Pan Film 5063 per F-4017 May 2007 p. 10 (later editions drop the note
+        but print the same figure)
+      legend_check: >-
+        the legend gives the dashed, lower curve to D=0.3 and the solid, upper curve to
+        D=1.0, but a lower density needs less exposure and so has the higher log
+        sensitivity, which suggests the legend is swapped. Kept as printed, not corrected
+  - output: spectral-sensitivity-d1.0
+    quantity: spectral_sensitivity
+    legend: D=1.0>Gross Fog
+    style: {width: 0.719, dash: []}
+    expect: {paths: 1, x_span: [300.0, 668.0], tolerance: [1.0, 0.05]}
+    conditions:
+      <<: *spectral
+      criterion: density 1.0 above gross fog (as the legend assigns it, see legend_check)
+notes:
+  - >-
+    Cross-checked against the same figure on p. 7 of the February 2016 edition
+    (recipes/f4017-2016-02, identical to the last decimal) and on p. 10 of the May 2007
+    edition (recipes/f4017-2007-05, within 0.005).
+  - >-
+    Possible legend error in the publication: the curve the legend labels D=1.0 (solid)
+    lies about 1.2 log units above the one labelled D=0.3 (dashed). Reaching density 1.0
+    above fog takes more exposure than reaching 0.3, so the D=1.0 curve should be the lower
+    one. The files follow the legend as printed; whoever uses them must decide.
+  - >-
+    Both curves end by dropping to the bottom of the frame (log sensitivity 0.0) near
+    655-670 nm; that last segment shows the sensitivity falling below the plotted range, not
+    a measured value of 0.0.
+  - >-
+    F-4017 May 2007 (kodak.com copy archived at web.archive.org, p. 10) states that the
+    Modulation Transfer Function and Spectral Sensitivity "were generated using the older
+    version of this film (KODAK TRI-X Pan Fim 5063)".
