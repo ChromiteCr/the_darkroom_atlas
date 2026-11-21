@@ -15,6 +15,7 @@ found by fixed-point iteration from ``I0 = m_cat`` until ``|dI| < 1e-6 M`` (spec
 """
 
 import math
+import numbers
 from collections.abc import Mapping
 from dataclasses import dataclass
 
@@ -27,6 +28,7 @@ from darkroom_atlas.data.models import Bath, KineticsFile, Species
 from darkroom_atlas.units import parse_dilution
 
 __all__ = [
+    "ALWAYS_COMPONENTS",
     "IONIC_STRENGTH_TOL",
     "WorkingSolution",
     "component_charges",
@@ -35,6 +37,11 @@ __all__ = [
 
 IONIC_STRENGTH_TOL = 1e-6
 """Convergence of the ionic-strength fixed point, mol/L (spec D1 2.3.2)."""
+
+ALWAYS_COMPONENTS = ("sulfite", "bromide", "iodide", "silver")
+"""Components every working solution carries, even at zero total: the products and the
+solvent of development (bromide, iodide, dissolved silver, spec D1 2.4 source terms) and
+sulfite, which the solvent and sulfonation laws read by name (spec D1 2.4.11)."""
 
 _MAX_IONIC_ITER = 100
 _CELSIUS_TO_KELVIN = 273.15
@@ -51,9 +58,11 @@ def _readonly(a) -> np.ndarray:
 class WorkingSolution:
     """A developer (or other bath) at one dilution and temperature (spec D1 2.3.2, 10 D1c).
 
-    ``component_ids`` are all transported components of the species table in its order
-    (the built-in ``toth`` and ``gelatin`` excluded); ``totals`` are their totals in mol/L
-    (zero for components the bath does not contain). ``toth`` is the proton excess (mol/L)
+    ``component_ids`` are the components the bath's ingredients dissolve to plus
+    ``ALWAYS_COMPONENTS``, in species-table order (the built-in ``toth`` and ``gelatin``
+    excluded; about 8 for a developer, spec D1 3.10). Membership follows the formula, not
+    the amounts, so an override of 0 g/L keeps the shapes. ``totals`` are their totals in
+    mol/L. ``toth`` is the proton excess (mol/L)
     relative to the reference states, ``cation_molality`` is ``m_cat`` (Na+ plus K+, mol/L)
     and ``ionic_strength`` the converged ``I`` (mol/L). ``speciation`` holds the conditional
     constants of the families of ``component_ids`` that have one, in that order, at
@@ -155,8 +164,16 @@ def component_charges(
     return charges
 
 
-def _amount_mol_per_l(bath: Bath, i: int, species: Species, grams_per_l: float | None) -> float:
-    if grams_per_l is not None:
+_NO_OVERRIDE = object()
+
+
+def _amount_mol_per_l(bath: Bath, i: int, species: Species, grams_per_l: object) -> float:
+    if grams_per_l is not _NO_OVERRIDE:
+        if isinstance(grams_per_l, bool) or not isinstance(grams_per_l, numbers.Real):
+            raise ValueError(
+                f"overrides[{species.id!r}]: amount must be a real number in g/L, "
+                f"got {type(grams_per_l).__name__} {grams_per_l!r}"
+            )
         w = float(grams_per_l)
         if not (math.isfinite(w) and w >= 0.0):
             raise ValueError(
@@ -212,21 +229,34 @@ def working_solution(
         )
 
     table = component_table(species, kinetics=kinetics)
-    component_ids = tuple(cid for cid in table if cid not in BUILTIN_COMPONENTS)
-    index = {cid: k for k, cid in enumerate(component_ids)}
     charges = component_charges(species, table)
 
-    totals = np.zeros(len(component_ids))
-    toth = 0.0
-    cations = 0.0
-    spectator_i2 = 0.0  # sum of z^2 c over spectator ions, mol/L
+    ingredients = []
+    members = set(ALWAYS_COMPONENTS)
     for i, name in enumerate(names):
         s = species.get(name)
         if s is None:
             raise ValueError(f"bath {bath.id!r}: components[{i}].species: unknown species {name!r}")
         if s.id in BUILTIN_COMPONENTS:
             raise ValueError(f"bath {bath.id!r}: {name!r} is a built-in pseudo-component")
-        n = f * _amount_mol_per_l(bath, i, s, overrides.get(name))
+        targets = (s.id,) if s.kind == "component" else tuple(s.dissolves_to)
+        for target in targets:
+            if target not in table or target in BUILTIN_COMPONENTS:
+                raise ValueError(f"ingredient {s.id!r} dissolves to unknown component {target!r}")
+        members.update(targets)
+        ingredients.append(s)
+    missing = sorted(members - set(table))
+    if missing:
+        raise ValueError(f"species table lacks the components {', '.join(map(repr, missing))}")
+    component_ids = tuple(cid for cid in table if cid in members)
+    index = {cid: k for k, cid in enumerate(component_ids)}
+
+    totals = np.zeros(len(component_ids))
+    toth = 0.0
+    cations = 0.0
+    spectator_i2 = 0.0  # sum of z^2 c over spectator ions, mol/L
+    for i, (name, s) in enumerate(zip(names, ingredients, strict=True)):
+        n = f * _amount_mol_per_l(bath, i, s, overrides.get(name, _NO_OVERRIDE))
         if s.kind == "component":
             if charges.get(s.id, 0.0) != 0.0:
                 raise ValueError(
@@ -236,8 +266,6 @@ def working_solution(
             totals[index[s.id]] += n
             continue
         for target, stoich in s.dissolves_to.items():
-            if target not in index:
-                raise ValueError(f"ingredient {s.id!r} dissolves to unknown component {target!r}")
             totals[index[target]] += n * stoich
         toth += n * s.toth
         cations += n * sum(s.cations.values())

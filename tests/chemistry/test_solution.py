@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from darkroom_atlas.chemistry.solution import (
+    ALWAYS_COMPONENTS,
     WorkingSolution,
     component_charges,
     working_solution,
@@ -140,10 +141,15 @@ def test_d76_published_plus_boric_oxide(library, species, b2o3, ideal, sit):
 
 
 def test_xtol_part_a_sit(library, species):
-    """Spec 12.4: Part A with D(I) 10.76 at I = 0.32 M (non-ionising Dimezone S)."""
+    """Spec 12.4: Part A with D(I) 10.76 (non-ionising Dimezone S).
+
+    The 12.4 table gives I = 0.32 M, which leaves out DTPA L5- (z^2 = 25 at 2.3 mM); with
+    it I = 0.349 M (reported to the spec author). The ionic strength is a regression on
+    the computed value, not a check against the table.
+    """
     part_a = ws(library, species, "xtol", SIT, **{**XTOL_PART_A, **NO_DIMEZONE_ACID})
     assert part_a.ph == pytest.approx(10.76, abs=0.03)
-    assert part_a.ionic_strength == pytest.approx(0.32, abs=0.03)
+    assert part_a.ionic_strength == pytest.approx(0.349, abs=0.002)
 
 
 def test_placeholder_dimezone_pka_lowers_xtol_ph(library, species):
@@ -252,7 +258,9 @@ def test_toth_and_cations(library, species):
 def test_component_ids_and_speciation(library, species):
     sol = ws(library, species, "xtol")
     table = component_table(species)
-    assert sol.component_ids == tuple(c for c in table if c not in BUILTIN_COMPONENTS)
+    expected = {"sulfite", "borate", "dimezone-s", "ascorbate", "dtpa", *ALWAYS_COMPONENTS}
+    assert sol.component_ids == tuple(c for c in table if c in expected)
+    assert not set(sol.component_ids) & set(BUILTIN_COMPONENTS)
     assert sol.totals.shape == (len(sol.component_ids),)
     assert not sol.totals.flags.writeable
     fam = [f.component for f in sol.speciation.families]
@@ -261,6 +269,50 @@ def test_component_ids_and_speciation(library, species):
     # The stored pH solves the proton condition at the stored speciation.
     ph = solve_ph(sol.speciation, sol.family_totals, np.asarray(sol.toth))
     assert float(ph) == pytest.approx(sol.ph, abs=1e-10)
+
+
+def test_d76_has_eight_components(library, species):
+    """Spec D1 3.10 sizes a developer at about 8 components: D-76 has exactly 8."""
+    sol = ws(library, species, "d-76")
+    assert sol.component_ids == (
+        "sulfite",
+        "borate",
+        "hydroquinone",
+        "metol",
+        "dtpa",
+        "bromide",
+        "iodide",
+        "silver",
+    )
+    assert [f.component for f in sol.speciation.families] == [
+        "sulfite",
+        "borate",
+        "hydroquinone",
+        "metol",
+        "dtpa",
+    ]
+    for cid in ("bromide", "iodide", "silver"):
+        assert sol.total(cid) == 0.0
+
+
+def test_always_components_without_sulfite(library, species):
+    """Rodinal has no sulfite; the always-present components are still there at 0."""
+    sol = ws(library, species, "rodinal", dilution="1+25", t=20.0)
+    for cid in ALWAYS_COMPONENTS:
+        assert cid in sol.component_ids
+    assert sol.total("sulfite") == 0.0
+    assert sol.total("bromide") > 0.0
+    with pytest.raises(KeyError, match="not a component"):
+        sol.total("hydroquinone")
+
+
+def test_zero_override_keeps_shape(library, species):
+    """Membership follows the formula, not the amounts."""
+    base = ws(library, species, "d-76")
+    zero = ws(library, species, "d-76", **{"boric-oxide": 0.0, "dtpa": 0.0})
+    assert zero.component_ids == base.component_ids
+    assert len(zero.speciation.families) == len(base.speciation.families)
+    assert zero.total("dtpa") == 0.0
 
 
 def test_ionic_strength_is_a_fixed_point(library, species):
@@ -347,7 +399,7 @@ def test_override_unknown_ingredient_raises(library, species):
         ws(library, species, "d-76", **{"sodium-bromide": 1.0})
 
 
-@pytest.mark.parametrize("value", [-1.0, float("nan"), float("inf")])
+@pytest.mark.parametrize("value", [-1.0, float("nan"), float("inf"), "1", True, None])
 def test_override_bad_amount_raises(library, species, value):
     with pytest.raises(ValueError, match="overrides"):
         ws(library, species, "d-76", **{"boric-oxide": value})
