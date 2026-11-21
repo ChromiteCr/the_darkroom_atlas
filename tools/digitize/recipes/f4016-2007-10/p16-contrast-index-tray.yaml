@@ -1,0 +1,139 @@
+# Cross-check recipe, generated from f4016-2018-06/p9-contrast-index-tray.yaml with this
+# edition's page, region, frame and legend box. It stages nothing.
+schema_version: 1
+publication:
+  publisher: Eastman Kodak Company
+  number: F-4016
+  title: KODAK PROFESSIONAL T-MAX Films (Technical Data / Black-and-White Film)
+  edition: October 2007 (p. 1 "October 2007"; back cover "Revised 10-07")
+  url: https://web.archive.org/web/20090206022109id_/http://www.kodak.com:80/global/en/professional/support/techPubs/f4016/f4016.pdf
+  file: f4016-2007-10.pdf
+  sha256: 9590131941e463cd6b4746094101c7ce1efc799cdca9dbe0a3ce94e57692e979
+page: 16
+printed_page: '16'
+figure: Contrast Index Curves (bottom right, Tray), KODAK PROFESSIONAL T-MAX 100 Film
+caption: 'Process: Tray, 68°F (20°C). Densitometry: Diffuse Visual'
+material: kodak/t-max-100
+method: vector
+region:
+- 328.32
+- 251.92
+- 546.48
+- 486.42
+frame:
+- 357.63
+- 277.5
+- 542.02
+- 461.97
+exclude:
+- - 478.82
+  - 317.65
+  - 537.51
+  - 352.11
+flatten_tolerance_pt: 0.01
+decimals:
+- 4
+- 4
+x:
+  title: DEVELOPMENT TIME (MINUTES)
+  unit: min
+  side: bottom
+  scale: linear
+  ticks:
+  - label: '4'
+    value: 4
+  - label: '6'
+    value: 6
+  - label: '8'
+    value: 8
+  - label: '10'
+    value: 10
+  - label: '12'
+    value: 12
+  - label: '14'
+    value: 14
+  - label: '16'
+    value: 16
+  - label: '18'
+    value: 18
+y:
+  title: CONTRAST INDEX
+  unit: '1'
+  side: left
+  scale: linear
+  ticks:
+  - label: '0.3'
+    value: 0.3
+  - label: '0.4'
+    value: 0.4
+  - label: '0.5'
+    value: 0.5
+  - label: '0.6'
+    value: 0.6
+  - label: '0.7'
+    value: 0.7
+  - label: '0.8'
+    value: 0.8
+  - label: '0.9'
+    value: 0.9
+curves:
+- output: ci-tray-xtol
+  quantity: contrast_index
+  legend: XTOL
+  style:
+    width: 0.72
+    dash: []
+  expect:
+    paths: 1
+    x_span:
+    - 6.8
+    - 9.8
+    y_span:
+    - 0.56
+    - 0.82
+    tolerance:
+    - 0.03
+    - 0.005
+  conditions:
+    developer: xtol
+    dilution: stock
+    temperature: 20 C
+    agitation: tray, sheets (continuous agitation, rotating the sheets 90 degrees as they are
+      interleaved, per p. 3)
+    format: not stated (the figure is not split by format)
+    densitometry: diffuse visual
+- output: ci-tray-xtol-1-1
+  quantity: contrast_index
+  legend: XTOL 1:1
+  style:
+    width: 0.72
+    dash:
+    - 3.2388
+    - 1.6194
+  expect:
+    paths: 1
+    x_span:
+    - 9.0
+    - 12.3
+    y_span:
+    - 0.56
+    - 0.82
+    tolerance:
+    - 0.03
+    - 0.005
+  conditions:
+    developer: xtol
+    dilution: 1+1 (printed 1:1)
+    temperature: 20 C
+    agitation: tray, sheets (continuous agitation, rotating the sheets 90 degrees as they are
+      interleaved, per p. 3)
+    format: not stated (the figure is not split by format)
+    densitometry: diffuse visual
+notes:
+- 'Cross-check of p9-contrast-index-tray.yaml against the same figure in the October 2007 combined
+  F-4016 (kodak.com copy archived at web.archive.org). Region: white box path #74; frame: path
+  #87; legend box: path #90.'
+cross_check_of: f4016-2018-06/p9-contrast-index-tray.yaml
+max_difference:
+- 0.001
+- 0.001

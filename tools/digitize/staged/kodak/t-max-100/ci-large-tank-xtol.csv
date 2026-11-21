@@ -1,0 +1,16 @@
+# material: kodak/t-max-100
+# quantity: contrast_index
+# x_unit: min
+# y_unit: 1
+# origin: datasheet
+# ref: Kodak Alaris, KODAK PROFESSIONAL T-MAX 100 Film (Technical Data / Black-and-White Film), Publication F-4016, June 2018 (p. 1 "June 2018"; back page "Revised 6-18"), p. 9 (unnumbered back page), figure "Contrast Index Curves (top right, Large Tank), KODAK PROFESSIONAL T-MAX 100 Film" (curve: XTOL); https://kodakprofessional.com/sites/default/files/wysiwyg/pro/resources/f4016_TMax_100.pdf (sha256 00518d7d1e296d6065f6e41ea3db999e5d8714679fb3d2b76d9a49eb207113be); digitised from the PDF's vector paths by tools/digitize/recipes/f4016-2018-06/p9-contrast-index-large-tank.yaml; estimated error x +/-0.0555 min, y +/-0.0024
+# conditions: developer=xtol; dilution=stock; temperature=20 C; agitation=large tank (the figure gives no interval, the large-tank procedure on p. 3 agitates once per minute after continuous agitation for the first 15 to 30 seconds); format=not stated (the figure is not split by format); densitometry=diffuse visual
+8.2001,0.5600
+9.0431,0.6123
+9.6905,0.6528
+10.1861,0.6847
+10.5728,0.7109
+10.8941,0.7345
+11.1934,0.7585
+11.5142,0.7860
+11.8999,0.8200

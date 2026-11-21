@@ -1,0 +1,96 @@
+schema_version: 1
+publication:
+  publisher: Kodak Alaris
+  number: F-4016
+  title: KODAK PROFESSIONAL T-MAX 100 Film (Technical Data / Black-and-White Film)
+  edition: June 2018 (p. 1 "June 2018"; back page "Revised 6-18")
+  url: https://kodakprofessional.com/sites/default/files/wysiwyg/pro/resources/f4016_TMax_100.pdf
+  file: f4016-2018-06.pdf
+  sha256: 00518d7d1e296d6065f6e41ea3db999e5d8714679fb3d2b76d9a49eb207113be
+page: 8
+printed_page: "8"
+figure: Spectral Sensitivity Curves, KODAK PROFESSIONAL T-MAX 100 Film
+caption: >-
+  Effective Exposure: 1.4 seconds. Process: KODAK Developer D-76, 68°F (20°C).
+  Densitometry: Diffuse visual. Footnote: *Sensitivity = reciprocal of exposure
+  (ergs/cm2) required to produce specified density
+material: kodak/t-max-100
+method: vector
+# Region: the white box around the chart (filled path #69).
+region: [42.90, 86.82, 281.46, 297.18]
+# Frame: the stroked rectangle, path #73.
+frame: [74.60, 142.04, 275.13, 293.51]
+flatten_tolerance_pt: 0.01
+decimals: [4, 4]
+x:
+  title: WAVELENGTH (nm)
+  unit: nm
+  side: bottom
+  scale: linear
+  note: >-
+    250 sits on the frame's left edge and 300-700 on grid lines (20.09-20.10 pt per 50 nm).
+    The 750 label is left out, as in the TRI-X recipe: the frame's right edge where it sits
+    is 0.44 pt short of where the grid spacing puts 750 nm.
+  ticks:
+    - {label: "250", value: 250}
+    - {label: "300", value: 300}
+    - {label: "350", value: 350}
+    - {label: "400", value: 400}
+    - {label: "450", value: 450}
+    - {label: "500", value: 500}
+    - {label: "550", value: 550}
+    - {label: "600", value: 600}
+    - {label: "650", value: 650}
+    - {label: "700", value: 700}
+y:
+  title: LOG SENSITIVITY*
+  unit: log10(cm2/erg)
+  side: left
+  scale: linear
+  bar_notation: true
+  note: >-
+    Log10 of sensitivity, where sensitivity is the reciprocal of the exposure in erg/cm2
+    needed for the stated density. The labels -1.0 and -2.0 are printed in bar notation
+    (bars drawn as paths #78 and #77). -2.0 and 2.0 sit on the frame edges, -1.0, 0.0 and
+    1.0 on grid lines (#89/#90, #75, #76).
+  ticks:
+    - {label: "2.0", bar: true, value: -2.0}
+    - {label: "1.0", bar: true, value: -1.0}
+    - {label: "0.0", value: 0.0}
+    - {label: "1.0", value: 1.0}
+    - {label: "2.0", value: 2.0}
+# The two curves are drawn in the same style (0.72 pt, solid) and the figure has no legend:
+# each is labelled by text printed beside it. "0.3 greater than D-min" sits just above the
+# upper curve (#79) and "1.0 greater than D-min" just below the lower curve (#80); the
+# annotation selector picks the path vertically nearest each label. The assignment is
+# physically consistent: a lower density needs less exposure, so the 0.3 curve has the
+# higher log sensitivity. (The TRI-X figure's legend assigns its curves the other way.)
+curves:
+  - output: spectral-sensitivity-d0.3
+    quantity: spectral_sensitivity
+    annotation: 0.3 greater than D-min
+    style: {width: 0.72, dash: []}
+    expect: {paths: 1, x_span: [400.0, 700.0], y_span: [1.5, -1.75], tolerance: [1.0, 0.05]}
+    conditions: &spectral
+      criterion: density 0.3 above D-min
+      exposure: effective exposure 1.4 s
+      developer: d-76
+      dilution: not stated in the figure
+      time: not stated
+      temperature: 20 C
+      densitometry: diffuse visual
+  - output: spectral-sensitivity-d1.0
+    quantity: spectral_sensitivity
+    annotation: 1.0 greater than D-min
+    style: {width: 0.72, dash: []}
+    expect: {paths: 1, x_span: [400.0, 670.0], y_span: [0.5, -1.65], tolerance: [1.0, 0.05]}
+    conditions:
+      <<: *spectral
+      criterion: density 1.0 above D-min
+notes:
+  - >-
+    Both curves end inside the frame (near 700 and 670 nm, at log sensitivity about -1.75
+    and -1.65), so there is no plot floor here, unlike the TRI-X figure.
+  - >-
+    The same figure is printed on p. 14 of the October 2007 combined F-4016 (KODAK
+    PROFESSIONAL T-MAX Films); see recipes/f4016-2007-10.

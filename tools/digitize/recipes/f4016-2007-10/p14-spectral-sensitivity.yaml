@@ -1,0 +1,139 @@
+# Cross-check recipe, generated from f4016-2018-06/p8-spectral-sensitivity.yaml with this
+# edition's page, region, frame and legend box. It stages nothing.
+schema_version: 1
+publication:
+  publisher: Eastman Kodak Company
+  number: F-4016
+  title: KODAK PROFESSIONAL T-MAX Films (Technical Data / Black-and-White Film)
+  edition: October 2007 (p. 1 "October 2007"; back cover "Revised 10-07")
+  url: https://web.archive.org/web/20090206022109id_/http://www.kodak.com:80/global/en/professional/support/techPubs/f4016/f4016.pdf
+  file: f4016-2007-10.pdf
+  sha256: 9590131941e463cd6b4746094101c7ce1efc799cdca9dbe0a3ce94e57692e979
+page: 14
+printed_page: '14'
+figure: Spectral Sensitivity Curves, KODAK PROFESSIONAL T-MAX 100 Film
+caption: 'Effective Exposure: 1.4 seconds. Process: KODAK Developer D-76, 68°F (20°C). Densitometry:
+  Diffuse visual. Footnote: *Sensitivity = reciprocal of exposure (ergs/cm2) required to produce
+  specified density'
+material: kodak/t-max-100
+method: vector
+region:
+- 42.0
+- 221.92
+- 282.0
+- 437.92
+frame:
+- 74.65
+- 280.42
+- 275.18
+- 431.9
+flatten_tolerance_pt: 0.01
+decimals:
+- 4
+- 4
+x:
+  title: WAVELENGTH (nm)
+  unit: nm
+  side: bottom
+  scale: linear
+  ticks:
+  - label: '250'
+    value: 250
+  - label: '300'
+    value: 300
+  - label: '350'
+    value: 350
+  - label: '400'
+    value: 400
+  - label: '450'
+    value: 450
+  - label: '500'
+    value: 500
+  - label: '550'
+    value: 550
+  - label: '600'
+    value: 600
+  - label: '650'
+    value: 650
+  - label: '700'
+    value: 700
+y:
+  title: LOG SENSITIVITY*
+  unit: log10(cm2/erg)
+  side: left
+  scale: linear
+  bar_notation: true
+  ticks:
+  - label: '2.0'
+    bar: true
+    value: -2.0
+  - label: '1.0'
+    bar: true
+    value: -1.0
+  - label: '0.0'
+    value: 0.0
+  - label: '1.0'
+    value: 1.0
+  - label: '2.0'
+    value: 2.0
+curves:
+- output: spectral-sensitivity-d0.3
+  quantity: spectral_sensitivity
+  annotation: 0.3 greater than D-min
+  style:
+    width: 0.72
+    dash: []
+  expect:
+    paths: 1
+    x_span:
+    - 400.0
+    - 700.0
+    y_span:
+    - 1.5
+    - -1.75
+    tolerance:
+    - 1.0
+    - 0.05
+  conditions:
+    criterion: density 0.3 above D-min
+    exposure: effective exposure 1.4 s
+    developer: d-76
+    dilution: not stated in the figure
+    time: not stated
+    temperature: 20 C
+    densitometry: diffuse visual
+- output: spectral-sensitivity-d1.0
+  quantity: spectral_sensitivity
+  annotation: 1.0 greater than D-min
+  style:
+    width: 0.72
+    dash: []
+  expect:
+    paths: 1
+    x_span:
+    - 400.0
+    - 670.0
+    y_span:
+    - 0.5
+    - -1.65
+    tolerance:
+    - 1.0
+    - 0.05
+  conditions:
+    criterion: density 1.0 above D-min
+    exposure: effective exposure 1.4 s
+    developer: d-76
+    dilution: not stated in the figure
+    time: not stated
+    temperature: 20 C
+    densitometry: diffuse visual
+notes:
+- 'Cross-check of p8-spectral-sensitivity.yaml against the same figure in the October 2007 combined
+  F-4016 (kodak.com copy archived at web.archive.org). Region: white box path #57; frame: path
+  #61.'
+- 'p. 14 of this edition adds a footnote: the blue sensitivity of KODAK PROFESSIONAL T-MAX Films
+  is slightly less than that of other Kodak panchromatic black-and-white films.'
+cross_check_of: f4016-2018-06/p8-spectral-sensitivity.yaml
+max_difference:
+- 0.01
+- 0.001

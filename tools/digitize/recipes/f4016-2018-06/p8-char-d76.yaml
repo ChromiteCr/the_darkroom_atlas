@@ -1,0 +1,96 @@
+schema_version: 1
+publication:
+  publisher: Kodak Alaris
+  number: F-4016
+  title: KODAK PROFESSIONAL T-MAX 100 Film (Technical Data / Black-and-White Film)
+  edition: June 2018 (p. 1 "June 2018"; back page "Revised 6-18")
+  url: https://kodakprofessional.com/sites/default/files/wysiwyg/pro/resources/f4016_TMax_100.pdf
+  file: f4016-2018-06.pdf
+  sha256: 00518d7d1e296d6065f6e41ea3db999e5d8714679fb3d2b76d9a49eb207113be
+page: 8
+printed_page: "8"
+figure: Characteristic Curves (top), KODAK PROFESSIONAL T-MAX 100 Film
+caption: >-
+  Exposure: Daylight. Process: KODAK PROFESSIONAL Developer D-76; Small Tank; 20°C (68°F).
+  Densitometry: Diffuse Visual
+material: kodak/t-max-100
+method: vector
+# Region: the white box around the chart (filled path #108).
+region: [326.94, 524.76, 544.08, 741.03]
+# Frame: the stroked rectangle, path #127.
+frame: [355.61, 550.52, 540.04, 734.99]
+# The legend box (path #112); nothing inside it is a curve.
+exclude:
+  - [364.31, 650.31, 421.10, 682.27]
+flatten_tolerance_pt: 0.01
+decimals: [4, 4]
+x:
+  title: LOG EXPOSURE (lux-seconds)
+  unit: log10(lux*s)
+  side: bottom
+  scale: linear
+  bar_notation: true
+  note: >-
+    Labels -4 to -1 are printed in bar notation (bars drawn as paths #116, #126, #125,
+    #120); the text layer reads them as 4.0, 3.0, 2.0, 1.0. -4 and +1 sit on the frame's
+    left and right edges, the others on tick paths #124, #119, #118, #117.
+  ticks:
+    - {label: "4.0", bar: true, value: -4.0}
+    - {label: "3.0", bar: true, value: -3.0}
+    - {label: "2.0", bar: true, value: -2.0}
+    - {label: "1.0", bar: true, value: -1.0}
+    - {label: "0.0", value: 0.0}
+    - {label: "1.0", value: 1.0}
+y:
+  title: DENSITY
+  unit: "1"
+  side: left
+  scale: linear
+  note: 0.0 and 4.0 sit on the frame edges, 1.0-3.0 on tick paths #123, #122, #121.
+  ticks:
+    - {label: "0.0", value: 0.0}
+    - {label: "1.0", value: 1.0}
+    - {label: "2.0", value: 2.0}
+    - {label: "3.0", value: 3.0}
+    - {label: "4.0", value: 4.0}
+curves:
+  - output: char-d76-06min
+    quantity: characteristic_curve
+    legend: 6 min
+    style: {width: 0.72, dash: [6.4785, 3.2392]}
+    expect: {paths: 1, x_span: [-3.15, 0.65], tolerance: [0.01, 0.01]}
+    conditions: &d76
+      developer: d-76
+      dilution: stock (the figure names no dilution)
+      time: 6min
+      temperature: 20 C
+      agitation: >-
+        small tank (the caption gives no interval, the small-tank procedure on p. 2 agitates
+        5 to 7 inversion cycles in 5 seconds at 30-second intervals)
+      format: not stated (the figure is not split by format)
+      densitometry: diffuse visual
+      exposure: daylight (no exposure time given)
+  - output: char-d76-07.5min
+    quantity: characteristic_curve
+    legend: 7.5 min
+    style: {width: 0.72, dash: [3.2392, 1.6196]}
+    expect: {paths: 1, x_span: [-3.15, 0.65], tolerance: [0.01, 0.01]}
+    conditions:
+      <<: *d76
+      time: 7.5min
+  - output: char-d76-10min
+    quantity: characteristic_curve
+    legend: 10 min
+    style: {width: 0.72, dash: []}
+    expect: {paths: 1, x_span: [-3.15, 0.65], tolerance: [0.01, 0.01]}
+    conditions:
+      <<: *d76
+      time: 10min
+notes:
+  - >-
+    The 10-minute curve is a solid path of 15 operators (lines and Bezier curves); the
+    dashed 6- and 7.5-minute curves are polylines of 136 points. The digitised points are
+    the path vertices and the flattened Beziers, not measurements at those exposures.
+  - >-
+    The same figure is printed on p. 15 of the October 2007 combined F-4016 (KODAK
+    PROFESSIONAL T-MAX Films); see recipes/f4016-2007-10.

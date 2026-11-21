@@ -1,0 +1,93 @@
+schema_version: 1
+publication:
+  publisher: Kodak Alaris
+  number: F-4016
+  title: KODAK PROFESSIONAL T-MAX 100 Film (Technical Data / Black-and-White Film)
+  edition: June 2018 (p. 1 "June 2018"; back page "Revised 6-18")
+  url: https://kodakprofessional.com/sites/default/files/wysiwyg/pro/resources/f4016_TMax_100.pdf
+  file: f4016-2018-06.pdf
+  sha256: 00518d7d1e296d6065f6e41ea3db999e5d8714679fb3d2b76d9a49eb207113be
+page: 8
+printed_page: "8"
+figure: Modulation Transfer Curves, KODAK PROFESSIONAL T-MAX 100 Film
+caption: >-
+  Exposure: Tungsten. Process: Small Tank, KODAK Developer D-76, 68°F (20°C).
+  Densitometry: Diffuse visual
+material: kodak/t-max-100
+method: vector
+# Region: the white box around the chart (filled path #10).
+region: [42.36, 325.62, 278.46, 537.24]
+# Frame: the stroked rectangle, path #37.
+frame: [71.15, 378.88, 273.66, 531.88]
+flatten_tolerance_pt: 0.01
+decimals: [4, 4]
+x:
+  title: SPATIAL FREQUENCY (cycles/mm)
+  unit: cycles/mm
+  side: bottom
+  scale: log10
+  fit: piecewise
+  note: >-
+    1 and 600 sit on the frame's left and right edges, 2 to 200 on grid lines #19-#26, #17,
+    #27, #29, #31, #36. As in the TRI-X figure the printed grid is not an exact logarithmic
+    scale (1 to 10: 71.73 pt; 10 to 100: 73.22 pt), so the curve is read piecewise between
+    neighbouring labelled grid lines; the least-squares residual of a single log scale is
+    reported and included in the error.
+  ticks:
+    - {label: "1", value: 1}
+    - {label: "2", value: 2}
+    - {label: "3", value: 3}
+    - {label: "4", value: 4}
+    - {label: "5", value: 5}
+    - {label: "10", value: 10}
+    - {label: "20", value: 20}
+    - {label: "50", value: 50}
+    - {label: "100", value: 100}
+    - {label: "200", value: 200}
+    - {label: "600", value: 600}
+y:
+  title: RESPONSE (%)
+  unit: "%"
+  side: left
+  scale: log10
+  fit: piecewise
+  note: >-
+    1 and 200 sit on the frame's bottom and top edges, 2 to 100 on grid lines. Read
+    piecewise between labelled grid lines, as for the x axis.
+  ticks:
+    - {label: "1", value: 1}
+    - {label: "2", value: 2}
+    - {label: "3", value: 3}
+    - {label: "5", value: 5}
+    - {label: "7", value: 7}
+    - {label: "10", value: 10}
+    - {label: "20", value: 20}
+    - {label: "30", value: 30}
+    - {label: "50", value: 50}
+    - {label: "70", value: 70}
+    - {label: "100", value: 100}
+    - {label: "200", value: 200}
+curves:
+  - output: mtf-d76-small-tank
+    quantity: modulation_transfer
+    style: {width: 0.72, dash: []}
+    expect: {paths: 1}
+    conditions:
+      developer: d-76
+      dilution: not stated in the figure
+      time: not stated
+      temperature: 20 C
+      agitation: small tank (no interval given)
+      format: not stated
+      densitometry: diffuse visual
+      exposure: tungsten (no exposure time given)
+notes:
+  - >-
+    The curve rises above 100 % (to about 113 %) at low and middle frequencies, as printed;
+    the values are kept as read.
+  - >-
+    Small circles inside the frame (paths #33, #34) are the degree signs of the caption,
+    drawn as 0.432-pt paths; the curve style (0.72 pt, solid) does not match them.
+  - >-
+    The same figure is printed on p. 14 of the October 2007 combined F-4016 (KODAK
+    PROFESSIONAL T-MAX Films); see recipes/f4016-2007-10.

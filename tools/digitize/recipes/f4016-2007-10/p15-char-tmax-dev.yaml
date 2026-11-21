@@ -1,0 +1,190 @@
+# Cross-check recipe, generated from f4016-2018-06/p8-char-tmax-dev.yaml with this
+# edition's page, region, frame and legend box. It stages nothing.
+schema_version: 1
+publication:
+  publisher: Eastman Kodak Company
+  number: F-4016
+  title: KODAK PROFESSIONAL T-MAX Films (Technical Data / Black-and-White Film)
+  edition: October 2007 (p. 1 "October 2007"; back cover "Revised 10-07")
+  url: https://web.archive.org/web/20090206022109id_/http://www.kodak.com:80/global/en/professional/support/techPubs/f4016/f4016.pdf
+  file: f4016-2007-10.pdf
+  sha256: 9590131941e463cd6b4746094101c7ce1efc799cdca9dbe0a3ce94e57692e979
+page: 15
+printed_page: '15'
+figure: Characteristic Curves (bottom), KODAK PROFESSIONAL T-MAX 100 Film
+caption: 'Exposure: Daylight. Process: KODAK PROFESSIONAL T-MAX Developer; Small Tank; 20°C (68°F).
+  Densitometry: Diffuse Visual'
+material: kodak/t-max-100
+method: vector
+region:
+- 342.0
+- 499.84
+- 558.0
+- 712.72
+frame:
+- 369.81
+- 524.75
+- 554.24
+- 709.18
+exclude:
+- - 489.93
+  - 542.2
+  - 546.72
+  - 583.03
+flatten_tolerance_pt: 0.01
+decimals:
+- 4
+- 4
+x:
+  title: LOG EXPOSURE (lux-seconds)
+  unit: log10(lux*s)
+  side: bottom
+  scale: linear
+  bar_notation: true
+  ticks:
+  - label: '4.0'
+    bar: true
+    value: -4.0
+  - label: '3.0'
+    bar: true
+    value: -3.0
+  - label: '2.0'
+    bar: true
+    value: -2.0
+  - label: '1.0'
+    bar: true
+    value: -1.0
+  - label: '0.0'
+    value: 0.0
+  - label: '1.0'
+    value: 1.0
+y:
+  title: DENSITY
+  unit: '1'
+  side: left
+  scale: linear
+  ticks:
+  - label: '0.0'
+    value: 0.0
+  - label: '1.0'
+    value: 1.0
+  - label: '2.0'
+    value: 2.0
+  - label: '3.0'
+    value: 3.0
+curves:
+- output: char-tmax-dev-06min
+  quantity: characteristic_curve
+  legend: 6 min
+  style:
+    width: 0.72
+    dash:
+    - 6.4777
+    - 3.2388
+    - 0.99964
+    - 3.2388
+  expect:
+    paths: 1
+    x_span:
+    - -3.15
+    - 0.65
+    tolerance:
+    - 0.01
+    - 0.01
+  conditions:
+    developer: t-max-dev
+    dilution: not stated in the figure
+    time: 6min
+    temperature: 20 C
+    agitation: small tank (the caption gives no interval, the small-tank procedure on p. 2 agitates
+      5 to 7 inversion cycles in 5 seconds at 30-second intervals)
+    format: not stated (the figure is not split by format)
+    densitometry: diffuse visual
+    exposure: daylight (no exposure time given)
+- output: char-tmax-dev-07min
+  quantity: characteristic_curve
+  legend: 7 min
+  style:
+    width: 0.72
+    dash:
+    - 3.2388
+    - 1.6194
+  expect:
+    paths: 1
+    x_span:
+    - -3.15
+    - 0.65
+    tolerance:
+    - 0.01
+    - 0.01
+  conditions:
+    developer: t-max-dev
+    dilution: not stated in the figure
+    time: 7min
+    temperature: 20 C
+    agitation: small tank (the caption gives no interval, the small-tank procedure on p. 2 agitates
+      5 to 7 inversion cycles in 5 seconds at 30-second intervals)
+    format: not stated (the figure is not split by format)
+    densitometry: diffuse visual
+    exposure: daylight (no exposure time given)
+- output: char-tmax-dev-10min
+  quantity: characteristic_curve
+  legend: 10 min
+  style:
+    width: 0.72
+    dash:
+    - 6.4777
+    - 3.2388
+  expect:
+    paths: 1
+    x_span:
+    - -3.15
+    - 0.65
+    tolerance:
+    - 0.01
+    - 0.01
+  conditions:
+    developer: t-max-dev
+    dilution: not stated in the figure
+    time: 10min
+    temperature: 20 C
+    agitation: small tank (the caption gives no interval, the small-tank procedure on p. 2 agitates
+      5 to 7 inversion cycles in 5 seconds at 30-second intervals)
+    format: not stated (the figure is not split by format)
+    densitometry: diffuse visual
+    exposure: daylight (no exposure time given)
+- output: char-tmax-dev-12min
+  quantity: characteristic_curve
+  legend: 12 min
+  style:
+    width: 0.72
+    dash: []
+  expect:
+    paths: 1
+    x_span:
+    - -3.15
+    - 0.39
+    tolerance:
+    - 0.01
+    - 0.01
+  conditions:
+    developer: t-max-dev
+    dilution: not stated in the figure
+    time: 12min
+    temperature: 20 C
+    agitation: small tank (the caption gives no interval, the small-tank procedure on p. 2 agitates
+      5 to 7 inversion cycles in 5 seconds at 30-second intervals)
+    format: not stated (the figure is not split by format)
+    densitometry: diffuse visual
+    exposure: daylight (no exposure time given)
+    plot_ceiling: the curve leaves the chart through the top of the frame (density 3.0) near log
+      exposure 0.39. Its last point is where it meets the frame edge, not the end of the measured
+      curve
+notes:
+- 'Cross-check of p8-char-tmax-dev.yaml against the same figure in the October 2007 combined F-4016
+  (kodak.com copy archived at web.archive.org). Region: white box path #44; frame: path #60; legend
+  box: path #49.'
+cross_check_of: f4016-2018-06/p8-char-tmax-dev.yaml
+max_difference:
+- 0.001
+- 0.001

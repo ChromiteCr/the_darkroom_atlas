@@ -1,0 +1,67 @@
+# material: kodak/t-max-100
+# quantity: modulation_transfer
+# x_unit: cycles/mm
+# y_unit: %
+# origin: datasheet
+# ref: Kodak Alaris, KODAK PROFESSIONAL T-MAX 100 Film (Technical Data / Black-and-White Film), Publication F-4016, June 2018 (p. 1 "June 2018"; back page "Revised 6-18"), p. 8, figure "Modulation Transfer Curves, KODAK PROFESSIONAL T-MAX 100 Film"; https://kodakprofessional.com/sites/default/files/wysiwyg/pro/resources/f4016_TMax_100.pdf (sha256 00518d7d1e296d6065f6e41ea3db999e5d8714679fb3d2b76d9a49eb207113be); digitised from the PDF's vector paths by tools/digitize/recipes/f4016-2018-06/p8-mtf.yaml; estimated error x +/-0.0218 decades (5.1 %), y +/-0.0205 decades (4.8 %)
+# conditions: developer=d-76; dilution=not stated in the figure; time=not stated; temperature=20 C; agitation=small tank (no interval given); format=not stated; densitometry=diffuse visual; exposure=tungsten (no exposure time given)
+2.4354,103.6764
+2.7457,104.6211
+3.0892,105.5175
+3.4628,106.3986
+4.0597,107.5431
+4.8241,108.5976
+5.7035,109.5615
+6.7344,110.4344
+7.9520,111.2162
+9.3898,111.9072
+11.0269,112.5080
+12.9060,113.0192
+14.2796,113.3125
+15.6947,113.5207
+17.0323,113.6681
+18.4838,113.7536
+20.0607,113.7480
+21.8278,113.6224
+23.7498,113.3483
+25.8399,112.8978
+28.1123,112.2445
+29.3217,111.8339
+30.5826,111.3635
+32.3102,110.6443
+34.1052,109.8426
+35.9497,108.9644
+37.6211,108.1176
+39.3620,107.1368
+41.1740,106.0274
+43.0585,104.7955
+45.0169,103.4471
+47.0503,101.9890
+49.1599,100.4278
+51.3583,98.8441
+53.6432,97.2009
+56.0078,95.4790
+58.4525,93.6850
+60.9773,91.8255
+63.5820,89.9073
+66.2661,87.9368
+69.0288,85.9207
+71.8687,83.8654
+74.7845,81.7773
+77.7741,79.6624
+80.8352,77.5268
+83.9650,75.3763
+87.1602,73.2165
+90.4172,71.0528
+93.7316,68.8553
+97.0989,66.6325
+100.5210,64.4231
+104.0275,62.2313
+107.5717,60.0614
+111.1466,57.9173
+114.7450,55.8026
+118.3586,53.7205
+121.9789,51.6741
+125.5968,49.6689
+137.3041,44.2457
+152.1443,38.5406

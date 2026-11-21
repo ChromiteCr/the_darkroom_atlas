@@ -1,0 +1,86 @@
+# material: kodak/t-max-100
+# quantity: characteristic_curve
+# x_unit: log10(lux*s)
+# y_unit: 1
+# origin: datasheet
+# ref: Kodak Alaris, KODAK PROFESSIONAL T-MAX 100 Film (Technical Data / Black-and-White Film), Publication F-4016, June 2018 (p. 1 "June 2018"; back page "Revised 6-18"), p. 8, figure "Characteristic Curves (middle), KODAK PROFESSIONAL T-MAX 100 Film" (curve: 15 min); https://kodakprofessional.com/sites/default/files/wysiwyg/pro/resources/f4016_TMax_100.pdf (sha256 00518d7d1e296d6065f6e41ea3db999e5d8714679fb3d2b76d9a49eb207113be); digitised from the PDF's vector paths by tools/digitize/recipes/f4016-2018-06/p8-char-tmax-rs.yaml; estimated error x +/-0.0198 log10(lux*s), y +/-0.0158
+# conditions: developer=t-max-rs; dilution=not stated in the figure (T-MAX RS Developer and Replenisher); time=15min; temperature=20 C; agitation=large tank (the caption gives no interval, the large-tank procedure on p. 3 agitates once per minute after continuous agitation for the first 15 to 30 seconds); format=not stated (the figure is not split by format); densitometry=diffuse visual; exposure=daylight (no exposure time given)
+-3.1745,0.2598
+-3.1035,0.2610
+-3.0409,0.2623
+-2.9858,0.2637
+-2.9229,0.2655
+-2.8624,0.2674
+-2.8042,0.2698
+-2.7479,0.2729
+-2.6933,0.2770
+-2.6666,0.2795
+-2.6402,0.2824
+-2.6142,0.2856
+-2.5885,0.2893
+-2.5630,0.2934
+-2.5377,0.2980
+-2.5127,0.3031
+-2.4878,0.3088
+-2.4631,0.3151
+-2.4385,0.3219
+-2.4139,0.3295
+-2.3895,0.3377
+-2.3650,0.3467
+-2.3406,0.3564
+-2.3161,0.3669
+-2.2916,0.3782
+-2.2670,0.3904
+-2.2422,0.4034
+-2.2173,0.4174
+-2.1923,0.4324
+-2.1670,0.4484
+-2.1415,0.4654
+-2.1164,0.4827
+-2.0912,0.5006
+-2.0399,0.5399
+-1.9893,0.5800
+-1.9395,0.6207
+-1.8902,0.6620
+-1.8415,0.7038
+-1.7931,0.7460
+-1.6973,0.8312
+-1.6019,0.9167
+-1.5060,1.0019
+-1.4578,1.0441
+-1.4091,1.0859
+-1.3599,1.1272
+-1.3101,1.1680
+-1.2850,1.1884
+-1.2598,1.2084
+-1.2346,1.2284
+-1.2093,1.2480
+-1.1110,1.3232
+-1.0129,1.3973
+-0.9154,1.4711
+-0.8670,1.5081
+-0.8190,1.5453
+-0.7713,1.5829
+-0.7241,1.6208
+-0.6774,1.6593
+-0.6313,1.6984
+-0.5858,1.7382
+-0.5409,1.7788
+-0.4969,1.8204
+-0.4536,1.8629
+-0.4284,1.8877
+-0.4032,1.9132
+-0.3452,1.9740
+-0.2879,2.0354
+-0.2314,2.0972
+-0.1755,2.1596
+-0.1202,2.2224
+-0.0655,2.2855
+-0.0112,2.3489
+0.0427,2.4125
+0.1494,2.5404
+0.2553,2.6686
+0.3608,2.7967
+0.4664,2.9244
+0.5215,2.9909
+0.6551,3.1521

@@ -1,0 +1,190 @@
+# Cross-check recipe, generated from f4016-2018-06/p8-char-tmax-rs.yaml with this
+# edition's page, region, frame and legend box. It stages nothing.
+schema_version: 1
+publication:
+  publisher: Eastman Kodak Company
+  number: F-4016
+  title: KODAK PROFESSIONAL T-MAX Films (Technical Data / Black-and-White Film)
+  edition: October 2007 (p. 1 "October 2007"; back cover "Revised 10-07")
+  url: https://web.archive.org/web/20090206022109id_/http://www.kodak.com:80/global/en/professional/support/techPubs/f4016/f4016.pdf
+  file: f4016-2007-10.pdf
+  sha256: 9590131941e463cd6b4746094101c7ce1efc799cdca9dbe0a3ce94e57692e979
+page: 15
+printed_page: '15'
+figure: Characteristic Curves (middle), KODAK PROFESSIONAL T-MAX 100 Film
+caption: 'Exposure: Daylight. Process: KODAK PROFESSIONAL T-MAX RS Developer and Replenisher;
+  Large Tank; 20°C (68°F). Densitometry: Diffuse Visual'
+material: kodak/t-max-100
+method: vector
+region:
+- 66.0
+- 257.92
+- 282.0
+- 469.84
+frame:
+- 93.81
+- 282.86
+- 278.24
+- 467.36
+exclude:
+- - 102.52
+  - 372.17
+  - 167.22
+  - 413.02
+flatten_tolerance_pt: 0.01
+decimals:
+- 4
+- 4
+x:
+  title: LOG EXPOSURE (lux-seconds)
+  unit: log10(lux*s)
+  side: bottom
+  scale: linear
+  bar_notation: true
+  ticks:
+  - label: '4.0'
+    bar: true
+    value: -4.0
+  - label: '3.0'
+    bar: true
+    value: -3.0
+  - label: '2.0'
+    bar: true
+    value: -2.0
+  - label: '1.0'
+    bar: true
+    value: -1.0
+  - label: '0.0'
+    value: 0.0
+  - label: '1.0'
+    value: 1.0
+y:
+  title: DENSITY
+  unit: '1'
+  side: left
+  scale: linear
+  ticks:
+  - label: '0.0'
+    value: 0.0
+  - label: '1.0'
+    value: 1.0
+  - label: '2.0'
+    value: 2.0
+  - label: '3.0'
+    value: 3.0
+  - label: '4.0'
+    value: 4.0
+curves:
+- output: char-tmax-rs-08min
+  quantity: characteristic_curve
+  legend: 8 min
+  legend_max_gap_pt: 20
+  style:
+    width: 0.72
+    dash:
+    - 6.4789
+    - 3.2394
+    - 0.99982
+    - 3.2394
+  expect:
+    paths: 1
+    x_span:
+    - -3.17
+    - 0.66
+    tolerance:
+    - 0.01
+    - 0.01
+  conditions:
+    developer: t-max-rs
+    dilution: not stated in the figure (T-MAX RS Developer and Replenisher)
+    time: 8min
+    temperature: 20 C
+    agitation: large tank (the caption gives no interval, the large-tank procedure on p. 3 agitates
+      once per minute after continuous agitation for the first 15 to 30 seconds)
+    format: not stated (the figure is not split by format)
+    densitometry: diffuse visual
+    exposure: daylight (no exposure time given)
+- output: char-tmax-rs-10.5min
+  quantity: characteristic_curve
+  legend: 10.5 min
+  style:
+    width: 0.72
+    dash:
+    - 3.2394
+    - 1.6197
+  expect:
+    paths: 1
+    x_span:
+    - -3.17
+    - 0.66
+    tolerance:
+    - 0.01
+    - 0.01
+  conditions:
+    developer: t-max-rs
+    dilution: not stated in the figure (T-MAX RS Developer and Replenisher)
+    time: 10.5min
+    temperature: 20 C
+    agitation: large tank (the caption gives no interval, the large-tank procedure on p. 3 agitates
+      once per minute after continuous agitation for the first 15 to 30 seconds)
+    format: not stated (the figure is not split by format)
+    densitometry: diffuse visual
+    exposure: daylight (no exposure time given)
+- output: char-tmax-rs-13min
+  quantity: characteristic_curve
+  legend: 13 min
+  style:
+    width: 0.72
+    dash:
+    - 6.4789
+    - 3.2394
+  expect:
+    paths: 1
+    x_span:
+    - -3.17
+    - 0.66
+    tolerance:
+    - 0.01
+    - 0.01
+  conditions:
+    developer: t-max-rs
+    dilution: not stated in the figure (T-MAX RS Developer and Replenisher)
+    time: 13min
+    temperature: 20 C
+    agitation: large tank (the caption gives no interval, the large-tank procedure on p. 3 agitates
+      once per minute after continuous agitation for the first 15 to 30 seconds)
+    format: not stated (the figure is not split by format)
+    densitometry: diffuse visual
+    exposure: daylight (no exposure time given)
+- output: char-tmax-rs-15min
+  quantity: characteristic_curve
+  legend: 15 min
+  style:
+    width: 0.72
+    dash: []
+  expect:
+    paths: 1
+    x_span:
+    - -3.17
+    - 0.66
+    tolerance:
+    - 0.01
+    - 0.01
+  conditions:
+    developer: t-max-rs
+    dilution: not stated in the figure (T-MAX RS Developer and Replenisher)
+    time: 15min
+    temperature: 20 C
+    agitation: large tank (the caption gives no interval, the large-tank procedure on p. 3 agitates
+      once per minute after continuous agitation for the first 15 to 30 seconds)
+    format: not stated (the figure is not split by format)
+    densitometry: diffuse visual
+    exposure: daylight (no exposure time given)
+notes:
+- 'Cross-check of p8-char-tmax-rs.yaml against the same figure in the October 2007 combined F-4016
+  (kodak.com copy archived at web.archive.org). Region: white box path #22; frame: path #39; legend
+  box: path #27.'
+cross_check_of: f4016-2018-06/p8-char-tmax-rs.yaml
+max_difference:
+- 0.001
+- 0.001

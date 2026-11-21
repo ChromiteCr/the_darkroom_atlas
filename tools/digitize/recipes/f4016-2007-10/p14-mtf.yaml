@@ -1,0 +1,116 @@
+# Cross-check recipe, generated from f4016-2018-06/p8-mtf.yaml with this
+# edition's page, region, frame and legend box. It stages nothing.
+schema_version: 1
+publication:
+  publisher: Eastman Kodak Company
+  number: F-4016
+  title: KODAK PROFESSIONAL T-MAX Films (Technical Data / Black-and-White Film)
+  edition: October 2007 (p. 1 "October 2007"; back cover "Revised 10-07")
+  url: https://web.archive.org/web/20090206022109id_/http://www.kodak.com:80/global/en/professional/support/techPubs/f4016/f4016.pdf
+  file: f4016-2007-10.pdf
+  sha256: 9590131941e463cd6b4746094101c7ce1efc799cdca9dbe0a3ce94e57692e979
+page: 14
+printed_page: '14'
+figure: Modulation Transfer Curves, KODAK PROFESSIONAL T-MAX 100 Film
+caption: 'Exposure: Tungsten. Process: Small Tank, KODAK Developer D-76, 68°F (20°C). Densitometry:
+  Diffuse visual'
+material: kodak/t-max-100
+method: vector
+region:
+- 42.0
+- 481.84
+- 282.0
+- 697.84
+frame:
+- 74.61
+- 538.49
+- 277.12
+- 691.49
+flatten_tolerance_pt: 0.01
+decimals:
+- 4
+- 4
+x:
+  title: SPATIAL FREQUENCY (cycles/mm)
+  unit: cycles/mm
+  side: bottom
+  scale: log10
+  fit: piecewise
+  ticks:
+  - label: '1'
+    value: 1
+  - label: '2'
+    value: 2
+  - label: '3'
+    value: 3
+  - label: '4'
+    value: 4
+  - label: '5'
+    value: 5
+  - label: '10'
+    value: 10
+  - label: '20'
+    value: 20
+  - label: '50'
+    value: 50
+  - label: '100'
+    value: 100
+  - label: '200'
+    value: 200
+  - label: '600'
+    value: 600
+y:
+  title: RESPONSE (%)
+  unit: '%'
+  side: left
+  scale: log10
+  fit: piecewise
+  ticks:
+  - label: '1'
+    value: 1
+  - label: '2'
+    value: 2
+  - label: '3'
+    value: 3
+  - label: '5'
+    value: 5
+  - label: '7'
+    value: 7
+  - label: '10'
+    value: 10
+  - label: '20'
+    value: 20
+  - label: '30'
+    value: 30
+  - label: '50'
+    value: 50
+  - label: '70'
+    value: 70
+  - label: '100'
+    value: 100
+  - label: '200'
+    value: 200
+curves:
+- output: mtf-d76-small-tank
+  quantity: modulation_transfer
+  style:
+    width: 0.72
+    dash: []
+  expect:
+    paths: 1
+  conditions:
+    developer: d-76
+    dilution: not stated in the figure
+    time: not stated
+    temperature: 20 C
+    agitation: small tank (no interval given)
+    format: not stated
+    densitometry: diffuse visual
+    exposure: tungsten (no exposure time given)
+notes:
+- 'Cross-check of p8-mtf.yaml against the same figure in the October 2007 combined F-4016 (kodak.com
+  copy archived at web.archive.org). Region: white box path #1; frame: path #28.'
+cross_check_of: f4016-2018-06/p8-mtf.yaml
+max_difference:
+- 0.001
+- 0.001

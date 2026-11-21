@@ -1,0 +1,31 @@
+# material: kodak/t-max-100
+# quantity: contrast_index
+# x_unit: min
+# y_unit: 1
+# origin: datasheet
+# ref: Kodak Alaris, KODAK PROFESSIONAL T-MAX 100 Film (Technical Data / Black-and-White Film), Publication F-4016, June 2018 (p. 1 "June 2018"; back page "Revised 6-18"), p. 9 (unnumbered back page), figure "Contrast Index Curves (top left, Small Tank), KODAK PROFESSIONAL T-MAX 100 Film" (curve: T-MAX); https://kodakprofessional.com/sites/default/files/wysiwyg/pro/resources/f4016_TMax_100.pdf (sha256 00518d7d1e296d6065f6e41ea3db999e5d8714679fb3d2b76d9a49eb207113be); digitised from the PDF's vector paths by tools/digitize/recipes/f4016-2018-06/p9-contrast-index-small-tank.yaml; estimated error x +/-0.0555 min, y +/-0.0024
+# conditions: developer=t-max-dev; dilution=not stated in the figure; temperature=20 C; agitation=small tank (the figure gives no interval, the small-tank procedure on p. 2 agitates at 30-second intervals); format=not stated (the figure is not split by format); densitometry=diffuse visual
+7.7002,0.5600
+9.2054,0.6124
+9.8024,0.6332
+10.0986,0.6435
+10.3931,0.6538
+10.6857,0.6642
+10.9764,0.6746
+11.2650,0.6851
+11.5514,0.6957
+11.8355,0.7063
+12.1171,0.7172
+12.2569,0.7226
+12.3961,0.7281
+12.5346,0.7337
+12.6723,0.7393
+12.8094,0.7449
+12.9458,0.7506
+13.0814,0.7563
+13.2162,0.7622
+13.3503,0.7680
+13.4836,0.7740
+13.6160,0.7800
+13.7477,0.7860
+14.4999,0.8200

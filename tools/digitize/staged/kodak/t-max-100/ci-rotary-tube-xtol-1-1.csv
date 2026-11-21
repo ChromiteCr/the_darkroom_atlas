@@ -1,0 +1,16 @@
+# material: kodak/t-max-100
+# quantity: contrast_index
+# x_unit: min
+# y_unit: 1
+# origin: datasheet
+# ref: Kodak Alaris, KODAK PROFESSIONAL T-MAX 100 Film (Technical Data / Black-and-White Film), Publication F-4016, June 2018 (p. 1 "June 2018"; back page "Revised 6-18"), p. 9 (unnumbered back page), figure "Contrast Index Curves (bottom left, Rotary Tube), KODAK PROFESSIONAL T-MAX 100 Film" (curve: XTOL 1:1); https://kodakprofessional.com/sites/default/files/wysiwyg/pro/resources/f4016_TMax_100.pdf (sha256 00518d7d1e296d6065f6e41ea3db999e5d8714679fb3d2b76d9a49eb207113be); digitised from the PDF's vector paths by tools/digitize/recipes/f4016-2018-06/p9-contrast-index-rotary-tube.yaml; estimated error x +/-0.0555 min, y +/-0.0024
+# conditions: developer=xtol; dilution=1+1 (printed 1:1); temperature=20 C; agitation=rotary tube (neither the figure nor F-4016 states the rotation); format=not stated (the figure is not split by format); densitometry=diffuse visual
+9.7000,0.5600
+10.4948,0.6130
+11.1079,0.6541
+11.5826,0.6862
+11.9624,0.7125
+12.2908,0.7360
+12.6110,0.7597
+12.9660,0.7867
+13.3999,0.8200
