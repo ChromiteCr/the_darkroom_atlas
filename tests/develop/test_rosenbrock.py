@@ -21,6 +21,7 @@ from darkroom_atlas.develop.rosenbrock import (
     ros2_step,
     ros2_step_columns,
     solve_columns,
+    toth_transport_jacobian,
 )
 
 # A small development-like column: 2 dense (emulsion) levels with 2 components and 1 local
@@ -292,6 +293,147 @@ def test_diffusion_integrator():
     assert errs[-1] < 1e-4
     for e0, e1 in itertools.pairwise(errs):
         assert 3.5 <= e0 / e1 <= 4.5, errs
+
+
+def _slab_series_cell_means(n_z, tau, terms=4000):
+    """Cell means of the finite-slab series solution, base zero flux, C0 = 1 at the top."""
+    edges = np.arange(n_z + 1) / n_z  # fractional height from the base
+    k = (2 * np.arange(terms)[:, None] + 1) * math.pi / 2
+    sign = (-1.0) ** np.arange(terms)[:, None]
+    s = np.sin(k * edges[None, 1:]) - np.sin(k * edges[None, :-1])
+    return 1.0 - np.sum(4.0 * sign / (2.0 * k) * s / (k / n_z) * np.exp(-k * k * tau), axis=0)
+
+
+def test_diffusion_into_slab():
+    # Spec D1 2.4.13 (num16): no reaction, s = 1, constant top value, emulsion n_z = 8/16/32
+    # (dense levels, one component); cell means against the finite-slab series. The error
+    # ratio between refinements is >= 3 at tD/L^2 in {0.01, 0.1, 0.3}; at n_z = 8 the error is
+    # <= 2e-3 C0 for tD/L^2 >= 1. The error is the max over cells of |C - cell mean of the
+    # series|, which reproduces the spec's n_z = 8 values (7.3e-2 at 0.01, 3.3e-3 at 0.3).
+    length, d = 10.0, 1.0  # um, um^2/s: t = tau L^2 / D
+    taus = (0.01, 0.1, 0.3, 1.0)
+    errors = {}
+    for n_z in (8, 16, 32):
+        thick = np.full(n_z, length / n_z)
+        lower, upper, self_, top = _transport(thick, np.full((n_z, 1), d))
+        lay = ColumnLayout(n_dense=n_z, n_diag=0, n_comp=1)
+        jac = ColumnJacobian(
+            lay, self_[None, :, :, None], np.zeros((1, 0, 1)), lower, upper
+        )  # fmt: skip
+        full = jac.to_dense()[0]
+        src = np.zeros(lay.size)
+        src[-1] = top[0]
+
+        def f(t, y, full=full, src=src):
+            return np.einsum("ij,nj->ni", full, y) + src
+
+        y, t, h = np.zeros((1, lay.size)), 0.0, 1e-4
+        for tau in taus:
+            t_out = tau * length**2 / d
+            while t < t_out:
+                step = min(h, t_out - t)
+                y, _ = ros2_step_columns(f, t, y, step, jac)
+                t += step
+                h = min(1.03 * h, 0.1)
+            errors[n_z, tau] = np.max(np.abs(y[0] - _slab_series_cell_means(n_z, tau)))
+    assert errors[8, 0.01] == pytest.approx(7.3e-2, abs=1e-3)
+    assert errors[8, 0.3] == pytest.approx(3.3e-3, abs=1e-4)
+    for tau in (0.01, 0.1, 0.3):
+        assert errors[8, tau] / errors[16, tau] >= 3.0, errors
+        assert errors[16, tau] / errors[32, tau] >= 3.0, errors
+    assert errors[8, 1.0] <= 2e-3
+
+
+# ---- TOTH transport Jacobian (spec D1 2.4.8, 3.3) -------------------------------------------
+
+
+def _toth_column():
+    from darkroom_atlas.chemistry.speciation import make_speciation
+    from darkroom_atlas.chemistry.species import AcidBaseFamily
+    from darkroom_atlas.data.models import ActivityParams
+
+    q = {"value": 0.0, "unit": "1", "source": "assumed", "note": "test"}
+    params = ActivityParams(
+        debye_huckel_A_20C=q,
+        debye_huckel_A_25C=q,
+        sit_b={"value": 1.5, "unit": "1", "source": "assumed", "note": "test"},
+        delta_eps={},
+    )
+    sulfite = AcidBaseFamily(
+        "sulfite", (0, -1, -2), (2, 1, 0), (1.86, 7.19), "van_t_hoff", (0.0, 0.0), (), "x"
+    )
+    hq = AcidBaseFamily(
+        "hydroquinone", (0, -1, -2), (0, -1, -2), (9.85, 11.45), "van_t_hoff", (0.0, 0.0), (), "x"
+    )
+    gel = AcidBaseFamily("gelatin", (1, 0), (1, 0), (10.5,), "van_t_hoff", (0.0,), (), "none")
+    spec = make_speciation([sulfite, hq, gel], 293.15, 0.0, 0.0, params)
+    # 4 levels: 2 gel cells (with gelatin), overcoat, liquid.
+    totals = np.array([[0.6, 0.62, 0.7, 0.79], [0.03, 0.035, 0.04, 0.045], [0.02, 0.02, 0.01, 0.0]])
+    ph = np.array([8.2, 8.3, 8.4, 8.5])
+    thick = np.array([5.0, 5.0, 3.0, 20.0])
+    # Face D per carrier (sulfite, HQ, H+, OH-): gel faces smaller.
+    face_d = np.array([[500.0, 600.0, 900.0], [80.0, 100.0, 700.0], [4000.0, 5000.0, 8130.0],
+                       [2300.0, 3000.0, 4600.0]])  # fmt: skip
+    return spec, totals, ph, thick, face_d
+
+
+def test_toth_transport_jacobian_matches_finite_difference():
+    from darkroom_atlas.chemistry.speciation import (
+        buffer_capacity,
+        mean_protons,
+        solve_ph,
+        water_ions,
+    )
+    from darkroom_atlas.develop.lateral import carrier_capacities
+
+    spec, totals, ph, thick, face_d = _toth_column()
+    nbar = mean_protons(spec, ph)
+    h_ion, oh_ion = water_ions(spec, ph)
+    toth = (totals * nbar).sum(axis=0) + h_ion - oh_ion
+    h_face = 0.5 * (thick[:-1] + thick[1:])
+
+    def f_toth(toth_vec):
+        p = solve_ph(spec, totals, toth_vec, ph0=ph)
+        pf = totals[:2] * mean_protons(spec, p)[:2]  # mobile families only
+        hh, oo = water_ions(spec, p)
+        flux = np.zeros(thick.size - 1)
+        for c, x in enumerate((pf[0], pf[1], hh)):
+            flux -= face_d[c] * (x[1:] - x[:-1]) / h_face
+        flux += face_d[3] * (oo[1:] - oo[:-1]) / h_face
+        out = np.zeros(thick.size)  # zero flux at both ends
+        out[:-1] -= flux / thick[:-1]
+        out[1:] += flux / thick[1:]
+        return out
+
+    beta_c = carrier_capacities(spec, totals, ph, [True, True, False])  # (4, L)
+    beta = buffer_capacity(spec, totals, ph)
+    lower, upper, self_ = toth_transport_jacobian(
+        beta_c[:, None, :], beta[None], face_d[:, None, :], h_face, thick
+    )
+    fd = np.zeros((thick.size, thick.size))
+    delta = 1e-7
+    for j in range(thick.size):
+        e = np.zeros(thick.size)
+        e[j] = delta
+        fd[:, j] = (f_toth(toth + e) - f_toth(toth - e)) / (2 * delta)
+    scale = np.max(np.abs(fd))
+    np.testing.assert_allclose(np.diag(fd), self_[0], rtol=1e-6, atol=1e-9 * scale)
+    np.testing.assert_allclose(np.diag(fd, -1), lower[0], rtol=1e-6, atol=1e-9 * scale)
+    np.testing.assert_allclose(np.diag(fd, 1), upper[0], rtol=1e-6, atol=1e-9 * scale)
+    # Only the tridiagonal part is present (no longer-range coupling).
+    assert np.max(np.abs(np.triu(fd, 2))) <= 1e-9 * scale
+
+
+def test_toth_transport_jacobian_rejects_bad_input():
+    *_, thick, face_d = _toth_column()
+    h_face = 0.5 * (thick[:-1] + thick[1:])
+    beta_c = np.ones((4, 1, 4))
+    with pytest.raises(ValueError, match="beta_total"):
+        toth_transport_jacobian(beta_c, np.zeros((1, 4)), face_d[:, None], h_face, thick)
+    with pytest.raises(ValueError, match="shape"):
+        toth_transport_jacobian(beta_c, np.ones((1, 3)), face_d[:, None], h_face, thick)
+    with pytest.raises(ValueError, match="face"):
+        toth_transport_jacobian(beta_c, np.ones((1, 4)), face_d[:, None], h_face[:2], thick)
 
 
 # ---- block-Thomas ----------------------------------------------------------------------------

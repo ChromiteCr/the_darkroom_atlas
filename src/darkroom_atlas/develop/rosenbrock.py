@@ -40,6 +40,10 @@ gamma_h, dense_update=...)`` adds the Schur term to the dense blocks of ``I - ga
 the caller's own ``solve`` closure handed to :func:`ros2_step` reduces and back-substitutes the
 eliminated part around :func:`solve_columns`.
 
+Frozen cells. During agitation the upper liquid cells are not solved (spec D1 2.4.8): give them
+zero rows in ``f`` and ``J`` (so ``M = I`` there, ``k = 0``) and no coupling across the
+``delta_agit`` face, then overwrite them with the bulk value after the step.
+
 Negative concentrations (spec D1 3.3, revised): steps are never rejected or split on a fixed
 schedule; :func:`min_scaled_concentration` records ``min C_k / s_k`` with ``s_k = max(c_k,bulk(0),
 1 mM)`` (:func:`concentration_scale`). The adaptive reference profile treats ``min C/s_k <
@@ -53,6 +57,8 @@ Public functions::
     ros2_step(f, t: float, y: ndarray (N, n), h: float, solve) -> (y_new, err)
         # f(t, y) -> (N, n); solve(rhs) solves (I - GAMMA h J) k = rhs for this h
     ros2_step_columns(f, t, y, h, jac: ColumnJacobian) -> (y_new, err)
+    toth_transport_jacobian(beta_carriers, beta_total, face_diffusion_um2_s,
+                            face_distance_um, thickness_um) -> (lower, upper, self)
     concentration_scale(bulk_initial: ndarray (K,)) -> ndarray (K,)
     min_scaled_concentration(conc: ndarray (..., K), scale: ndarray (K,)) -> float
     error_norm(err, y_old, y_new, *, rtol: float, scale) -> float
@@ -83,6 +89,7 @@ __all__ = [
     "ros2_step",
     "ros2_step_columns",
     "solve_columns",
+    "toth_transport_jacobian",
 ]
 
 GAMMA = 1.0 + 1.0 / math.sqrt(2.0)
@@ -475,6 +482,72 @@ def ros2_step_columns(
     """:func:`ros2_step` with the block-Thomas solve of ``jac`` (factored once for both stages)."""
     factor = factor_columns(jac, GAMMA * float(h))
     return ros2_step(f, t, y, h, lambda rhs: solve_columns(factor, rhs))
+
+
+def toth_transport_jacobian(
+    beta_carriers: np.ndarray,
+    beta_total: np.ndarray,
+    face_diffusion_um2_s: np.ndarray,
+    face_distance_um: np.ndarray,
+    thickness_um: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """TOTH transport entries of ``J`` (spec D1 3.3), only the TOTH-on-TOTH derivatives.
+
+    The face flux of spec D1 2.4.8 is built from the mobile carriers ``c`` (the mobile families'
+    proton amounts ``P_f``, ``[H+]``, ``[OH-]``). Its derivative with respect to the TOTH of the
+    cell on either side of face ``l+1/2`` is ``+-G`` with::
+
+        G(face, cell) = sum_c Dbar_c,face beta_c,cell / (beta_cell h_face)
+
+    (``beta_c`` the carrier's buffer capacity, ``beta_cell`` the cell's total including
+    gelatin). Inputs: ``beta_carriers`` ``(C, N, L)``, ``beta_total`` ``(N, L)``,
+    ``face_diffusion_um2_s`` ``(C, N, L-1)`` (or broadcastable), ``face_distance_um``
+    ``(L-1,)`` = ``(Delta_l + Delta_l+1)/2``, ``thickness_um`` ``(L,)``. Returns ``(lower,
+    upper, self)`` in the convention of :class:`ColumnJacobian`: ``lower`` ``(N, L-1)`` =
+    ``G(l+1/2, l)/Delta_l+1``, ``upper`` ``(N, L-1)`` = ``G(l+1/2, l+1)/Delta_l``, ``self``
+    ``(N, L)`` = ``-(G(l-1/2, l) + G(l+1/2, l))/Delta_l``. The flux through the top Dirichlet
+    face is the caller's (it adds its own self term to the cell below that face).
+    """
+    bc = np.asarray(beta_carriers, dtype=np.float64)
+    bt = np.asarray(beta_total, dtype=np.float64)
+    thick = np.asarray(thickness_um, dtype=np.float64)
+    hf = np.asarray(face_distance_um, dtype=np.float64)
+    if bc.ndim != 3 or bt.shape != bc.shape[1:]:
+        raise ValueError(
+            f"beta_carriers (C, N, L) and beta_total (N, L) disagree in shape: {bc.shape} vs "
+            f"{bt.shape}"
+        )
+    n_lev = bc.shape[2]
+    if thick.shape != (n_lev,) or hf.shape != (n_lev - 1,):
+        raise ValueError(
+            f"thickness_um must be ({n_lev},) and face_distance_um ({n_lev - 1},), got "
+            f"{thick.shape} and {hf.shape}"
+        )
+    target = (bc.shape[0], bc.shape[1], n_lev - 1)
+    try:
+        df = np.broadcast_to(np.asarray(face_diffusion_um2_s, dtype=np.float64), target)
+    except ValueError:
+        raise ValueError(f"face_diffusion_um2_s must broadcast to {target}") from None
+    for name, a in (("beta_carriers", bc), ("face_diffusion_um2_s", df)):
+        if not (np.all(np.isfinite(a)) and np.all(a >= 0.0)):
+            raise ValueError(f"{name} must be finite and >= 0")
+    if not (np.all(np.isfinite(bt)) and np.all(bt > 0.0)):
+        raise ValueError("beta_total must be finite and > 0")
+    if not (np.all(thick > 0.0) and np.all(hf > 0.0)):
+        raise ValueError("thickness_um and face_distance_um must be > 0")
+    below = np.zeros(target[1:])  # sum_c Dbar_c beta_c,l over face l+1/2, cell l (below)
+    above = np.zeros(target[1:])  # same with the cell l+1 (above)
+    for c in range(bc.shape[0]):  # explicit loop: no reduction (spec D1 3.6)
+        below = below + df[c] * bc[c, :, :-1]
+        above = above + df[c] * bc[c, :, 1:]
+    g_below = below / (bt[:, :-1] * hf)
+    g_above = above / (bt[:, 1:] * hf)
+    lower = g_below / thick[1:]
+    upper = g_above / thick[:-1]
+    self_ = np.zeros(bt.shape)
+    self_[:, :-1] -= g_below / thick[:-1]
+    self_[:, 1:] -= g_above / thick[1:]
+    return lower, upper, self_
 
 
 def concentration_scale(bulk_initial: np.ndarray) -> np.ndarray:
