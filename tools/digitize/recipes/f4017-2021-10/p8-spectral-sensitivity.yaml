@@ -77,6 +77,9 @@ curves:
         the legend gives the dashed, lower curve to D=0.3 and the solid, upper curve to
         D=1.0, but a lower density needs less exposure and so has the higher log
         sensitivity, which suggests the legend is swapped. Kept as printed, not corrected
+      plot_floor: >-
+        the last points drop to the bottom of the frame (log sensitivity 0.0) near 655-670 nm.
+        That drop shows the sensitivity leaving the plotted range and is not a measured value
   - output: spectral-sensitivity-d1.0
     quantity: spectral_sensitivity
     legend: D=1.0>Gross Fog
@@ -88,7 +91,7 @@ curves:
 notes:
   - >-
     Cross-checked against the same figure on p. 7 of the February 2016 edition
-    (recipes/f4017-2016-02, identical to the last decimal) and on p. 10 of the May 2007
+    (recipes/f4017-2016-02, within 0.0001, which is rounding) and on p. 10 of the May 2007
     edition (recipes/f4017-2007-05, within 0.005).
   - >-
     Possible legend error in the publication: the curve the legend labels D=1.0 (solid)

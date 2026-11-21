@@ -140,7 +140,7 @@ curves:
 notes:
   - >-
     Cross-checked against the same figure on p. 8 of the February 2016 edition
-    (recipes/f4017-2016-02, identical to the last decimal). The May 2007 edition's
+    (recipes/f4017-2016-02, within 0.0001, which is rounding). The May 2007 edition's
     contrast-index figure (p. 12) draws the curves with different widths and dashes and
     is not cross-checked.
   - >-

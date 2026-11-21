@@ -109,6 +109,8 @@ curves:
     legend_check: the legend gives the dashed, lower curve to D=0.3 and the solid, upper curve to
       D=1.0, but a lower density needs less exposure and so has the higher log sensitivity, which
       suggests the legend is swapped. Kept as printed, not corrected
+    plot_floor: the last points drop to the bottom of the frame (log sensitivity 0.0) near 655-670
+      nm. That drop shows the sensitivity leaving the plotted range and is not a measured value
 - output: spectral-sensitivity-d1.0
   quantity: spectral_sensitivity
   legend: D=1.0>Gross Fog
@@ -133,9 +135,11 @@ curves:
     legend_check: the legend gives the dashed, lower curve to D=0.3 and the solid, upper curve to
       D=1.0, but a lower density needs less exposure and so has the higher log sensitivity, which
       suggests the legend is swapped. Kept as printed, not corrected
+    plot_floor: the last points drop to the bottom of the frame (log sensitivity 0.0) near 655-670
+      nm. That drop shows the sensitivity leaving the plotted range and is not a measured value
 notes:
 - 'Cross-check: the same figure in the February 2016 edition. Its paths are the 2021 paths moved on
-  the page, so the curves should agree to the last decimal.'
+  the page, so the curves should agree within rounding (0.0001).'
 cross_check_of: tools/digitize/recipes/f4017-2021-10/p8-spectral-sensitivity.yaml
 max_difference:
 - 0.0002

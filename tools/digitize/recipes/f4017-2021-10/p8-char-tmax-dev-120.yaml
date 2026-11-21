@@ -94,5 +94,5 @@ curves:
 notes:
   - >-
     Cross-checked against the same figure on p. 7 of the February 2016 edition
-    (recipes/f4017-2016-02, identical to the last decimal) and on p. 11 of the May 2007
+    (recipes/f4017-2016-02, within 0.0001, which is rounding) and on p. 11 of the May 2007
     edition (recipes/f4017-2007-05, within 0.005).

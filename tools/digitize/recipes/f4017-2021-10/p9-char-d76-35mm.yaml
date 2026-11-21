@@ -94,7 +94,7 @@ curves:
 notes:
   - >-
     Cross-checked against the same figure on p. 8 of the February 2016 edition
-    (recipes/f4017-2016-02, identical to the last decimal) and on p. 12 of the May 2007
+    (recipes/f4017-2016-02, within 0.0001, which is rounding) and on p. 12 of the May 2007
     edition (recipes/f4017-2007-05, within 0.005).
   - >-
     Not to be confused with the HC-110 (Dilution B) and D-76 characteristic curves on pp. 9-10

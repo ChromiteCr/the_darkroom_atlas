@@ -240,7 +240,7 @@ curves:
     densitometry: diffuse visual
 notes:
 - 'Cross-check: the same figure in the February 2016 edition. Its paths are the 2021 paths moved on
-  the page, so the curves should agree to the last decimal.'
+  the page, so the curves should agree within rounding (0.0001).'
 exclude: []
 cross_check_of: tools/digitize/recipes/f4017-2021-10/p9-contrast-index-small-tank.yaml
 max_difference:
