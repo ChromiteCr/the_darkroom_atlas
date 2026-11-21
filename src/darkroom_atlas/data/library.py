@@ -647,7 +647,7 @@ class Library:
             (path, obj) for kind in loaded for path, obj in loaded[kind]
         ]
         if species:
-            fitted_sources.append((self._root / _SPECIES_FILE, list(species.values())))
+            fitted_sources.append((self._root / _SPECIES_FILE, {"species": list(species.values())}))
         if kinetics is not None:
             fitted_sources.append((kinetics_path, kinetics))
         for path, obj in fitted_sources:

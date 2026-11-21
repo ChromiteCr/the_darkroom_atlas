@@ -306,3 +306,13 @@ def test_staged_reference_files_readable(tmp_path):
         assert library.developer_facts(bath)["developer"] == DEVELOPER_FACTS_FILES[bath]
     for film in ("tri-x-400", "t-max-100"):
         assert library.reference_tables(f"kodak/{film}")["material"] == f"kodak/{film}"
+
+
+def test_validate_fitted_species_values_use_species_paths(root):
+    def change(data):
+        sulfite = next(s for s in data["species"] if s["id"] == "test-sulfite")
+        sulfite["acid_base"]["pka"][1].update(source="fitted", fit=_fit("nope"))
+
+    _edit(root / "chemistry" / "species.yaml", change)
+    (problem,) = Library(root).validate()
+    assert "species.yaml: species[4].acid_base.pka[1].fit.run_id: no calibration record" in problem
