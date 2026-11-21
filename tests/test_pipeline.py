@@ -1,14 +1,16 @@
 import dataclasses
+import functools
 from pathlib import Path
 
 import numpy as np
 import pytest
 from scipy.ndimage import gaussian_filter
 
-from darkroom_atlas import registry
+from darkroom_atlas import pipeline, registry
 from darkroom_atlas.data.library import Library
-from darkroom_atlas.data.models import StepKind
-from darkroom_atlas.light import Light
+from darkroom_atlas.data.models import Process, ProcessStep, StepKind
+from darkroom_atlas.fieldstore import FieldStore
+from darkroom_atlas.light import Light, LowRankLight
 from darkroom_atlas.pipeline import (
     Readout,
     RunContext,
@@ -16,6 +18,7 @@ from darkroom_atlas.pipeline import (
     expose,
     process,
     readout,
+    segments,
     unexposed_state,
 )
 from darkroom_atlas.registry import RegistryError, register_exposure, register_step
@@ -66,7 +69,8 @@ def light():
 
 @pytest.fixture(scope="module")
 def exposed(ideal, light, lib):
-    return expose(ideal, light, TIME_S, RunContext(lib, seed=11))
+    # Seed 0, the RunContext default: process and readout require state.seed == ctx.seed.
+    return expose(ideal, light, TIME_S, RunContext(lib))
 
 
 def _as_model(state, model):
@@ -389,3 +393,320 @@ def test_readout_validated():
     assert not image.data.flags.writeable
     with pytest.raises(TypeError):
         image.meta["a"] = 2
+
+
+# ----------------------------------------------------------------------------------------
+# D1: run context, segments, fused streaming, seeds and low-rank light
+# ----------------------------------------------------------------------------------------
+
+
+def _proc(*kinds):
+    """A process of bath-free steps of ``kinds``, each lasting 10 s (identity: no time)."""
+    steps = [
+        ProcessStep(kind=kind, time=None if kind is StepKind.identity else 10.0) for kind in kinds
+    ]
+    return Process(schema_version=1, id="test-seg", name="segments", family="test", steps=steps)
+
+
+def _stencil(field_in, field_out, radius, scale):
+    """A step adding ``scale`` times the box sum over ``radius`` px (edge-padded), bit-exact."""
+
+    def step(state, step, ctx):
+        a = state.fields[field_in]
+        padded = np.pad(a, radius, mode="edge")
+        h, w = a.shape
+        total = np.zeros_like(a)
+        for dr in range(2 * radius + 1):
+            for dc in range(2 * radius + 1):
+                total = total + padded[dr : dr + h, dc : dc + w]
+        return state.with_fields({field_out: a + scale * total})
+
+    return step
+
+
+def test_run_context_new_fields(lib, tmp_path):
+    ctx = RunContext(lib)
+    assert ctx.film_format is None
+    assert ctx.profile == "image"
+    assert ctx.workers == 1
+    assert ctx.memory_budget_gb == 6.0
+    assert ctx.scratch_dir is None
+
+    ctx = RunContext(
+        lib,
+        film_format="135",
+        profile="calibration",
+        workers=3,
+        memory_budget_gb=2,
+        scratch_dir=str(tmp_path),
+    )
+    assert ctx.film_format == "135"
+    assert ctx.profile == "calibration"
+    assert ctx.workers == 3
+    assert ctx.memory_budget_gb == 2.0 and isinstance(ctx.memory_budget_gb, float)
+    assert ctx.scratch_dir == tmp_path and isinstance(ctx.scratch_dir, Path)
+    assert RunContext(lib, profile="reference").profile == "reference"
+
+    bad = [
+        {"film_format": ""},
+        {"film_format": 135},
+        {"profile": "fast"},
+        {"workers": 0},
+        {"workers": 1.5},
+        {"workers": True},
+        {"memory_budget_gb": 0.0},
+        {"memory_budget_gb": float("inf")},
+        {"memory_budget_gb": True},
+        {"scratch_dir": 3},
+    ]
+    for kwargs in bad:
+        with pytest.raises((ValueError, TypeError), match=next(iter(kwargs))):
+            RunContext(lib, **kwargs)
+
+
+def test_segments(scratch):
+    model = "segtest"
+    register_step(model, StepKind.identity, interaction_range_um=5.0)(_stencil("x/a", "x/a", 1, 1))
+    register_step(model, StepKind.presoak, interaction_range_um=0.0)(lambda s, st, c: s)
+    register_step(model, StepKind.stop, interaction_range_um=None)(lambda s, st, c: s)
+    register_step(model, StepKind.wash, interaction_range_um=0.0)(lambda s, st, c: s)
+    register_step(model, StepKind.dry, interaction_range_um=2.0)(lambda s, st, c: s)
+    I, P, S, W, D = (StepKind.identity, StepKind.presoak, StepKind.stop, StepKind.wash,
+                     StepKind.dry)  # fmt: skip
+    assert segments(_proc(I, P, S, W, D), model) == [(0, 1), (2,), (3, 4)]
+    assert segments(_proc(S), model) == [(0,)]
+    assert segments(_proc(S, S), model) == [(0,), (1,)]
+    assert segments(_proc(I, P, W, D), model) == [(0, 1, 2, 3)]
+    assert segments(_proc(S, I, S), model) == [(0,), (1,), (2,)]
+    with pytest.raises(RegistryError, match="stabilize"):
+        segments(_proc(I, StepKind.stabilize), model)
+    with pytest.raises(TypeError):
+        segments("identity", model)
+
+
+def _fusion_model(scratch_model, calls=None):
+    """Steps mixing a finite range, pointwise, global, rng and field-dropping handlers."""
+
+    def noisy(state, step, ctx):
+        geometry = state.geometry
+        (r0, c0), (h, w) = geometry.origin_px, geometry.shape_hw
+        noise = pixel_uniform(
+            state.seed, "fusion", (r0, r0 + h), (c0, c0 + w), geometry.frame_shape_hw[1]
+        )
+        return state.with_fields({"x/a": state.fields["x/a"] * (1.0 + noise)})
+
+    def drop(state, step, ctx):
+        return state.drop("x/b").with_fields({"y/c": np.abs(state.fields["x/a"]) ** 0.5})
+
+    def tank(state, step, ctx):
+        # Whole-frame coupling: a global mean.
+        return state.with_fields({"x/a": state.fields["x/a"] - 0.5 * state.fields["x/a"].mean()})
+
+    pitch = 36000 / 96
+    register_step(scratch_model, StepKind.identity, interaction_range_um=2 * pitch)(
+        _stencil("x/a", "x/a", 2, 0.01)
+    )
+    register_step(scratch_model, StepKind.presoak, interaction_range_um=0.0)(noisy)
+    register_step(scratch_model, StepKind.stop, interaction_range_um=None)(tank)
+    register_step(scratch_model, StepKind.wash, interaction_range_um=0.5 * pitch)(
+        _stencil("x/a", "x/b", 1, -0.02)
+    )
+    register_step(scratch_model, StepKind.dry, interaction_range_um=0.0)(drop)
+    return _proc(StepKind.identity, StepKind.presoak, StepKind.stop, StepKind.wash, StepKind.dry)
+
+
+def _fusion_state(exposed, model):
+    rng = np.random.default_rng(7)
+    base = dataclasses.replace(exposed, fields={}).with_fields(
+        {"x/a": rng.random((64, 96)), "z/keep": rng.random((64, 96, 2))}
+    )
+    return _as_model(base, model)
+
+
+def test_segment_fusion_equals_unfused(scratch, exposed, lib):
+    proc = _fusion_model("fusiontest")
+    assert segments(proc, "fusiontest") == [(0, 1), (2,), (3, 4)]
+    state = _fusion_state(exposed, "fusiontest")
+
+    untiled = process(state, proc, RunContext(lib, tile_px=None))
+    for tile_px in (16, 23, 200):
+        fused = process(state, proc, RunContext(lib, tile_px=tile_px))
+        _assert_states_equal(fused, untiled)
+        # Step by step: each step its own one-step process, tiled.
+        stepwise = state
+        for step in proc.steps:
+            single = proc.model_copy(update={"steps": [step]})
+            stepwise = process(stepwise, single, RunContext(lib, tile_px=tile_px))
+        assert sorted(stepwise.fields) == sorted(fused.fields)
+        for key in fused.fields:
+            np.testing.assert_array_equal(fused.fields[key], stepwise.fields[key], err_msg=key)
+            assert fused.fields[key].dtype == stepwise.fields[key].dtype
+
+    assert sorted(untiled.fields) == ["x/a", "y/c", "z/keep"]
+    assert [r.kind for r in untiled.history] == ["identity", "presoak", "stop", "wash", "dry"]
+    assert [r.index for r in untiled.history] == [0, 1, 2, 3, 4]
+
+
+def test_segment_halo_is_sum_of_ranges(scratch, exposed, identity, lib):
+    pitch = exposed.geometry.pixel_pitch_um
+    seen = []
+
+    def first(state, step, ctx):
+        seen.append(("first", state.geometry.origin_px, state.geometry.shape_hw))
+        return _stencil("x/a", "x/a", 2, 0.1)(state, step, ctx)
+
+    def second(state, step, ctx):
+        seen.append(("second", state.geometry.origin_px, state.geometry.shape_hw))
+        return _stencil("x/a", "x/a", 3, 0.1)(state, step, ctx)
+
+    register_step("halotest", StepKind.identity, interaction_range_um=1.5 * pitch)(first)
+    register_step("halotest", StepKind.wash, interaction_range_um=3 * pitch)(second)
+    proc = _proc(StepKind.identity, StepKind.wash)
+    state = _fusion_state(exposed, "halotest")
+    untiled = process(state, proc, RunContext(lib))
+    seen.clear()
+    tiled = process(state, proc, RunContext(lib, tile_px=16))
+    _assert_states_equal(tiled, untiled)
+    # Halo ceil(1.5) + 3 = 5 px; both steps run on the same window, one tile after another.
+    tiles = list(iter_tiles((64, 96), 16, 5))
+    assert len(seen) == 2 * len(tiles)
+    for i, tile in enumerate(tiles):
+        rows, cols = tile.outer
+        window = ((rows.start, cols.start), (rows.stop - rows.start, cols.stop - cols.start))
+        assert seen[2 * i] == ("first", *window)
+        assert seen[2 * i + 1] == ("second", *window)
+    assert seen[2 * 7][2] == (26, 26)  # an interior tile: 16 + 2 * 5
+
+
+def test_fused_step_sees_earlier_step_in_history(scratch, exposed, lib):
+    histories = []
+
+    @register_step("histtest", StepKind.wash, interaction_range_um=0.0)
+    def record(state, step, ctx):
+        histories.append(tuple(r.kind for r in state.history))
+        return state
+
+    register_step("histtest", StepKind.identity, interaction_range_um=0.0)(lambda s, st, c: s)
+    proc = _proc(StepKind.identity, StepKind.wash)
+    state = _fusion_state(exposed, "histtest")
+    for tile_px in (None, 32):
+        histories.clear()
+        result = process(state, proc, RunContext(lib, tile_px=tile_px))
+        assert histories and set(histories) == {("identity",)}
+        assert [r.kind for r in result.history] == ["identity", "wash"]
+
+
+def test_fused_segment_passes_untouched_fields_through(scratch, exposed, lib):
+    @register_step("passtest", StepKind.wash, interaction_range_um=0.0)
+    def double(state, step, ctx):
+        return state.with_fields({"x/a": 2.0 * state.fields["x/a"]})
+
+    state = _fusion_state(exposed, "passtest")
+    result = process(state, _proc(StepKind.wash), RunContext(lib, tile_px=16))
+    # The field no step touched is the input array itself, not a copy.
+    assert result.fields["z/keep"] is state.fields["z/keep"]
+    np.testing.assert_array_equal(result.fields["x/a"], 2.0 * state.fields["x/a"])
+    assert not result.fields["x/a"].flags.writeable
+
+
+def test_fused_segment_field_untouched_only_in_some_tiles(scratch, exposed, lib):
+    @register_step("sometest", StepKind.wash, interaction_range_um=0.0)
+    def partly(state, step, ctx):
+        if state.geometry.origin_px == (0, 0):
+            return state  # this tile leaves x/a alone
+        return state.with_fields({"x/a": state.fields["x/a"] + 1.0})
+
+    state = _fusion_state(exposed, "sometest")
+    result = process(state, _proc(StepKind.wash), RunContext(lib, tile_px=16))
+    expected = state.fields["x/a"] + 1.0
+    expected[:16, :16] = state.fields["x/a"][:16, :16]
+    np.testing.assert_array_equal(result.fields["x/a"], expected)
+
+
+def test_fused_segment_keeps_uniform_fields_broadcast(scratch, exposed, lib):
+    @register_step("unitest", StepKind.wash, interaction_range_um=0.0)
+    def uniform(state, step, ctx):
+        one = np.array([[True]])
+        one.flags.writeable = False  # so the broadcast view is shared, not copied
+        flag = np.broadcast_to(one, state.geometry.shape_hw)
+        return state.with_fields({"frame/presoaked": flag})
+
+    state = _fusion_state(exposed, "unitest")
+    result = process(state, _proc(StepKind.wash), RunContext(lib, tile_px=16))
+    presoaked = result.fields["frame/presoaked"]
+    assert presoaked.shape == (64, 96) and presoaked.dtype == np.bool_
+    assert presoaked.strides == (0, 0)
+    assert presoaked.all()
+
+
+def test_fused_segment_writes_to_scratch_dir(scratch, exposed, lib, tmp_path, monkeypatch):
+    # Map every assembled field to a file (threshold 0) to see the scratch directory used.
+    monkeypatch.setattr(
+        pipeline, "FieldStore", functools.partial(FieldStore, ram_threshold_bytes=0)
+    )
+    proc = _fusion_model("scratchtest")
+    state = _fusion_state(exposed, "scratchtest")
+    reference = process(state, proc, RunContext(lib))
+    result = process(state, proc, RunContext(lib, tile_px=16, scratch_dir=tmp_path))
+    _assert_states_equal(result, reference)
+    mapped = result.fields["y/c"]
+    assert isinstance(mapped, np.memmap) and mapped.mode == "r"
+    assert any(tmp_path.rglob("*.dat"))
+    # Without a scratch directory the fields stay in memory.
+    in_ram = process(state, proc, RunContext(lib, tile_px=16))
+    assert not isinstance(in_ram.fields["y/c"], np.memmap)
+
+
+def test_tiled_rejects_inconsistent_fields_in_fused_step(scratch, exposed, lib):
+    register_step("mixfused", StepKind.identity, interaction_range_um=0.0)(lambda s, st, c: s)
+
+    @register_step("mixfused", StepKind.wash, interaction_range_um=0.0)
+    def mixed(state, step, ctx):
+        if state.geometry.origin_px == (0, 0):
+            return state.with_fields({"y/extra": state.fields["x/a"]})
+        return state
+
+    state = _fusion_state(exposed, "mixfused")
+    with pytest.raises(ValueError, match="'wash' handler of model 'mixfused'"):
+        process(state, _proc(StepKind.identity, StepKind.wash), RunContext(lib, tile_px=16))
+
+
+def test_process_and_readout_reject_seed_mismatch(exposed, identity, lib):
+    assert exposed.seed == 0
+    with pytest.raises(ValueError, match="seed"):
+        process(exposed, identity, RunContext(lib, seed=1))
+    state = process(exposed, identity, RunContext(lib))
+    with pytest.raises(ValueError, match="seed"):
+        readout(state, "ideal_colorimetric", RunContext(lib, seed=3))
+    seeded = expose(exposed.material, scene_light(read_image(SAMPLE).linear_rgb, time_s=TIME_S),
+                    TIME_S, RunContext(lib, seed=3))  # fmt: skip
+    ctx = RunContext(lib, seed=3)
+    assert readout(process(seeded, identity, ctx), "ideal_colorimetric", ctx).data.shape[:2] == (
+        64,
+        96,
+    )
+
+
+def test_expose_accepts_low_rank_light(scratch, ideal, lib):
+    h, w, b = 6, 9, DEFAULT_GRID.n_bands
+    rng = np.random.default_rng(5)
+    basis = 1e6 * rng.random((3, b))
+    low = LowRankLight(rng.random((h, w, 3)), basis, DEFAULT_GRID, {"source": "test"})
+    weights = rng.random((b, 1))
+
+    @register_exposure("lowranktest")
+    def project_only(material, light, time_s, ctx):
+        signal = light.project(weights)[..., 0] * time_s
+        return unexposed_state(material, light, ctx).with_fields({"x/exposure": signal})
+
+    material = ideal.model_copy(update={"model": "lowranktest"})
+    ctx = RunContext(lib)
+    state = expose(material, low, 0.5, ctx)
+    assert state.geometry.shape_hw == (h, w)
+    assert dict(state.meta["light"]) == {"source": "test"}
+    full = expose(material, low.to_light(), 0.5, ctx)
+    np.testing.assert_allclose(
+        state.get("x", "exposure"), full.get("x", "exposure"), rtol=1e-12, atol=0.0
+    )
+    with pytest.raises(TypeError, match="light"):
+        expose(material, np.zeros((h, w, b)), 0.5, ctx)
