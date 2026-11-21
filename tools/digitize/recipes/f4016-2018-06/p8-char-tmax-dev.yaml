@@ -89,7 +89,7 @@ curves:
       time: 10min
       ci_cross_check: >-
         F-4016 disagrees with itself here. The contrast index read off this curve is 0.683,
-        but the small-tank T-MAX contrast-index curve on p. 9 gives 0.640 at 10 min, 0.043
+        but the small-tank T-MAX contrast-index curve on p. 9 gives 0.640 at 10 min, 0.042
         lower. Every characteristic curve whose time lies within the span of its contrast-
         index curve reads 0.035 to 0.065 higher than that curve, well beyond the reading
         errors (CI +/-0.003, density +/-0.016), so the inconsistency is in F-4016 itself and
