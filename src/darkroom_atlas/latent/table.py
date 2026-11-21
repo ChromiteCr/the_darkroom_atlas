@@ -1,10 +1,10 @@
 """Per-frame latent-image lookup table (spec D1 2.2.5).
 
 For a fixed exposure time each size class gets ``p(n | m)`` on ``log10 m`` nodes spaced
-evenly over ``[-6, 4]`` (201 nodes by default). Lookup interpolates each entry with a cubic
-spline in ``log10 m`` (spec D1 3.1; linear interpolation misses the 1e-3 bound of the
-interpolation test by about 2x on this grid), clamps to the first node below the range and
-to the last node above it, clips the tiny spline undershoots at 0 and renormalises.
+evenly over ``[-6, 4]`` (201 nodes by default). Lookup interpolates each entry with a
+not-a-knot cubic spline in ``log10 m`` (coefficients built with the table), clamps to the
+first node below the range and to the last node above it, clips the tiny spline undershoots
+at 0 and renormalises.
 """
 
 import math

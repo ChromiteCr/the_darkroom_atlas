@@ -66,7 +66,7 @@ def test_latent_table_interpolation(classes, params, t):
         direct = np.array(
             [cluster_distribution(10.0**u, t, params, ecd_um=float(classes.ecd_um[c])) for u in mid]
         )
-        assert np.abs(looked_up - direct).max() <= 1e-3
+        assert np.abs(looked_up - direct).max() <= 1e-4
 
 
 def test_latent_table_deterministic(classes, layer):
