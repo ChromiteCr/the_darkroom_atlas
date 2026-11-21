@@ -1,0 +1,32 @@
+# Calibration record for schema tests (spec D1 5.7). Invented values.
+schema_version: 1
+run_id: d1e-test
+created_utc: 2026-12-01T00:00:00Z
+model_version: D1e
+git_commit: null
+profile: calibration
+stages:
+  - name: C_film
+    parameters: ["films/test/bw-mechanistic:emulsion.grain.mean_diameter"]
+    data_files:
+      - {path: reference/test/bw-neg/characteristic.csv, sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
+    table_rows: ["test/bw-neg/tables.yaml#facts/rms-granularity"]
+    optimizer: {method: trf, loss: linear, x_scale: jac, starts: 8, seed: 0}
+    chi2: 1.5
+    n_observations: 20
+    n_parameters: 2
+    converged: true
+parameters:
+  - name: "films/test/bw-mechanistic:emulsion.grain.mean_diameter"
+    value: 0.8
+    unit: um
+    transform: log10
+    sigma_transformed: 0.02
+    interval: null
+    method: covariance
+    at_bound: false
+    identifiable: true
+singular_values: {C_film: [3.0, 0.5]}
+training_set_sha256: "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+frozen: false
+held_out_evaluated: false

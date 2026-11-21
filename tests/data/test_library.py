@@ -146,7 +146,7 @@ def test_load_bw_negative_and_baths(fx):
 
 
 def test_ids_listing(fx):
-    assert fx.ids("material") == ["test/bw-neg", "test/color-neg"]
+    assert fx.ids("material") == ["test/bw-mechanistic", "test/bw-neg", "test/color-neg"]
     assert fx.ids("bath") == ["test-bleach", "test-bw-dev", "test-color-dev", "test-fix"]
     assert fx.ids("process") == ["test-bw", "test-c41"]
     with pytest.raises(ValueError, match="material"):

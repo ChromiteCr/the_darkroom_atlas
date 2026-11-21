@@ -1,0 +1,49 @@
+# D1 species for schema tests (spec D1 5.2): ingredients and components. Invented values.
+schema_version: 1
+species:
+  - id: test-sulfite-salt
+    name: test sulfite salt
+    molar_mass: {value: 126.04, unit: g/mol, source: assumed}
+    roles: [preservative]
+    kind: ingredient
+    dissolves_to: {test-sulfite: 1}
+    toth: 0
+    cations: {Na: 2}
+  - id: test-sulfite
+    name: test sulfite component
+    molar_mass: {value: 80.06, unit: g/mol, source: assumed}
+    roles: [preservative, buffer]
+    kind: component
+    acid_base:
+      charge_most_protonated: 0
+      reference_protons: 2
+      pka:
+        - {value: 1.86, unit: "1", source: assumed}
+        - {value: 7.19, unit: "1", source: assumed}
+      ionisation_enthalpy:
+        - {value: 0.0, unit: kJ/mol, source: assumed}
+        - {value: -3.65, unit: kJ/mol, source: assumed}
+      activity_class: sulfite
+    diffusion_coefficient: {value: 1030, unit: um2/s, source: assumed}
+    gel_diffusion_ratio: {value: 0.8, unit: "1", source: assumed}
+  - id: test-agent
+    name: test developing agent
+    molar_mass: {value: 110.11, unit: g/mol, source: assumed}
+    roles: [developing_agent]
+    kind: component
+    acid_base:
+      charge_most_protonated: 0
+      reference_protons: 0
+      pka:
+        - {value: 9.85, unit: "1", source: assumed}
+        - {value: 11.45, unit: "1", source: assumed, uncertainty: 0.1}
+      activity_class: organic
+    diffusion_coefficient: {value: 855, unit: um2/s, source: assumed}
+    gel_diffusion_ratio: {value: 0.10, unit: "1", source: assumed}
+    developing_agent: {role: regenerator, kinetic_class: hydroquinone, active_state: 2, product_sulfonated: true}
+  - id: test-gelatin
+    name: test gelatin
+    molar_mass: {value: 1000.0, unit: g/mol, source: assumed}
+    roles: [buffer]
+    kind: component
+    immobile: true

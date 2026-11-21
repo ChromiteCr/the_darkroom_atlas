@@ -1,0 +1,55 @@
+# Complete kinetics file for schema tests (spec D1 5.3). Invented values, not a calibration.
+schema_version: 1
+model_version: D1c
+activity:
+  debye_huckel_A_20C: {value: 0.5050, unit: "1", source: assumed}
+  debye_huckel_A_25C: {value: 0.5091, unit: "1", source: assumed}
+  sit_b: {value: 1.5, unit: "1", source: assumed}
+  delta_eps:
+    sulfite: {value: 0.0, unit: kg/mol, source: assumed, bounds: [-0.45, 0.45], prior: normal}
+    borate: {value: 0.0, unit: kg/mol, source: assumed}
+agents:
+  hydroquinone:
+    k_et: {value: 0.05, unit: 1/s, source: assumed, bounds: [1.0e-4, 10.0], prior: lognormal}
+    K_ads: {value: 100.0, unit: L/mol, source: assumed}
+    lambda0: {value: 0.01, unit: 1/s, source: assumed}
+    activation_energy: {value: 67.5, unit: kJ/mol, source: literature, ref: "test ref", uncertainty: 10.0}
+    k_reg: {value: 100.0, unit: L/(mol*s), source: assumed}
+  metol:
+    k_et: {value: 0.05, unit: 1/s, source: assumed}
+    K_ads: {value: 100.0, unit: L/mol, source: assumed}
+    lambda0: {value: 0.01, unit: 1/s, source: assumed}
+    activation_energy: {value: 61.8, unit: kJ/mol, source: assumed}
+    k_des: {value: 0.1, unit: 1/s, source: assumed}
+halides:
+  K_Br: {value: 300.0, unit: L/mol, source: assumed}
+  iodide_ratio: {value: 30.0, unit: "1", source: assumed}
+barriers:
+  u_gel: {value: 2.0, unit: "1", source: assumed}
+  u_halide: {value: 5.0, unit: "1", source: assumed}
+  ionic_strength_ref: {value: 1.0, unit: mol/L, source: assumed}
+latent:
+  u_li: {value: 1.0, unit: "1", source: assumed}
+  n_sat: {value: 5.0, unit: "1", source: literature, ref: "test ref"}
+solvent:
+  latent_attrition: {value: 1.0, unit: "1", source: assumed}
+  k_diss: {value: 1.0e-4, unit: um/s, source: assumed}
+  c_sat_ref: {value: 1.0e-4, unit: mol/L, source: assumed}
+  sulfite_exponent: {value: 0.6, unit: "1", source: assumed}
+  bromide_exponent: {value: 0.4, unit: "1", source: assumed}
+  ligands: {value: 2.0, unit: "1", source: assumed}
+  k_pd: {value: 1.0e-4, unit: um/s, source: assumed}
+  sulfonation_switch: {value: 1.0e-4, unit: mol/L, source: assumed}
+transport:
+  delta_max: {value: 300.0, unit: um, source: assumed}
+  delta_agit: {value: 50.0, unit: um, source: assumed}
+  swelling_half_time: {value: 20.0, unit: s, source: assumed}
+  viscosity_ionic_coefficient: {value: 0.125, unit: L/mol, source: assumed}
+  water_viscosity:
+    temperature: {value: [18, 20, 24, 25], unit: C, source: assumed}
+    viscosity: {value: [1.053, 1.002, 0.911, 0.890], unit: cP, source: assumed}
+gelatin:
+  groups_per_gram: {value: 4.8e-4, unit: mol/g, source: assumed}
+  pka: {value: 10.5, unit: "1", source: assumed}
+  initial_ph: {value: 5.5, unit: "1", source: assumed}
+  dry_density: {value: 1.35, unit: g/cm3, source: assumed}

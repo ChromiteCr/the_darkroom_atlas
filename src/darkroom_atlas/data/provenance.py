@@ -13,16 +13,25 @@ value becomes an underscore in the name (``FormulaConfidence.MSDS_ESTIMATED``).
 import math
 from enum import EnumType, StrEnum
 from numbers import Real
-from typing import Any, Self
+from typing import Annotated, Any, Literal, Self
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
+from darkroom_atlas.manifest import Sha256
 from darkroom_atlas.units import convert
 
 __all__ = [
     "CurveOrigin",
     "DataEnum",
+    "FitRecord",
     "FormulaConfidence",
     "FrozenModel",
     "Quantity",
@@ -117,12 +126,66 @@ def _finite_float(value: Any) -> float:
     return result
 
 
+def _nonblank(value: str) -> str:
+    if not value.strip():
+        raise ValueError("must not be empty")
+    return value
+
+
+_Text = Annotated[str, AfterValidator(_nonblank)]
+
+
+class FitRecord(FrozenModel):
+    """How a ``fitted`` value was obtained (spec D1 5.1, 7.8).
+
+    ``sigma_transformed`` is one standard deviation in the ``transform`` space; ``interval``
+    is a 95 % interval in the quantity's own unit and is required for the profile method.
+    """
+
+    run_id: _Text
+    model_version: _Text
+    training_set_sha256: Sha256
+    method: Literal["covariance", "profile", "prior"]
+    transform: Literal["linear", "log10", "logit"]
+    sigma_transformed: float = Field(ge=0.0, allow_inf_nan=False)
+    interval: tuple[float, float] | None = None
+    at_bound: bool = False
+    identifiable: bool = True
+
+    @field_validator("interval", mode="before")
+    @classmethod
+    def _check_interval(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        lo, hi = _pair(value, "interval")
+        if lo > hi:
+            raise ValueError(f"interval must have lo <= hi, got [{lo}, {hi}]")
+        return (lo, hi)
+
+    @model_validator(mode="after")
+    def _check_method(self) -> Self:
+        if self.method == "profile" and self.interval is None:
+            raise ValueError("interval is required when method is 'profile'")
+        return self
+
+
+def _pair(value: Any, name: str) -> tuple[float, float]:
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        raise ValueError(f"{name} must be a pair [lo, hi], got {value!r}")
+    return _finite_float(value[0]), _finite_float(value[1])
+
+
 class Quantity(FrozenModel):
     """A physical value with its unit and provenance.
 
     ``value`` is a number or a list of numbers, all finite. ``unit`` is a plain ASCII unit
     string (see :mod:`darkroom_atlas.units`). ``uncertainty`` is one standard uncertainty in
     the same unit.
+
+    Calibration fields (spec D1 5.1): ``bounds`` is the prior box ``[lo, hi]`` in the same
+    unit, and every value must lie inside it; ``prior`` names the prior shape (a
+    ``lognormal`` prior needs positive bounds); ``fit`` is present exactly when ``source``
+    is ``fitted``.
     """
 
     value: float | list[float]
@@ -131,6 +194,19 @@ class Quantity(FrozenModel):
     ref: str | None = None
     uncertainty: float | None = Field(default=None, ge=0.0, allow_inf_nan=False)
     note: str | None = None
+    bounds: tuple[float, float] | None = None
+    prior: Literal["uniform", "normal", "lognormal"] | None = None
+    fit: FitRecord | None = None
+
+    @field_validator("bounds", mode="before")
+    @classmethod
+    def _check_bounds(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        lo, hi = _pair(value, "bounds")
+        if lo > hi:
+            raise ValueError(f"bounds must have lo <= hi, got [{lo}, {hi}]")
+        return (lo, hi)
 
     @field_validator("value", mode="before")
     @classmethod
@@ -151,6 +227,20 @@ class Quantity(FrozenModel):
     @model_validator(mode="after")
     def _check_ref(self) -> Self:
         check_ref(self.source, self.ref)
+        if self.source is Source.FITTED and self.fit is None:
+            raise ValueError("a fitted value needs a fit record (fit)")
+        if self.source is not Source.FITTED and self.fit is not None:
+            raise ValueError(
+                f"fit is only allowed when source is 'fitted', not {self.source.value!r}"
+            )
+        if self.bounds is not None:
+            lo, hi = self.bounds
+            values = self.value if isinstance(self.value, list) else [self.value]
+            outside = [v for v in values if not lo <= v <= hi]
+            if outside:
+                raise ValueError(f"value {outside[0]} is outside bounds [{lo}, {hi}]")
+            if self.prior == "lognormal" and not lo > 0.0:
+                raise ValueError(f"a lognormal prior needs positive bounds, got [{lo}, {hi}]")
         return self
 
     def to(self, unit: str) -> float | np.ndarray:

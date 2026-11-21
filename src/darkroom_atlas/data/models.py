@@ -12,9 +12,16 @@ Identifiers:
   (``"<layer_id>/<name>"``), so ``frame`` is reserved for fields that belong to no layer.
 
 YAML note: PyYAML reads unquoted ``9:45`` as the base-60 integer 585 (which happens to equal
-the duration in seconds) and unquoted ``1:1`` as 61. Quote durations and dilutions.
+the duration in seconds) and unquoted ``1:1`` as 61. Quote durations and dilutions, and quote
+film-format ids such as ``"135"``.
+
+D1 additions (spec D1 section 5) are all optional on the D0 models, so D0 files load
+unchanged; the ``bw-mechanistic`` model checks the fields it needs with
+:func:`bw_mechanistic_problems`. New top-level files: :class:`KineticsFile`
+(``chemistry/kinetics.yaml``) and :class:`CalibrationRecord` (``calibration/<run_id>.yaml``).
 """
 
+import itertools
 import re
 from pathlib import PurePosixPath
 from typing import Annotated, Any, Literal, Self
@@ -22,6 +29,8 @@ from typing import Annotated, Any, Literal, Self
 import numpy as np
 from pydantic import (
     AfterValidator,
+    AwareDatetime,
+    BaseModel,
     BeforeValidator,
     ConfigDict,
     Field,
@@ -33,41 +42,72 @@ from pydantic import (
 from darkroom_atlas.data.provenance import (
     CurveOrigin,
     DataEnum,
+    FitRecord,
     FormulaConfidence,
     FrozenModel,
     Quantity,
     Source,
     check_ref,
 )
+from darkroom_atlas.manifest import FileRef, JsonDict, Sha256
 from darkroom_atlas.units import convert, parse_dilution, parse_duration_s
 
 __all__ = [
     "BUILTIN_CURVES",
+    "BW_MECHANISTIC",
+    "AcidBase",
+    "ActivityParams",
+    "AgentKinetics",
+    "AgentRole",
     "Agitation",
     "AntihalationLayer",
+    "BarrierParams",
+    "BaseFormat",
     "BaseLayer",
     "Bath",
     "BathComponent",
+    "BathConstants",
     "BathKind",
+    "CalibrationRecord",
+    "CalibrationRef",
     "Coupler",
+    "DyeBand",
+    "EmulsionDevelopment",
     "EmulsionLayer",
+    "EmulsionOptics",
+    "FileRef",
     "FilterLayer",
+    "FitRecord",
+    "GelatinParams",
     "Grain",
+    "HalideParams",
     "InlineCurve",
     "InterlayerLayer",
+    "IntrinsicAbsorption",
+    "KineticsFile",
+    "LatentInteraction",
+    "LatentParams",
     "Layer",
     "Material",
     "MaterialKind",
     "OvercoatLayer",
+    "ParameterResult",
+    "PhAnchor",
     "Process",
     "ProcessStep",
     "ReferenceCurve",
+    "SolventParams",
     "Species",
     "SpeciesFile",
     "SpeciesRole",
     "SpectralCurve",
+    "StageRecord",
     "StepKind",
     "Tank",
+    "TransportParams",
+    "ViscosityTable",
+    "bw_mechanistic_problems",
+    "iter_quantities",
 ]
 
 
@@ -212,6 +252,22 @@ Temperature = Annotated[Quantity, _dimension("C", "temperature")]
 MolarMass = Annotated[Quantity, _dimension("g/mol", "molar mass")]
 ArealMass = Annotated[Quantity, _dimension("g/m2", "areal mass")]
 Dimensionless = Annotated[Quantity, _dimension("1", "dimensionless")]
+# D1 quantity kinds (units of spec D1 5.1).
+Time = Annotated[Quantity, _dimension("s", "time")]
+Rate = Annotated[Quantity, _dimension("1/s", "first-order rate")]
+Concentration = Annotated[Quantity, _dimension("mol/L", "concentration")]
+InverseConcentration = Annotated[Quantity, _dimension("L/mol", "inverse concentration")]
+SecondOrderRate = Annotated[Quantity, _dimension("L/(mol*s)", "second-order rate")]
+InverseMolality = Annotated[Quantity, _dimension("kg/mol", "inverse molality")]
+Diffusivity = Annotated[Quantity, _dimension("um2/s", "diffusion coefficient")]
+Velocity = Annotated[Quantity, _dimension("um/s", "velocity")]
+MolarEnergy = Annotated[Quantity, _dimension("kJ/mol", "molar energy")]
+InverseLength = Annotated[Quantity, _dimension("um-1", "inverse length")]
+SpecificAmount = Annotated[Quantity, _dimension("mol/g", "specific amount")]
+InverseArealMass = Annotated[Quantity, _dimension("1/(g/m2)", "inverse areal mass")]
+MassDensity = Annotated[Quantity, _dimension("g/cm3", "mass density")]
+Viscosity = Annotated[Quantity, _dimension("cP", "viscosity")]
+InverseTemperature = Annotated[Quantity, _dimension("1/K", "inverse temperature")]
 
 
 def _dilution(value: Any) -> Any:
@@ -259,8 +315,74 @@ def _cas(value: str) -> str:
     return value
 
 
+class AcidBase(FrozenModel):
+    """Acid-base family of a component (spec D1 2.3.1, 5.2).
+
+    ``pka`` holds the stepwise pKa values at 25 C and I -> 0, most protonated first; the
+    family has ``len(pka) + 1`` states. ``reference_protons`` is how many protons the
+    reference state has lost relative to the most protonated state.
+    """
+
+    charge_most_protonated: int
+    reference_protons: int = Field(ge=0)
+    pka: list[Dimensionless]
+    temperature_law: Literal["van_t_hoff", "manov_boric", "linear"] = "van_t_hoff"
+    ionisation_enthalpy: list[MolarEnergy] = Field(default_factory=list)
+    dpka_dt: list[InverseTemperature] = Field(default_factory=list)
+    activity_class: Literal["sulfite", "borate", "organic", "amine", "none"]
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        n = len(self.pka)
+        if self.reference_protons > n:
+            raise ValueError(
+                f"reference_protons ({self.reference_protons}) must not exceed the number of "
+                f"pka values ({n})"
+            )
+        if self.ionisation_enthalpy and len(self.ionisation_enthalpy) != n:
+            raise ValueError(
+                f"ionisation_enthalpy must be empty or have one entry per pka value "
+                f"({len(self.ionisation_enthalpy)} != {n})"
+            )
+        if self.temperature_law == "linear":
+            if len(self.dpka_dt) != n:
+                raise ValueError(
+                    f"temperature_law 'linear' needs one dpka_dt per pka value "
+                    f"({len(self.dpka_dt)} != {n})"
+                )
+        elif self.dpka_dt:
+            raise ValueError("dpka_dt is only used when temperature_law is 'linear'")
+        return self
+
+    @property
+    def n_states(self) -> int:
+        """Number of protonation states, ``len(pka) + 1``."""
+        return len(self.pka) + 1
+
+
+class AgentRole(FrozenModel):
+    """Developing-agent role of a component (spec D1 2.3.5, 5.2)."""
+
+    role: Literal["eta", "regenerator", "single"]
+    kinetic_class: NameId
+    active_state: int = Field(ge=0)
+    product_sulfonated: bool
+
+
+_COMPONENT_ONLY = ("acid_base", "gel_diffusion_ratio", "developing_agent")
+_INGREDIENT_ONLY = ("dissolves_to", "cations", "spectator_charge")
+
+
 class Species(FrozenModel):
-    """A chemical species and its physical constants."""
+    """A chemical species and its physical constants.
+
+    D1 (spec D1 5.2) distinguishes ``ingredient`` species, which are weighed into a bath and
+    dissolve into components (``dissolves_to``, ``toth``, ``cations``, ``spectator_charge``),
+    from ``component`` species, which are transported and reacted (``acid_base``,
+    ``gel_diffusion_ratio``, ``developing_agent``, ``immobile``). A component needs a
+    ``diffusion_coefficient`` (um2/s at 20 C) and a ``gel_diffusion_ratio`` unless it is
+    ``immobile``.
+    """
 
     id: NameId
     name: Text
@@ -271,6 +393,54 @@ class Species(FrozenModel):
     pka: list[Dimensionless] = Field(default_factory=list)
     diffusion_coefficient: Quantity | None = None
     parameters: dict[str, Quantity] = Field(default_factory=dict)
+    kind: Literal["ingredient", "component"] = "ingredient"
+    dissolves_to: dict[NameId, PositiveFloat] = Field(default_factory=dict)
+    toth: FiniteFloat = 0.0
+    cations: dict[Literal["Na", "K"], NonNegativeFloat] = Field(default_factory=dict)
+    spectator_charge: dict[str, FiniteFloat] = Field(default_factory=dict)
+    acid_base: AcidBase | None = None
+    gel_diffusion_ratio: Dimensionless | None = None
+    developing_agent: AgentRole | None = None
+    immobile: bool = False
+
+    @model_validator(mode="after")
+    def _check_kind(self) -> Self:
+        if self.kind == "ingredient":
+            wrong = [name for name in _COMPONENT_ONLY if getattr(self, name) is not None]
+            if self.immobile:
+                wrong.append("immobile")
+            if wrong:
+                raise ValueError(f"{', '.join(wrong)}: only allowed on species of kind 'component'")
+            return self
+        wrong = [name for name in _INGREDIENT_ONLY if getattr(self, name)]
+        if self.toth != 0.0:
+            wrong.append("toth")
+        if wrong:
+            raise ValueError(f"{', '.join(wrong)}: only allowed on species of kind 'ingredient'")
+        if not self.immobile:
+            missing = [
+                name
+                for name in ("diffusion_coefficient", "gel_diffusion_ratio")
+                if getattr(self, name) is None
+            ]
+            if missing:
+                raise ValueError(f"a mobile component needs {' and '.join(missing)}")
+            try:
+                convert(1.0, self.diffusion_coefficient.unit, "um2/s")
+            except ValueError:
+                raise ValueError(
+                    f"diffusion_coefficient: unit {self.diffusion_coefficient.unit!r} is not a "
+                    "diffusion coefficient unit (expected e.g. 'um2/s')"
+                ) from None
+        if self.developing_agent is not None:
+            if self.acid_base is None:
+                raise ValueError("a developing agent needs acid_base")
+            if self.developing_agent.active_state >= self.acid_base.n_states:
+                raise ValueError(
+                    f"developing_agent.active_state {self.developing_agent.active_state} is out "
+                    f"of range: acid_base has {self.acid_base.n_states} states"
+                )
+        return self
 
 
 class SpeciesFile(FrozenModel):
@@ -287,6 +457,148 @@ class SpeciesFile(FrozenModel):
         return self
 
 
+# --------------------------------------------------------------------------------------
+# Shared kinetics constants (chemistry/kinetics.yaml, spec D1 5.3)
+# --------------------------------------------------------------------------------------
+
+ActivityClass = Literal["sulfite", "borate", "organic", "amine"]
+"""Activity classes that carry a SIT interaction coefficient (spec D1 2.3.3, 2.3.6)."""
+
+
+class ActivityParams(FrozenModel):
+    """Debye-Hueckel and SIT activity parameters (spec D1 2.3.3, 2.3.6)."""
+
+    debye_huckel_A_20C: Dimensionless
+    debye_huckel_A_25C: Dimensionless
+    sit_b: Dimensionless
+    delta_eps: dict[ActivityClass, InverseMolality] = Field(default_factory=dict)
+
+
+class AgentKinetics(FrozenModel):
+    """Kinetic constants of one developing-agent class (spec D1 2.4.11)."""
+
+    k_et: Rate
+    K_ads: InverseConcentration
+    lambda0: Rate
+    activation_energy: MolarEnergy
+    k_des: Rate | None = None
+    k_reg: SecondOrderRate | None = None
+    pka: Dimensionless | None = None
+
+
+class HalideParams(FrozenModel):
+    """Halide adsorption (spec D1 2.4.11)."""
+
+    K_Br: InverseConcentration
+    iodide_ratio: Dimensionless
+
+
+class BarrierParams(FrozenModel):
+    """Charge barriers of initiation (spec D1 2.4.2, 2.4.11); ``u_*`` are in units of kT."""
+
+    u_gel: Dimensionless
+    u_halide: Dimensionless
+    ionic_strength_ref: Concentration
+
+
+class LatentInteraction(FrozenModel):
+    """Latent-image size dependence of initiation (spec D1 2.4.11)."""
+
+    u_li: Dimensionless
+    n_sat: Dimensionless
+
+
+class SolventParams(FrozenModel):
+    """Silver-halide solvent action and solution physical development (spec D1 2.4.6, 2.4.11).
+
+    ``sulfonation_switch`` is the sulfite concentration ``c_s`` of spec D1 2.4.6.
+    """
+
+    latent_attrition: Dimensionless
+    k_diss: Velocity
+    c_sat_ref: Concentration
+    sulfite_exponent: Dimensionless
+    bromide_exponent: Dimensionless
+    ligands: Dimensionless
+    k_pd: Velocity
+    sulfonation_switch: Concentration
+
+
+class ViscosityTable(FrozenModel):
+    """Water viscosity at a few temperatures; ``ln eta`` is interpolated in ``1/T``.
+
+    ``temperature`` and ``viscosity`` are list quantities of equal length (at least 2) with
+    strictly increasing temperatures and positive viscosities (spec D1 2.3.7 lists four nodes).
+    """
+
+    temperature: Temperature
+    viscosity: Viscosity
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        t = self.temperature.value
+        eta = self.viscosity.value
+        if not isinstance(t, list) or not isinstance(eta, list):
+            raise ValueError("temperature and viscosity must be lists of values")  # noqa: TRY004
+        if len(t) != len(eta) or len(t) < 2:
+            raise ValueError(
+                f"temperature and viscosity need the same length, at least 2 "
+                f"({len(t)} and {len(eta)})"
+            )
+        if any(b <= a for a, b in itertools.pairwise(t)):
+            raise ValueError("temperatures must be strictly increasing")
+        if any(v <= 0.0 for v in eta):
+            raise ValueError("viscosities must be positive")
+        return self
+
+
+class TransportParams(FrozenModel):
+    """Boundary layer, swelling and viscosity (spec D1 2.4.7, 2.4.8, 2.4.11)."""
+
+    delta_max: Length
+    delta_agit: Length
+    swelling_half_time: Time
+    viscosity_ionic_coefficient: InverseConcentration
+    water_viscosity: ViscosityTable
+
+
+class GelatinParams(FrozenModel):
+    """Gelatin as an immobile buffer (spec D1 2.4.7, 2.4.11)."""
+
+    groups_per_gram: SpecificAmount
+    pka: Dimensionless
+    initial_ph: Dimensionless
+    dry_density: MassDensity
+
+
+class CalibrationRef(FrozenModel):
+    """The calibration record that last wrote fitted values into a file."""
+
+    run_id: Text
+    sha256: Sha256
+
+
+class KineticsFile(FrozenModel):
+    """``chemistry/kinetics.yaml``: chemistry constants shared by all films (spec D1 5.3)."""
+
+    schema_version: Literal[1]
+    model_version: Text
+    activity: ActivityParams
+    agents: dict[NameId, AgentKinetics]
+    halides: HalideParams
+    barriers: BarrierParams
+    latent: LatentInteraction
+    solvent: SolventParams
+    transport: TransportParams
+    gelatin: GelatinParams
+    calibration: CalibrationRef | None = None
+
+
+# --------------------------------------------------------------------------------------
+# Baths
+# --------------------------------------------------------------------------------------
+
+
 class BathComponent(FrozenModel):
     """One ingredient of a bath: a species id and its amount (e.g. g/L of working solution)."""
 
@@ -294,8 +606,40 @@ class BathComponent(FrozenModel):
     amount: Quantity
 
 
+class PhAnchor(FrozenModel):
+    """A measured or published pH of a working solution (spec D1 5.5); ``ph`` needs an
+    ``uncertainty``."""
+
+    dilution: Dilution
+    temperature: Temperature
+    ph: Dimensionless
+    method: Literal["glass_electrode", "colorimetric", "typical"]
+    note: str | None = None
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        if self.ph.uncertainty is None:
+            raise ValueError("ph: a pH anchor needs an uncertainty")
+        return self
+
+
+class BathConstants(FrozenModel):
+    """First-order constants of the post-development steps (spec D1 2.6, 5.5), in s."""
+
+    neutralisation_time: Time | None = None
+    clearing_time_constant: Time | None = None
+    dye_removal_time: Time | None = None
+    wash_time_constant: Time | None = None
+    wash_dye_time_constant: Time | None = None
+
+
 class Bath(FrozenModel):
-    """A processing bath (developer, bleach, fixer, ...) and its formula."""
+    """A processing bath (developer, bleach, fixer, ...) and its formula.
+
+    D1 fields (spec D1 5.5): ``base_solution`` says whether the component amounts are per
+    litre of stock or of concentrate (a process ``dilution`` then dilutes that solution);
+    ``nuisance`` lists component species whose amounts are fitted within their ``bounds``.
+    """
 
     schema_version: Literal[1]
     id: DataId
@@ -307,12 +651,26 @@ class Bath(FrozenModel):
     standard_dilutions: list[Dilution] = Field(default_factory=lambda: ["stock"], min_length=1)
     refs: list[str] = Field(default_factory=list)
     note: str | None = None
+    variant: Text | None = None
+    base_solution: Literal["stock", "concentrate"] = "stock"
+    ph_anchors: list[PhAnchor] = Field(default_factory=list)
+    nuisance: list[NameId] = Field(default_factory=list)
+    constants: BathConstants | None = None
 
     @model_validator(mode="after")
     def _unique_components(self) -> Self:
         duplicates = _duplicates(c.species for c in self.components)
         if duplicates:
             raise ValueError(f"duplicate species in components: {', '.join(map(repr, duplicates))}")
+        duplicates = _duplicates(self.nuisance)
+        if duplicates:
+            raise ValueError(f"nuisance: duplicate id(s): {', '.join(map(repr, duplicates))}")
+        amounts = {c.species: c.amount for c in self.components}
+        for name in self.nuisance:
+            if name not in amounts:
+                raise ValueError(f"nuisance: {name!r} is not a component of this bath")
+            if amounts[name].bounds is None:
+                raise ValueError(f"nuisance: the amount of {name!r} needs bounds")
         return self
 
 
@@ -393,13 +751,32 @@ class SpectralCurve(FrozenModel):
 
 
 class Grain(FrozenModel):
-    """Silver-halide grain population of an emulsion layer (log-normal size distribution)."""
+    """Silver-halide grain population of an emulsion layer (log-normal size distribution).
+
+    ``mean_diameter`` is the number median of the equivalent circular diameter and
+    ``sigma_log`` the standard deviation of its natural log. D1 fields (spec D1 2.0.2, 5.4):
+    ``thickness`` (required for ``tabular``), ``iodide_fraction`` (mole fraction of AgI) and
+    ``n_classes`` (number of size classes).
+    """
 
     morphology: Literal["conventional", "tabular", "cubic"]
     mean_diameter: Length
     sigma_log: Dimensionless
     silver_coverage: ArealMass
     halide: str | None = None
+    thickness: Length | None = None
+    iodide_fraction: Dimensionless | None = None
+    n_classes: int = Field(default=6, ge=2, le=64)
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        if self.morphology == "tabular" and self.thickness is None:
+            raise ValueError("thickness: required for tabular grains")
+        if self.iodide_fraction is not None:
+            x = self.iodide_fraction.value
+            if isinstance(x, list) or not 0.0 <= x <= 1.0:
+                raise ValueError(f"iodide_fraction must be a number in [0, 1], got {x!r}")
+        return self
 
 
 class Coupler(FrozenModel):
@@ -420,8 +797,65 @@ class OvercoatLayer(FrozenModel):
     thickness: Length | None = None
 
 
+class DyeBand(FrozenModel):
+    """One Gaussian band (in wavenumber) of the sensitising-dye absorption (spec D1 2.1.2)."""
+
+    amplitude: Dimensionless
+    peak_wavenumber: InverseLength
+    width: InverseLength
+
+
+class IntrinsicAbsorption(FrozenModel):
+    """Urbach-tail intrinsic absorption of AgX (spec D1 2.1.2)."""
+
+    alpha0: InverseLength
+    edge_energy: MolarEnergy
+    urbach_energy: MolarEnergy
+
+
+class EmulsionOptics(FrozenModel):
+    """Optical parameters of an emulsion layer (spec D1 2.1.8)."""
+
+    gelatin_index: Dimensionless
+    intrinsic_absorption: IntrinsicAbsorption
+    dye_bands: list[DyeBand] = Field(min_length=1, max_length=4)
+    scattering_550: InverseLength
+    scattering_exponent: Dimensionless
+    psf_weight: Dimensionless
+    psf_length: Length
+
+
+class LatentParams(FrozenModel):
+    """Latent-image formation parameters (spec D1 2.2.7)."""
+
+    efficiency: Dimensionless
+    efficiency_size_exponent: Dimensionless
+    tau0_median: Time
+    tau0_sigma_ln: Dimensionless
+    ionic_time: Time
+    competing_sites: Dimensionless
+    hole_attack: Dimensionless
+    cluster_cap: int = Field(default=5, ge=1)
+
+
+class EmulsionDevelopment(FrozenModel):
+    """Film-side development and imaging parameters (spec D1 2.4.11, 2.5.3, 2.6)."""
+
+    fog_hazard_ratio: Dimensionless
+    covering_power: InverseArealMass
+    covering_power_size_exponent: Dimensionless
+    physical_covering_ratio: Dimensionless
+    halide_density: InverseArealMass
+    dye_density: Dimensionless
+    fixing_factor: Dimensionless
+
+
 class EmulsionLayer(FrozenModel):
-    """A light-sensitive layer."""
+    """A light-sensitive layer.
+
+    D1 fields (spec D1 5.4): ``gelatin_coverage`` (g/m2), ``swelling_ratio``, ``optics``,
+    ``latent`` and ``development``.
+    """
 
     type: Literal["emulsion"] = "emulsion"
     id: LayerId
@@ -431,6 +865,11 @@ class EmulsionLayer(FrozenModel):
     spectral_sensitivity: SpectralCurve | None = None
     couplers: list[Coupler] = Field(default_factory=list)
     parameters: dict[str, Quantity] = Field(default_factory=dict)
+    gelatin_coverage: ArealMass | None = None
+    swelling_ratio: Dimensionless | None = None
+    optics: EmulsionOptics | None = None
+    latent: LatentParams | None = None
+    development: EmulsionDevelopment | None = None
 
     @model_validator(mode="after")
     def _unique_couplers(self) -> Self:
@@ -468,8 +907,30 @@ class AntihalationLayer(FrozenModel):
     removed_in_processing: bool = True
 
 
+class BaseFormat(FrozenModel):
+    """Base properties of one film format (spec D1 2.1.5, 5.4)."""
+
+    thickness: Length
+    grey_density: Dimensionless
+    backing_density: Dimensionless
+
+
+def _format_keys(value: Any) -> Any:
+    if isinstance(value, dict):
+        for key in value:
+            if not isinstance(key, str):
+                raise ValueError(  # noqa: TRY004 - pydantic reports ValueError as a field error
+                    f'format id {key!r} must be a string; quote it in YAML (e.g. "135")'
+                )
+    return value
+
+
 class BaseLayer(FrozenModel):
-    """Film base or paper support."""
+    """Film base or paper support.
+
+    ``formats`` (D1, spec D1 5.4) gives the thickness, grey density and backing density per
+    film format id (``"135"``, ``"120"``).
+    """
 
     type: Literal["base"] = "base"
     id: LayerId
@@ -477,6 +938,9 @@ class BaseLayer(FrozenModel):
     thickness: Length | None = None
     refractive_index: Dimensionless | None = None
     spectral_density: SpectralCurve | None = None
+    formats: Annotated[dict[NameId, BaseFormat], BeforeValidator(_format_keys)] = Field(
+        default_factory=dict
+    )
 
 
 Layer = Annotated[
@@ -505,6 +969,16 @@ class Material(FrozenModel):
     layers: list[Layer]
     refs: list[str] = Field(default_factory=list)
     note: str | None = None
+    default_format: NameId | None = None
+
+    @field_validator("default_format", mode="before")
+    @classmethod
+    def _check_default_format(cls, value: Any) -> Any:
+        if isinstance(value, int) and not isinstance(value, bool):
+            raise ValueError(  # noqa: TRY004
+                f'default_format must be a string; quote it in YAML (e.g. "{value}")'
+            )
+        return value
 
     @model_validator(mode="after")
     def _check_layers(self) -> Self:
@@ -519,12 +993,68 @@ class Material(FrozenModel):
                 raise ValueError(
                     f"a {self.kind.value!r} material needs exactly one base layer, found {n_base}"
                 )
+        formats = self.formats
+        if formats and self.default_format is None:
+            raise ValueError(
+                f"default_format is required when the base lists formats "
+                f"(available: {', '.join(formats)})"
+            )
+        if self.default_format is not None and self.default_format not in formats:
+            raise ValueError(
+                f"default_format {self.default_format!r} is not one of the base formats "
+                f"({', '.join(formats) if formats else 'none'})"
+            )
         return self
 
     @property
     def emulsion_layers(self) -> tuple[EmulsionLayer, ...]:
         """The emulsion layers, from top to bottom."""
         return tuple(layer for layer in self.layers if isinstance(layer, EmulsionLayer))
+
+    @property
+    def formats(self) -> dict[str, BaseFormat]:
+        """Film formats of the base layer (empty if there is none or it lists none)."""
+        for layer in self.layers:
+            if isinstance(layer, BaseLayer):
+                return dict(layer.formats)
+        return {}
+
+
+BW_MECHANISTIC = "bw-mechanistic"
+"""Material model name of the D1 black-and-white chain (spec D1 2.0.4)."""
+
+_BW_LAYERS = (("overcoat", "overcoat"), ("emulsion", "emulsion"), ("base", "base"))
+
+
+def bw_mechanistic_problems(material: Material) -> list[str]:
+    """Problems that keep ``material`` from running with the ``bw-mechanistic`` model.
+
+    One ``"<field path>: <problem>"`` line per problem, empty if none. Checks the fixed layer
+    structure of spec D1 2.0.1 (``overcoat``, ``emulsion``, ``base`` from top to bottom) and
+    that every film field of spec D1 5.4 the model reads is present.
+    """
+    layout = [(layer.type, layer.id) for layer in material.layers]
+    if layout != list(_BW_LAYERS):
+        found = ", ".join(f"{t} {i!r}" for t, i in layout)
+        message = (
+            "layers: the bw-mechanistic model needs exactly the layers overcoat 'overcoat', "
+            f"emulsion 'emulsion', base 'base' from top to bottom; found {found}"
+        )
+        return [message]
+    overcoat, emulsion, base = material.layers
+    problems = []
+    if overcoat.thickness is None:
+        problems.append("layers[0].thickness: required by the bw-mechanistic model")
+    for name in ("grain", "gelatin_coverage", "swelling_ratio", "optics", "latent", "development"):
+        if getattr(emulsion, name) is None:
+            problems.append(f"layers[1].{name}: required by the bw-mechanistic model")
+    if emulsion.grain is not None and emulsion.grain.iodide_fraction is None:
+        problems.append("layers[1].grain.iodide_fraction: required by the bw-mechanistic model")
+    if base.refractive_index is None:
+        problems.append("layers[2].refractive_index: required by the bw-mechanistic model")
+    if not base.formats:
+        problems.append("layers[2].formats: required by the bw-mechanistic model")
+    return problems
 
 
 # --------------------------------------------------------------------------------------
@@ -533,19 +1063,36 @@ class Material(FrozenModel):
 
 
 class Agitation(FrozenModel):
-    """Agitation scheme: an initial period, then ``duration_s`` every ``interval_s``."""
+    """Agitation scheme: an initial period, then ``duration_s`` every ``interval_s``.
 
-    method: Literal["inversion", "rotary", "stand", "continuous", "tray"]
+    ``lift`` is the large-tank lift, tilt and drain cycle (spec D1 5.6).
+    """
+
+    method: Literal["inversion", "lift", "rotary", "stand", "continuous", "tray"]
     initial_s: NonNegativeFloat = 0.0
     interval_s: PositiveFloat | None = None
     duration_s: NonNegativeFloat | None = None
 
 
 class Tank(FrozenModel):
-    """Processing tank: working-solution volume and the film area it serves."""
+    """Processing tank: working-solution volume and the film area it serves.
+
+    D1 fields (spec D1 3.7, 5.6): ``image_area_fraction`` in (0, 1] (default by format when
+    absent) and ``rolls_before``, the number of rolls developed earlier in the same solution.
+    """
 
     volume_ml: PositiveFloat
     film_area_cm2: PositiveFloat | None = None
+    image_area_fraction: Dimensionless | None = None
+    rolls_before: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        if self.image_area_fraction is not None:
+            f = self.image_area_fraction.value
+            if isinstance(f, list) or not 0.0 < f <= 1.0:
+                raise ValueError(f"image_area_fraction must be a number in (0, 1], got {f!r}")
+        return self
 
 
 class ProcessStep(FrozenModel):
@@ -656,3 +1203,89 @@ class ReferenceCurve(FrozenModel):
         if np.any(np.diff(self.x) <= 0.0):
             raise ValueError("x must be strictly increasing")
         return self
+
+
+# --------------------------------------------------------------------------------------
+# Calibration records (calibration/<run_id>.yaml, spec D1 5.7)
+# --------------------------------------------------------------------------------------
+
+
+class StageRecord(FrozenModel):
+    """One stage of a calibration run (spec D1 7.3)."""
+
+    name: Literal[
+        "A_activity", "B_spectral", "C_film", "D_chemistry", "E_polish", "F_identifiability"
+    ]
+    parameters: list[Text]
+    data_files: list[FileRef]
+    table_rows: list[Text]
+    optimizer: JsonDict
+    chi2: NonNegativeFloat
+    n_observations: int = Field(ge=0)
+    n_parameters: int = Field(ge=0)
+    converged: bool
+
+
+class ParameterResult(FrozenModel):
+    """The result for one fitted parameter (spec D1 7.8)."""
+
+    name: Text
+    value: FiniteFloat
+    unit: str
+    transform: Literal["linear", "log10", "logit"]
+    sigma_transformed: FiniteFloat
+    interval: tuple[FiniteFloat, FiniteFloat] | None
+    method: Literal["covariance", "profile", "prior"]
+    at_bound: bool
+    identifiable: bool
+
+
+class CalibrationRecord(FrozenModel):
+    """A calibration run: stages, results and the training-set hash (spec D1 5.7, 7.8)."""
+
+    schema_version: Literal[1]
+    run_id: Text
+    created_utc: AwareDatetime
+    model_version: Text
+    git_commit: str | None
+    profile: Literal["calibration"]
+    stages: list[StageRecord]
+    parameters: list[ParameterResult]
+    singular_values: dict[str, list[FiniteFloat]]
+    training_set_sha256: Sha256
+    frozen: bool = False
+    held_out_evaluated: bool = False
+    notes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        if self.held_out_evaluated and not self.frozen:
+            raise ValueError("held_out_evaluated requires frozen (spec D1 8.4)")
+        duplicates = _duplicates(p.name for p in self.parameters)
+        if duplicates:
+            raise ValueError(f"duplicate parameter name(s): {', '.join(map(repr, duplicates))}")
+        return self
+
+
+# --------------------------------------------------------------------------------------
+# Walking quantities
+# --------------------------------------------------------------------------------------
+
+
+def iter_quantities(obj: Any, path: str = ""):
+    """Yield ``(field path, quantity)`` for every :class:`Quantity` inside ``obj``.
+
+    ``obj`` may be a model, list, tuple or dict; paths use the data-error format
+    (``layers[1].grain.mean_diameter``).
+    """
+    if isinstance(obj, Quantity):
+        yield path, obj
+    elif isinstance(obj, BaseModel):
+        for name in type(obj).model_fields:
+            yield from iter_quantities(getattr(obj, name), f"{path}.{name}" if path else name)
+    elif isinstance(obj, dict):
+        for key, value in obj.items():
+            yield from iter_quantities(value, f"{path}.{key}" if path else str(key))
+    elif isinstance(obj, (list, tuple)):
+        for i, value in enumerate(obj):
+            yield from iter_quantities(value, f"{path}[{i}]")

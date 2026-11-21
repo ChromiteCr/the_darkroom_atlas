@@ -15,6 +15,8 @@ from darkroom_atlas.backend import xp_of
 
 __all__ = [
     "C_LIGHT",
+    "E_CHARGE",
+    "FARADAY",
     "H_PLANCK",
     "K_BOLTZMANN",
     "K_M",
@@ -40,6 +42,12 @@ N_AVOGADRO = 6.02214076e23
 
 R_GAS = 8.314462618
 """Molar gas constant, J / (mol K)."""
+
+E_CHARGE = 1.602176634e-19
+"""Elementary charge, C (exact, SI 2019)."""
+
+FARADAY = E_CHARGE * N_AVOGADRO
+"""Faraday constant, C / mol (exact, SI 2019); also J/mol per eV."""
 
 K_BOLTZMANN = 1.380649e-23
 """Boltzmann constant, J / K (exact, SI 2019)."""
@@ -115,12 +123,38 @@ _LINEAR_UNITS: dict[str, tuple[str, float]] = {
     "s": ("time", 1.0),
     "min": ("time", 60.0),
     "h": ("time", 3600.0),
-    "mL": ("volume", 1.0),
-    "L": ("volume", 1e3),
+    # Volume is based on um3 (spec D1 5.1); 1 mL = 1e12 um3 and 1 L = 1e15 um3 exactly.
+    "um3": ("volume", 1.0),
+    "mL": ("volume", 1e12),
+    "L": ("volume", 1e15),
+    "um2": ("area", 1.0),
     "mg/L": ("mass concentration", 1.0),
     "g/L": ("mass concentration", 1e3),
     "g/mol": ("molar mass", 1.0),
     "g/m2": ("areal mass", 1.0),
+    "1/(g/m2)": ("inverse areal mass", 1.0),
+    # Mass density (g/cm3 is the unit of rho_AgX and gelatin.dry_density, spec D1 2.0.2, 5.3).
+    "g/cm3": ("mass density", 1.0),
+    "mmol/L": ("concentration", 1.0),
+    "mol/L": ("concentration", 1e3),
+    "mol/g": ("specific amount", 1.0),
+    "L/mol": ("inverse concentration", 1.0),
+    "L/(mol*s)": ("second-order rate", 1.0),
+    "kg/mol": ("inverse molality", 1.0),
+    # Diffusion coefficients: 1 cm2/s = 1e8 um2/s (spec D1 5.1).
+    "um2/s": ("diffusivity", 1.0),
+    "cm2/s": ("diffusivity", 1e8),
+    "um/s": ("velocity", 1.0),
+    "1/s": ("rate", 1.0),
+    "1/K": ("inverse temperature", 1.0),
+    "J/mol": ("molar energy", 1.0),
+    "kJ/mol": ("molar energy", 1e3),
+    # 1 eV per particle is e * N_A J/mol (exact in SI 2019; spec D1 5.1 quotes 96.4853 kJ/mol).
+    "eV": ("molar energy", FARADAY),
+    # Inverse length: 1 um-1 = 1e4 cm-1.
+    "cm-1": ("inverse length", 1.0),
+    "um-1": ("inverse length", 1e4),
+    "cP": ("viscosity", 1.0),
     "1": ("dimensionless", 1.0),
 }
 
@@ -142,10 +176,15 @@ def convert(value, from_unit: str, to_unit: str):
     """Convert ``value`` from ``from_unit`` to ``to_unit``.
 
     Supported: length ``nm um mm cm m``, time ``s min h``, temperature ``C K``, volume
-    ``mL L``, mass concentration ``mg/L g/L``. ``value`` may be a scalar or an array; lists
-    and tuples are converted to NumPy arrays. If the two units are identical, ``value`` is
-    returned unchanged (without checking the unit). Unknown units and conversions between
-    different dimensions raise ``ValueError``.
+    ``um3 mL L``, area ``um2``, mass concentration ``mg/L g/L``, concentration
+    ``mmol/L mol/L``, diffusivity ``um2/s cm2/s``, molar energy ``J/mol kJ/mol eV``,
+    inverse length ``um-1 cm-1``, and single-unit dimensions such as ``mol/g``, ``L/mol``,
+    ``L/(mol*s)``, ``kg/mol``, ``um/s``, ``1/s``, ``1/K``, ``g/cm3``, ``1/(g/m2)`` and ``cP``.
+    The units of reference-curve axes (``log10(lux*s)``, ``cycles/mm`` ...) are labels only
+    and are not known here. ``value`` may be a scalar or an array; lists and tuples are
+    converted to NumPy arrays. If the two units are identical, ``value`` is returned
+    unchanged (without checking the unit). Unknown units and conversions between different
+    dimensions raise ``ValueError``.
     """
     if from_unit == to_unit:
         return value
@@ -158,7 +197,12 @@ def convert(value, from_unit: str, to_unit: str):
     if from_dim == "temperature":
         kelvin = value + _TEMPERATURE_OFFSET_K[from_unit]
         return kelvin - _TEMPERATURE_OFFSET_K[to_unit]
-    return value * _LINEAR_UNITS[from_unit][1] / _LINEAR_UNITS[to_unit][1]
+    factor_from = _LINEAR_UNITS[from_unit][1]
+    factor_to = _LINEAR_UNITS[to_unit][1]
+    # One multiplication or division by the ratio, which is exact for powers of ten.
+    if factor_from >= factor_to:
+        return value * (factor_from / factor_to)
+    return value / (factor_to / factor_from)
 
 
 # --------------------------------------------------------------------------------------

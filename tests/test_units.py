@@ -114,3 +114,49 @@ def test_parse_dilution_rejects(text):
 def test_pixel_pitch():
     assert pixel_pitch_um(36.0, (4000, 6000)) == 6.0
     assert pixel_pitch_um(36.0, (6000, 4000)) == 6.0
+
+
+# --------------------------------------------------------------------------------------
+# D1 units (spec D1 5.1)
+# --------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("value", "from_unit", "to_unit", "expected"),
+    [
+        (1.0, "mol/L", "mmol/L", 1000.0),
+        (1.0, "cm2/s", "um2/s", 1e8),
+        (1.0, "um-1", "cm-1", 1e4),
+        (1.0, "L", "um3", 1e15),
+        (1.0, "mL", "um3", 1e12),
+        (250.0, "mL", "L", 0.25),
+        (1.0, "kJ/mol", "J/mol", 1000.0),
+        (5.0, "1/s", "1/s", 5.0),
+    ],
+)
+def test_convert_d1_units_exact(value, from_unit, to_unit, expected):
+    assert convert(value, from_unit, to_unit) == expected
+
+
+def test_convert_ev_to_molar_energy():
+    # spec D1 5.1: 1 eV corresponds to 96.4853 kJ/mol
+    assert convert(1.0, "eV", "kJ/mol") == pytest.approx(96.4853, abs=5e-5)
+    assert convert(convert(2.7, "eV", "kJ/mol"), "kJ/mol", "eV") == pytest.approx(2.7, rel=1e-15)
+
+
+@pytest.mark.parametrize(
+    "unit",
+    ["mol/g", "L/mol", "L/(mol*s)", "kg/mol", "um/s", "um2", "1/(g/m2)", "cP", "g/cm3", "1/K"],
+)
+def test_single_unit_dimensions_known(unit):
+    assert convert(2.0, unit, unit) == 2.0
+    with pytest.raises(ValueError, match="cannot convert"):
+        convert(1.0, unit, "um" if unit != "um2" else "s")
+
+
+def test_reference_axis_units_are_labels_only():
+    for unit in ("log10(lux*s)", "cycles/mm", "%", "log10(cm2/erg)"):
+        with pytest.raises(ValueError, match="unknown unit"):
+            convert(1.0, unit, "1")
+    with pytest.raises(ValueError, match="cannot convert"):
+        convert(1.0, "mol/L", "kg/mol")
