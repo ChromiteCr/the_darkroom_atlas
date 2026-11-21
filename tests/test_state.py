@@ -375,6 +375,6 @@ def _assembly_seconds(blocks_per_side, block_px=64, trailing=6, repeats=9):
 def test_assembler_linear_cost():
     # Same block size, 4 blocks vs 64 blocks: area ratio 16 (spec §10 D1a). Frames stay
     # small (12 MB at most) so both sizes see the same allocator and cache behaviour and the
-    # ratio measures the algorithm (D0's repeated paste gives about 16 x 16 = 256).
+    # ratio measures the algorithm (D0's repeated paste measured about 100 here).
     ratio = _assembly_seconds(8) / _assembly_seconds(2)
     assert ratio <= 1.5 * 16
