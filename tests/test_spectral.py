@@ -166,3 +166,10 @@ def test_srgb_matrix_matches_published():
     )
     np.testing.assert_allclose(LINEAR_SRGB_TO_XYZ, published, rtol=0, atol=5e-5)
     np.testing.assert_allclose(LINEAR_SRGB_TO_XYZ[1].sum(), 1.0, rtol=0, atol=1e-12)
+
+
+def test_illuminant_d55():
+    spd = illuminant("D55", DEFAULT_GRID)
+    assert float(np.sum(spd * cmf_xyz(DEFAULT_GRID)[:, 1])) == pytest.approx(1.0, rel=1e-12)
+    # CIE D55 chromaticity: x = 0.3324, y = 0.3474.
+    assert _xy(spd) == pytest.approx((0.3324, 0.3474), abs=1e-3)

@@ -174,7 +174,8 @@ DEFAULT_GRID = SpectralGrid()
 # --------------------------------------------------------------------------------------
 
 _CMF_NAME = "CIE 1931 2 Degree Standard Observer"
-_ILLUMINANT_NAMES = ("D65", "D50", "A", "E")
+# D55 is the ISO sensitometric daylight base (spec D1 section 4.7, section 6.1).
+_ILLUMINANT_NAMES = ("D65", "D55", "D50", "A", "E")
 
 
 @lru_cache(maxsize=1)
@@ -230,7 +231,7 @@ def _illuminant_cached(name: str, grid: SpectralGrid) -> np.ndarray:
 def illuminant(name: str, grid: SpectralGrid) -> np.ndarray:
     """Relative band-integrated energy of a CIE illuminant on ``grid``, shape ``(B,)``.
 
-    ``name`` is one of ``"D65" "D50" "A" "E"``. The tabulated spectral power distribution is
+    ``name`` is one of ``"D65" "D55" "D50" "A" "E"``. The tabulated spectral power distribution is
     resampled to the band centres, multiplied by ``step_nm`` and normalised so that
     ``sum(spd * ybar) == 1``.
     """

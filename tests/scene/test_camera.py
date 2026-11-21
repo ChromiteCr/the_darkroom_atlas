@@ -135,3 +135,114 @@ def test_tungsten_shifts_spectrum():
 
     assert long_over_short("A") > 1.0
     assert long_over_short("A") > long_over_short("D65")
+
+
+# --------------------------------------------------------------------------------------
+# D1a: low-rank scene light (spec D1 section 4.2, section 10)
+# --------------------------------------------------------------------------------------
+
+_SETTINGS = [
+    {},
+    {"illuminant": "A", "iso": 400.0, "ev": -1.5, "time_s": 1 / 30},
+    {"illuminant": "D55", "white_exposure_lux_s": 2.0},
+]
+
+
+def _d0_flux(rgb, *, illuminant="D65", iso=100.0, ev=0.0, time_s=1 / 125, white=None):
+    """The D0 scene light, written out from the module docs."""
+    from darkroom_atlas.scene.upsample import rgb_to_reflectance
+    from darkroom_atlas.spectral import cmf_xyz
+    from darkroom_atlas.spectral import illuminant as spd
+    from darkroom_atlas.units import K_M, photon_energy_j
+
+    energy = rgb_to_reflectance(rgb, DEFAULT_GRID) * spd(illuminant, DEFAULT_GRID)
+    if white is not None:
+        scale = white / K_M * 1e-12
+    else:
+        mean = float(np.mean(energy @ cmf_xyz(DEFAULT_GRID)[:, 1]))
+        scale = (10.0 / iso) * 2.0**ev / (K_M * mean) * 1e-12
+    return energy * (scale / time_s / photon_energy_j(DEFAULT_GRID.wavelengths))
+
+
+def test_scene_light_low_rank_flag(image):
+    from darkroom_atlas.light import Light
+
+    default = scene_light(image)
+    explicit = scene_light(image, low_rank=False)
+    assert isinstance(explicit, Light)
+    np.testing.assert_array_equal(explicit.photon_flux, default.photon_flux)
+    np.testing.assert_array_equal(explicit.photon_flux, _d0_flux(image))
+    assert explicit.meta == default.meta
+    tungsten = scene_light(image, illuminant="A", iso=400.0, ev=-1.5, time_s=1 / 30)
+    np.testing.assert_array_equal(
+        tungsten.photon_flux,
+        _d0_flux(image, illuminant="A", iso=400.0, ev=-1.5, time_s=1 / 30),
+    )
+    fixed = scene_light(image, illuminant="D55", white_exposure_lux_s=2.0, low_rank=False)
+    np.testing.assert_array_equal(fixed.photon_flux, _d0_flux(image, illuminant="D55", white=2.0))
+
+
+@pytest.mark.parametrize("kwargs", _SETTINGS)
+def test_scene_light_low_rank_matches_full(image, kwargs):
+    from darkroom_atlas.light import LowRankLight
+
+    full = scene_light(image, **kwargs)
+    low = scene_light(image, low_rank=True, **kwargs)
+    assert isinstance(low, LowRankLight)
+    assert low.rank == 3
+    assert low.shape_hw == full.shape_hw
+    assert low.meta["energy_scale_j_per_um2"] == pytest.approx(
+        full.meta["energy_scale_j_per_um2"], rel=1e-12
+    )
+    assert {k: v for k, v in low.meta.items() if k != "energy_scale_j_per_um2"} == {
+        k: v for k, v in full.meta.items() if k != "energy_scale_j_per_um2"
+    }
+    expanded = low.to_light().photon_flux
+    mask = full.photon_flux > 0.0
+    assert np.array_equal(expanded > 0.0, mask)
+    rel = np.abs(expanded[mask] - full.photon_flux[mask]) / full.photon_flux[mask]
+    assert rel.max() <= 1e-12
+
+
+def test_scene_light_low_rank_shares_read_only_input():
+    rgb = np.random.default_rng(7).random((8, 9, 3))
+    rgb.flags.writeable = False
+    low = scene_light(rgb, low_rank=True)
+    assert low.coefficients is rgb
+    writable = np.random.default_rng(8).random((8, 9, 3))
+    copied = scene_light(writable, low_rank=True)
+    assert not np.shares_memory(copied.coefficients, writable)
+    as_float32 = scene_light(writable.astype(np.float32), low_rank=True)
+    assert as_float32.coefficients.dtype == np.float64
+
+
+def test_scene_light_low_rank_black_frame_and_errors(image):
+    black = scene_light(np.zeros((4, 6, 3)), iso=100, low_rank=True)
+    full_black = scene_light(np.zeros((4, 6, 3)), iso=100)
+    assert black.meta["energy_scale_j_per_um2"] == pytest.approx(
+        full_black.meta["energy_scale_j_per_um2"], rel=1e-12
+    )
+    for ev in (1010.0, 1024.0, -1100.0):
+        with pytest.raises(ValueError, match="ev"):
+            scene_light(image, ev=ev, low_rank=True)
+    with pytest.raises(ValueError, match="white_exposure_lux_s"):
+        scene_light(image, white_exposure_lux_s=1e308, low_rank=True)
+    with pytest.raises(TypeError):
+        scene_light(image, low_rank=1)
+    with pytest.raises(ValueError):
+        scene_light(np.full((2, 2, 3), -0.5), low_rank=True)
+
+
+def test_scene_light_low_rank_no_full_spectrum_allocation():
+    import tracemalloc
+
+    rgb = np.random.default_rng(9).random((600, 400, 3))
+    rgb.flags.writeable = False
+    tracemalloc.start()
+    try:
+        scene_light(rgb, low_rank=True)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    # The full flux would be 600 * 400 * 81 * 8 = 156 MB; the input is 5.8 MB.
+    assert peak < 4 * rgb.nbytes

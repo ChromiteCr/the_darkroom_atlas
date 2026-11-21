@@ -2,7 +2,7 @@ import array_api_strict as xps
 import numpy as np
 import pytest
 
-from darkroom_atlas.light import Light, apply_transmittance
+from darkroom_atlas.light import Light, LightField, LowRankLight, apply_transmittance
 from darkroom_atlas.spectral import DEFAULT_GRID, SpectralGrid
 
 B = DEFAULT_GRID.n_bands
@@ -99,3 +99,139 @@ def test_filtered_array_api_strict():
     assert bool(xps.all(per_pixel == 0.25))
     with pytest.raises(ValueError):
         apply_transmittance(flux, xps.full((B,), 1.5, dtype=xps.float64))
+
+
+# --------------------------------------------------------------------------------------
+# D1a: window / project and LowRankLight (spec D1 section 4.2, section 10)
+# --------------------------------------------------------------------------------------
+
+
+def _low_rank(h=6, w=5, rank=3, seed=3, meta=None):
+    rng = np.random.default_rng(seed)
+    coefficients = rng.random((h, w, rank)) * 2.0
+    basis = rng.random((rank, B)) * 1e3
+    return LowRankLight(coefficients, basis, DEFAULT_GRID, meta or {"iso": 100.0})
+
+
+def _assert_rel(actual, expected, rtol=1e-12):
+    actual, expected = np.asarray(actual), np.asarray(expected)
+    assert actual.shape == expected.shape
+    assert np.all(np.abs(actual - expected) <= rtol * np.abs(expected))
+
+
+def test_light_window_shares_and_project():
+    flux = np.random.default_rng(2).random((5, 7, B))
+    light = Light(flux, DEFAULT_GRID, meta={"iso": 100.0})
+    block = light.window(slice(1, 4), slice(2, 7))
+    assert block.shape_hw == (3, 5)
+    assert np.shares_memory(block.photon_flux, light.photon_flux)
+    np.testing.assert_array_equal(block.photon_flux, flux[1:4, 2:7])
+    assert block.meta == {"iso": 100.0}
+    weights = np.random.default_rng(4).random((B, 2))
+    np.testing.assert_array_equal(light.project(weights), flux @ weights)
+    np.testing.assert_array_equal(
+        light.project(weights, rows=slice(1, 4), cols=slice(2, 7)), flux[1:4, 2:7] @ weights
+    )
+    assert isinstance(light, LightField)
+
+
+def test_low_rank_light_window_and_project():
+    low = _low_rank()
+    full = low.to_light()
+    assert isinstance(low, LightField)
+    assert full.shape_hw == low.shape_hw == (6, 5)
+    _assert_rel(full.photon_flux, low.coefficients @ low.basis)
+    weights = np.random.default_rng(5).random((B, 4))
+    _assert_rel(low.project(weights), full.project(weights))
+    rows, cols = slice(2, 5), slice(1, 4)
+    block = low.window(rows, cols)
+    _assert_rel(block.photon_flux, full.window(rows, cols).photon_flux)
+    _assert_rel(low.project(weights, rows, cols), full.project(weights, rows, cols))
+    _assert_rel(low.project(weights, rows=rows), full.project(weights, rows=rows))
+    _assert_rel(low.luminous_exposure_lux_s(0.01), full.luminous_exposure_lux_s(0.01))
+    assert block.meta == low.meta
+
+
+def test_low_rank_light_memory():
+    shape = (6000, 4000, 3)
+    coefficients = np.zeros(shape)
+    coefficients.flags.writeable = False
+    low = LowRankLight(coefficients, np.ones((3, B)), DEFAULT_GRID)
+    assert low.coefficients is coefficients  # read-only input is shared, not copied
+    assert low.nbytes == coefficients.nbytes + 3 * B * 8
+    assert low.nbytes <= 0.6e9
+    assert low.rank == 3
+
+
+def test_low_rank_light_filtered():
+    low = _low_rank()
+    t = np.linspace(0.0, 1.0, B)
+    out = low.filtered(t)
+    assert isinstance(out, LowRankLight)
+    assert out.coefficients is low.coefficients
+    np.testing.assert_array_equal(out.basis, low.basis * t)
+    _assert_rel(out.to_light().photon_flux, low.to_light().filtered(t).photon_flux)
+    assert out.meta == low.meta
+    with pytest.raises(ValueError):
+        low.filtered(np.full((6, 5, B), 0.5))
+    with pytest.raises(ValueError):
+        low.filtered(np.full(B, 1.5))
+    bad = np.full(B, 0.5)
+    bad[3] = np.nan
+    with pytest.raises(ValueError):
+        low.filtered(bad)
+
+
+def test_low_rank_light_is_immutable():
+    coefficients = np.ones((2, 3, 3))
+    low = LowRankLight(coefficients, np.ones((3, B)), DEFAULT_GRID, meta={"iso": 100.0})
+    assert not low.coefficients.flags.writeable
+    assert not low.basis.flags.writeable
+    coefficients[0, 0, 0] = 5.0  # a writable input is copied
+    assert low.coefficients[0, 0, 0] == 1.0
+    with pytest.raises(TypeError):
+        low.meta["iso"] = 200.0
+
+
+def test_low_rank_light_rejects_bad_input():
+    good_c, good_b = np.ones((2, 3, 3)), np.ones((3, B))
+    with pytest.raises(ValueError):
+        LowRankLight(np.ones((2, 3)), good_b, DEFAULT_GRID)
+    with pytest.raises(ValueError):
+        LowRankLight(np.ones((0, 3, 3)), good_b, DEFAULT_GRID)
+    with pytest.raises(ValueError):
+        LowRankLight(good_c, np.ones((2, B)), DEFAULT_GRID)
+    with pytest.raises(ValueError):
+        LowRankLight(good_c, np.ones((3, B - 1)), DEFAULT_GRID)
+    for bad in (-1.0, np.nan, np.inf):
+        c = good_c.copy()
+        c[0, 0, 0] = bad
+        with pytest.raises(ValueError):
+            LowRankLight(c, good_b, DEFAULT_GRID)
+        b = good_b.copy()
+        b[0, 0] = bad
+        with pytest.raises(ValueError):
+            LowRankLight(good_c, b, DEFAULT_GRID)
+    with pytest.raises(TypeError):
+        LowRankLight(good_c, good_b, "grid")
+
+
+def test_window_and_project_reject_bad_arguments():
+    low = _low_rank()
+    for light in (low, low.to_light()):
+        with pytest.raises(ValueError):
+            light.window(slice(3, 3), slice(0, 2))
+        with pytest.raises(TypeError):
+            light.window(0, slice(0, 2))
+        with pytest.raises(ValueError):
+            light.project(np.ones(B))
+        with pytest.raises(ValueError):
+            light.project(np.ones((B - 1, 2)))
+        with pytest.raises(ValueError):
+            light.project(np.full((B, 2), np.nan))
+        with pytest.raises(ValueError):
+            light.project(np.ones((B, 2)), rows=slice(10, 12))
+        with pytest.raises(TypeError):
+            light.project(np.ones((B, 2)), rows=1)
+        with pytest.raises(ValueError):
+            light.luminous_exposure_lux_s(0.0)
