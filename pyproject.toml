@@ -48,6 +48,8 @@ digitize = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["slow: takes more than 30 s; skipped unless selected with -m slow"]
+addopts = "-m 'not slow'"
 
 [tool.ruff]
 line-length = 100
