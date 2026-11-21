@@ -1,0 +1,39 @@
+# KODAK XTOL as US 5,756,271 Example 1, "Preferred Developing Kit" (spec D1 1.1). Amounts are
+# g/L of working stock: Part A (sodium sulfite 10, DTPA-Na5 1, sodium metaborate "8 mol" 4.0,
+# Dimezone S 0.2) dissolved in 850 mL water, then Part B (sodium sulfite 75, sodium
+# metabisulfite 3.5, sodium isoascorbate 12), made up to 1 L. The two sulfite amounts are
+# summed here. Report abbreviations: DEV = docs/research/d1/developer-formulas.md,
+# TMX = t-max-developer.md.
+schema_version: 1
+id: xtol
+name: KODAK XTOL Developer (US 5,756,271 Example 1)
+kind: developer
+formula_confidence: patent
+variant: patent-example-1
+base_solution: stock
+components:
+  - {species: sodium-sulfite, amount: {value: 85.0, unit: g/L, source: literature, ref: "US 5,756,271 Example 1: Part A 10 g + Part B 75 g; DEV 2.1"}}
+  - {species: dtpa-pentasodium, amount: {value: 1.0, unit: g/L, source: literature, ref: "US 5,756,271 Example 1, Part A; DEV 2.1"}}
+  - {species: sodium-metaborate-tetrahydrate, amount: {value: 4.0, unit: g/L, source: literature, ref: "US 5,756,271 Example 1, Part A, sodium metaborate (8 mol); DEV 2.1", note: "'8 mol' read as the trade grade Na2B2O4.8H2O = NaBO2.4H2O (recalled trade naming, DEV 2.1)"}}
+  - {species: dimezone-s, amount: {value: 0.2, unit: g/L, source: literature, ref: "US 5,756,271 Example 1, Part A, 4-hydroxymethyl-4-methyl-1-phenyl-3-pyrazolidone; DEV 2.1"}}
+  - {species: sodium-metabisulfite, amount: {value: 3.5, unit: g/L, source: literature, ref: "US 5,756,271 Example 1, Part B; DEV 2.1"}}
+  - {species: sodium-erythorbate-monohydrate, amount: {value: 12.0, unit: g/L, source: literature, ref: "US 5,756,271 Example 1, Part B, sodium isoascorbate; DEV 2.1", note: "hydration not stated in the patent; read as the monohydrate (55.5 mM), DEV 2.1"}}
+ph_anchors:
+  - dilution: stock
+    temperature: {value: 25, unit: C, source: datasheet, ref: "Kodak J-109 (Feb 2018) p. 1: measured at 25 +- 0.3 C; Kodak CIS-61; TMX 10.3"}
+    ph: {value: 8.20, unit: "1", source: literature, ref: "US 5,756,271 Example 1 (final solution 8.20 +- 0.05); J-109 (Feb 2018) and CIS-61 give 8.2 +- 0.05; DEV 2.1, 2.3", uncertainty: 0.05}
+    method: glass_electrode
+    note: "J-109 and CIS-61 give specific gravity 1.085 +- 0.003 at 25 C for the working tank solution"
+standard_dilutions: ["stock", "1+1", "1+2", "1+3"]
+refs:
+  - "US 5,756,271 (Opitz & Zawadzki, Eastman Kodak, 1998), Example 1; DEV 2.1"
+  - "Kodak J-109 (Feb 2018): stock and 1:1; J-109 (Apr 1998): 1:1, 1:2, 1:3; DEV 2.3"
+  - "PSI SDS 1058338A v2.0 (2024-02-20) for Part A; DEV 2.2"
+  - "Kodak CIS-61; TMX 10.3"
+note: >-
+  No initial bromide. Part A alone in 850 mL has pH 10.19 +- 0.05 (patent Example 1, glass
+  electrode, DEV 2.1); it is not a dilution of this solution, so it is not a ph_anchor here
+  (the calibration builds it from the Part A amounts / 0.85 L, spec D1 7.2, 12.4). The
+  commercial kit differs: Part A buffers with borax pentahydrate, and the SDS give Dimezone S
+  < 0.01 % (PSI 2024) or 0.1 to < 1 % (Kodak 2015, secondary) (DEV 2.2, 7 items 3-4).
+  Working pH at 1:1-1:3 not published (DEV 2.3).

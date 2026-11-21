@@ -1,0 +1,35 @@
+# Packaged KODAK D-76 (powder kit): what the Kodak reference curves were made with
+# (spec D1 1.1, 5.8). Amounts are g/L of stock. Exact amounts are withheld by the SDS; the
+# ranges below are the PSI SDS 5160304 v2.0 (2024) w/w ranges converted with a kit mass of
+# about 105-125 g/L (sulfite fixed at 100 g/L), DEV 1.2 (estimate with an assumed kit mass).
+# Report abbreviations: DEV = docs/research/d1/developer-formulas.md, TMX = t-max-developer.md.
+schema_version: 1
+id: d-76
+name: KODAK Developer D-76 (packaged)
+kind: developer
+formula_confidence: msds-estimated
+variant: packaged
+base_solution: stock
+components:
+  - {species: sodium-sulfite, amount: {value: 100.0, unit: g/L, source: assumed, bounds: [84.0, 119.0], note: "PSI SDS 2024 80-95 %, kit mass assumed; DEV 1.2"}}
+  - {species: hydroquinone, amount: {value: 5.0, unit: g/L, source: assumed, bounds: [3.2, 6.3], note: "PSI SDS 2024 3-5 %; DEV 1.2"}}
+  - {species: metol-sulfate, amount: {value: 2.0, unit: g/L, source: assumed, bounds: [1.1, 3.8], note: "PSI SDS 2024 1-3 %; DEV 1.2"}}
+  - {species: borax-pentahydrate, amount: {value: 1.53, unit: g/L, source: assumed, bounds: [1.1, 3.8], note: "2 g decahydrate equivalent; PSI SDS 2024 1-3 %; DEV 1.2"}}
+  - {species: boric-oxide, amount: {value: 2.0, unit: g/L, source: assumed, bounds: [0.0, 3.8], note: "PLACEHOLDER; nuisance, fitted in stage A against the CIS-61 anchor (spec D1 7.1); PSI SDS 2024 1-3 %, DEV 1.2, lower bound 0 per DEV 7 item 2"}}
+  - {species: dtpa, amount: {value: 0.5, unit: g/L, source: assumed, bounds: [0.0, 1.2], note: "pentetic acid (CAS 67-43-6), PSI SDS 2024 < 1 %; DEV 1.2"}}
+nuisance: [boric-oxide]
+ph_anchors:
+  - dilution: stock
+    temperature: {value: 25, unit: C, source: datasheet, ref: "Kodak CIS-61 (May 2010); TMX 10.2"}
+    ph: {value: 8.5, unit: "1", source: datasheet, ref: "Kodak CIS-61 (May 2010), typical value, D-76 stock; TMX 10.2", uncertainty: 0.05}
+    method: typical
+    note: "CIS-61 gives specific gravity 1.078 +- 0.003 for the stock and 1.039 for 1:1 (pH not given for 1:1), 25 C; TMX 10.2"
+standard_dilutions: ["stock", "1+1"]
+refs:
+  - "Kodak J-78 (Dec 2017), pp. 2 and 5: full strength or 1:1, one shot"
+  - "PSI SDS 5160304 v2.0 (2024-07-24), section 3; DEV 1.2"
+  - "Kodak CIS-61 (Oct 1999, Feb 2003, May 2010); TMX 10.2"
+note: >-
+  Differs from the published formula by diboron trioxide (a borax/boric-acid buffer of the
+  D-76d kind), DTPA, and borax supplied as the pentahydrate (DEV 1.2). No initial bromide.
+  SIT-only pH with B2O3 1-3 g/L is 8.32-8.17, below CIS-61 8.5 (spec D1 9 item 3, 12.4).

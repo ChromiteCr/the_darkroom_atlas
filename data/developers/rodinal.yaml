@@ -1,0 +1,29 @@
+# Rodinal / ADOX Adonal / R09 type p-aminophenol concentrate: the unreferenced "predicted"
+# case of D1 (spec D1 1.1; DEV 4). Amounts are g/L of CONCENTRATE from the ADOX Rodinal SDS
+# v1.0 (2024-06-24) w/w ranges: midpoint x an assumed density 1.2 kg/L, bounds from the range
+# ends x 1.1-1.3 kg/L (DEV 4, assumed density). Validation status in D1: predicted.
+# Report abbreviations: DEV = docs/research/d1/developer-formulas.md.
+schema_version: 1
+id: rodinal
+name: Rodinal type p-aminophenol developer (ADOX SDS composition)
+kind: developer
+formula_confidence: msds-estimated
+variant: adox-2024
+base_solution: concentrate
+components:
+  - {species: p-aminophenol, amount: {value: 48.0, unit: g/L, source: assumed, bounds: [33.0, 65.0], note: "ADOX SDS 2024 4-aminophenol 3-5 % (opened, DEV 4), density assumed"}}
+  - {species: potassium-hydroxide, amount: {value: 24.0, unit: g/L, source: assumed, bounds: [11.0, 39.0], note: "ADOX SDS 2024 1-3 % (opened, DEV 4), density assumed"}}
+  - {species: potassium-bromide, amount: {value: 24.0, unit: g/L, source: assumed, bounds: [11.0, 39.0], note: "ADOX SDS 2024 1-3 % (opened, DEV 4), density assumed; 3.5-13 mM Br- at 1+25"}}
+standard_dilutions: ["1+25", "1+50"]
+refs:
+  - "ADOX Rodinal SDS v1.0 (2024-06-24), section 3: 4-aminophenol 3-5 %, KOH 1-3 %, KBr 1-3 %; pH > 13; DEV 4"
+  - "AGFA RODINAL leaflet (a&o imaging solutions GmbH, code 13 144 140 - 1106): dilution 1+25 or 1+50 at 20 C; DEV 4"
+  - "ADOX product page: dilution 1+25 to 1+500, one shot; DEV 4"
+note: >-
+  Sulfite (or metabisulfite) is present in Rodinal but not listed in the SDS (non-classified,
+  silently omitted; DEV 4, 7 item 9); no amount is known, so it is left out of this formula.
+  Concentrate pH > 13 (ADOX SDS, a lower limit, so not a ph_anchor); working pH not found.
+  DEV 5.2 ideal-solution sweeps over the undisclosed alkali and sulfite: 11.9-12.3 at 1+25,
+  11.6-12.1 at 1+50 (DEV 4 gives 11.6-12.3 and 11.4-12.1), falling by about 0.3 per
+  doubling of the dilution. This SDS-midpoint centre (KOH about equimolar with the
+  p-aminophenol) gives a lower ideal-solution pH, about 11.3 at 1+25 (20 C).

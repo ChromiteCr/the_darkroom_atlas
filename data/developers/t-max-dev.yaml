@@ -1,0 +1,43 @@
+# KODAK PROFESSIONAL T-MAX Developer, generation I (amine-SO2 concentrate), the formulation
+# behind the Kodak reference curves (spec D1 1.1; TMX 0, 1). Amounts are g/L of CONCENTRATE:
+# TMX 6 gives the working solution (1 part concentrate + 4 parts water, factor 5), so each
+# value here is 5 times the TMX 6 working value (bounds likewise). TMX 6 reads the 2007 MSDS
+# "diethanolamine-sulphur dioxide complex" as the raw material "diethanolamine (with 16 % sulfur
+# dioxide)" of US 5,756,271 Examples 2-5 (assumed, TMX 3.3) with a concentrate density of
+# 1.225 kg/L (1.21-1.24, from CIS-61 specific gravity, TMX 3.1).
+# Report abbreviations: TMX = docs/research/d1/t-max-developer.md, DEV = developer-formulas.md.
+schema_version: 1
+id: t-max-dev
+name: KODAK PROFESSIONAL T-MAX Developer (generation I, amine-SO2 concentrate)
+kind: developer
+formula_confidence: msds-estimated
+variant: generation-I
+base_solution: concentrate
+components:
+  - {species: diethanolamine, amount: {value: 411.5, unit: g/L, source: assumed, bounds: [355.5, 468.5], note: "5 x TMX 6 working 82.3 (71.1-93.7) g/L = 0.783 (0.677-0.892) M; Kodak MSDS 2007 complex 35-45 % read as DEA with 16 % SO2 (assumed, TMX 3.3)"}}
+  - {species: sulfur-dioxide, amount: {value: 78.5, unit: g/L, source: assumed, bounds: [68.0, 89.5], note: "S(IV) nuisance (spec D1 7.1 stage A); 5 x TMX 6 working 15.7 (13.6-17.9) g/L = 0.245 (0.212-0.279) M SO2 from the amine complex; the 2014 literal reading (SO2 15-20 %) is excluded by the measured pH (TMX 4.2)"}}
+  - {species: sodium-metabisulfite, amount: {value: 36.75, unit: g/L, source: assumed, bounds: [12.1, 62.0], note: "5 x TMX 6 working 7.35 (2.42-12.4) g/L; Kodak MSDS 2007 1-5 %, arithmetic midpoint (TMX 6)"}}
+  - {species: hydroquinone, amount: {value: 36.75, unit: g/L, source: assumed, bounds: [12.1, 62.0], note: "5 x TMX 6 working 7.35 (2.42-12.4) g/L = 66.8 (22-113) mM; Kodak MSDS 2007 1-5 %, arithmetic midpoint"}}
+  - {species: dimezone-s, amount: {value: 3.85, unit: g/L, source: assumed, bounds: [1.2, 12.4], note: "5 x TMX 6 working 0.77 (0.24-2.48) g/L = 3.8 (1.2-12) mM; MSDS 0.1-1 %, geometric midpoint 0.32 % (TMX 6)"}}
+  - {species: sodium-bromide, amount: {value: 0.0, unit: g/L, source: assumed, bounds: [0.0, 10.8], note: "initial bromide not listed in any generation-I SDS; TMX 5: centre 0, bound 0-21 mM in working solution by analogy with generation II '< 1 % NaBr' (21 mM x 5 x 102.89 g/mol = 10.8 g/L of concentrate)"}}
+nuisance: [sulfur-dioxide, hydroquinone, dimezone-s, sodium-bromide]
+ph_anchors:
+  - dilution: "1+4"
+    temperature: {value: 25, unit: C, source: datasheet, ref: "Kodak CIS-61 (Oct 1999, Feb 2003, May 2010); TMX 4.1"}
+    ph: {value: 8.37, unit: "1", source: datasheet, ref: "Kodak CIS-61 (Oct 1999, Feb 2003, May 2010), typical value, T-MAX Developer working solution; TMX 4.1", uncertainty: 0.05}
+    method: typical
+    note: "CIS-61 working-solution specific gravity 1.045 +- 0.003 at 25 C (fresh tank); TMX 3.1, 4.1"
+standard_dilutions: ["1+4"]
+refs:
+  - "Kodak J-86 (Dec 2017) p. 1, 9 and Oct 2002: one part concentrate plus four parts water; TMX 3.1"
+  - "Eastman Kodak MSDS 000000020762 v1.1 (2007-10-02), product 1599844; TMX 2.1"
+  - "Kodak Alaris MSDS/SDS 000000020762 v1.8/v2.1 (2014), product 1402767/5050851; TMX 2.3"
+  - "US 5,756,271 Examples 2-5 (diethanolamine with 16 % sulfur dioxide); TMX 3.3, 9"
+  - "Kodak CIS-61 (1999, 2003, 2010); TMX 4.1"
+note: >-
+  Concentrate pH 8.3 (MSDS 2007), 8.3-8.8 (SDS 2014), 8.8 (SDS 2019 v11), measurement
+  temperature and method not stated (TMX 1, 4.1); concentrate specific gravity 1.22-1.23
+  (2014), 1.21 (2019 v11). Ideal-solution pH of this centre formula 8.50 at 25 C (TMX 4.2);
+  the main buffer is DEAH+/DEA (TMX 4.3). Generation II (product 1058718, K2SO3/borax, from
+  2019) is a different formula and is not in this file (TMX 2.5). Unlisted chelating agent,
+  antifoggant or solvent possible (TMX 5).

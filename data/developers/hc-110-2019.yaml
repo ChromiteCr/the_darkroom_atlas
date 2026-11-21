@@ -1,0 +1,36 @@
+# KODAK PROFESSIONAL HC Developer (HC-110 formulation from 2019 on, product 1058692), from the
+# PSI SDS v5.0 (2024-07-22) section 3 w/w ranges (spec D1 1.1; DEV 3.2). Not used in
+# calibration. Amounts are g/L of CONCENTRATE: w/w midpoint x the SDS relative density 1.07,
+# bounds from the range ends x density 1.07-1.25 (DEV 3.2 flags 1.07 as low and uses
+# 1.07-1.25 for its working concentrations; estimate). The g/L / 32 reproduce the DEV 3.2
+# working concentrations at dilution B.
+# Report abbreviations: DEV = docs/research/d1/developer-formulas.md.
+schema_version: 1
+id: hc-110-2019
+name: KODAK PROFESSIONAL HC Developer (HC-110, 2019 formulation)
+kind: developer
+formula_confidence: msds-estimated
+variant: "2019"
+base_solution: concentrate
+components:
+  - {species: potassium-sulfite, amount: {value: 240.75, unit: g/L, source: assumed, bounds: [192.6, 337.5], note: "potassium sulfite solution 45 % at 40-60 % = K2SO3 18-27 %, midpoint 22.5 % (PSI SDS 2024; DEV 3.2)"}}
+  - {species: hydroquinone, amount: {value: 133.75, unit: g/L, source: assumed, bounds: [107.0, 187.5], note: "PSI SDS 2024 10-15 %; DEV 3.2"}}
+  - {species: diethylene-glycol, amount: {value: 80.25, unit: g/L, source: assumed, bounds: [53.5, 125.0], note: "PSI SDS 2024 5-10 %; DEV 3.2"}}
+  - {species: borax-pentahydrate, amount: {value: 42.8, unit: g/L, source: assumed, bounds: [32.1, 62.5], note: "PSI SDS 2024 3-5 %; DEV 3.2"}}
+  - {species: potassium-hydroxide, amount: {value: 9.63, unit: g/L, source: assumed, bounds: [4.815, 16.875], note: "potassium hydroxide 45 % at 1-3 % = KOH 0.45-1.35 %, midpoint 0.9 % (PSI SDS 2024; DEV 3.2)"}}
+  - {species: sodium-bromide, amount: {value: 21.4, unit: g/L, source: assumed, bounds: [10.7, 37.5], note: "PSI SDS 2024 1-3 %; DEV 3.2 (3.3-11 mM Br- at 1+31)"}}
+  - {species: hedta-trisodium, amount: {value: 8.56, unit: g/L, source: assumed, bounds: [4.28, 15.0], note: "Dissolvine H-40 (about 40 % HEDTA-Na3 solution) at 1-3 % = 0.4-1.2 % active, midpoint 0.8 % (PSI SDS 2024; DEV 3.2)"}}
+  - {species: diethanolamine, amount: {value: 21.4, unit: g/L, source: assumed, bounds: [10.7, 37.5], note: "PSI SDS 2024 1-3 %; DEV 3.2"}}
+  - {species: dimezone-s, amount: {value: 5.35, unit: g/L, source: assumed, bounds: [0.0, 12.5], note: "PSI SDS 2024 < 1 %, midpoint of 0-1 % (assumed); DEV 3.2"}}
+standard_dilutions: ["1+15", "1+31", "1+19", "1+39", "1+47", "1+79"]
+refs:
+  - "PSI SDS 'KODAK PROFESSIONAL HC Developer', product 1058692, v5.0 (2024-07-22), sections 3 and 9; DEV 3.2"
+  - "Kodak J-24 (Dec 2017) p. 2: dilutions A-F from concentrate 1:15, 1:31, 1:19, 1:39, 1:47, 1:79 (part + parts); DEV 3.3"
+note: >-
+  Dilutions are from the concentrate: A 1+15, B 1+31, C 1+19, D 1+39, E 1+47, F 1+79 (J-24;
+  stock is 1+3, from which B is 1+7). Published pH (PSI SDS 2024 section 9): concentrate 9.0
+  and "pH in solution 9.3" at an unstated dilution, temperature and method not stated; no
+  ph_anchor because the dilution of the 9.3 value is unknown and the formula is not
+  calibrated. Ideal-solution pH at 1+31 is 9.26 (DEV 3.2, 5.2). Pyrocatechol < 0.05 % (SDS
+  section 3) is not in the species table and is left out. Relative density 1.07 (SDS)
+  looks low for the stated composition (DEV 3.2, 7 item 8).
