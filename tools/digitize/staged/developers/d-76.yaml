@@ -430,11 +430,19 @@ development_times:
   agitation: Follow the agitation recommendations for your processor.
   agitation_ref: rotary-tube
   dilution: full strength (stock)
-  note: the header prints the temperature columns in the order 18, 21, 20, 22, 24 C; temperature_c keeps that printed
-    order
+  note: the header prints the temperature columns in the order 18, 21, 20, 22, 24 C (65, 70, 68, 72, 75 F), kept in
+    temperature_c_as_printed and temperature_f_as_printed. That order contradicts the table body. Read with the printed
+    headings, 13 of the 18 rows need longer development at 21 C than at 20 C and none needs less (TRI-X Pan 400/800 is
+    7 min at "21" and 6 at "20", T-MAX 100 Professional 100/200 is 6½ against 6 and its EI 400 row 9 against 8½, T-MAX
+    400 EI 800 7 against 6½, PLUS-X Pan 125 5 against 4). Development time shortens as temperature rises, and with the
+    second and third headings exchanged no row of this table gets longer anywhere from 18 to 24 C. So the second column
+    is taken as 20 C and the third as 21 C in temperature_c and temperature_f. No other publication in this set prints
+    a D-76 rotary-tube table to confirm it; the printed and minutes values stay in printed column order
   unit: min
-  temperature_c: [18, 21, 20, 22, 24]
-  temperature_f: [65, 70, 68, 72, 75]
+  temperature_c_as_printed: [18, 21, 20, 22, 24]
+  temperature_f_as_printed: [65, 70, 68, 72, 75]
+  temperature_c: [18, 20, 21, 22, 24]
+  temperature_f: [65, 68, 70, 72, 75]
   rows:
   - film_as_printed: T-MAX 100 Professional
     material: null

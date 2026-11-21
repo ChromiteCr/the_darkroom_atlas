@@ -70,9 +70,9 @@ facts:
       mL water}
   note: '"1:7" means one part stock to seven parts water (eight parts in all), as the volume columns show (for 1
     L, 125 mL + 875 mL). With stock = 1 part concentrate in 4, B from stock is 1 part concentrate in 32, the same
-    as 1:31 from concentrate. The stock table prints "4.38 mL" of water for 5 L of B and the concentrate table prints
-    "828 L (28 fl oz)" of concentrate for 13.3 L of A; these look like misprints for 4.38 L and 828 mL and are not
-    used.'
+    as 1:31 from concentrate. The stock table prints "4.38 mL" of water for 5 L of B, and the concentrate table prints
+    "313 L" of concentrate (beside 4687 mL of water) for 5 L of A and "828 L (28 fl oz)" of concentrate for 13.3 L of
+    A; these look like misprints for 4.38 L, 313 mL and 828 mL and are not used.'
 - id: concentrate-versions
   value: null
   unit: null
