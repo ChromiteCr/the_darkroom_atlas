@@ -2,4 +2,4 @@
 
 __all__ = ["ATLAS_VERSION"]
 
-ATLAS_VERSION: str = "D0c"
+ATLAS_VERSION: str = "D0d"
