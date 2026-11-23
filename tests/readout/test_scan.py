@@ -88,6 +88,18 @@ def test_scan_is_seeded(developed, tmp_path):
     assert not np.array_equal(a, b)
 
 
+def test_scan_opaque_pixels_counts_every_replaced_pixel(developed, monkeypatch):
+    state, ctx = developed
+    h, w = state.geometry.shape_hw
+    d = np.full((h, w), 0.5)
+    d[0, 0] = math.inf  # non-finite density
+    d[0, 1] = 1e6  # finite density whose Y_out overflows
+    monkeypatch.setattr(scan, "density_frame", lambda *a, **k: (d, None))
+    result = readout(state, "scan_standard", ctx, grain=False)
+    assert result.meta["opaque_pixels"] == 2
+    assert result.data[0, 0, 0] == 1.0 and result.data[0, 1, 0] == 1.0
+
+
 def test_bad_scan_parameters(developed):
     state, ctx = developed
     with pytest.raises(TypeError, match="grain"):

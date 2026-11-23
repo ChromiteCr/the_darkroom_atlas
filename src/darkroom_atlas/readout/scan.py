@@ -46,11 +46,16 @@ SCAN_D_REF: float = SCAN_D_SPEED + SCAN_G_REF * math.log10(10.0 / 0.8)
 """Net density of the metered average: 0.10 + 0.56 log10(12.5) = 0.714 (spec 2.8)."""
 
 
-def scan_inversion(d_scan: np.ndarray, base: float) -> np.ndarray:
-    """``Y_out = 0.18 * 10^((D_scan - base - D_ref) / G_ref)``; non-finite results become 1."""
+def _scan_raw(d_scan: np.ndarray, base: float) -> np.ndarray:
+    """``Y_out`` before non-finite values are replaced."""
     d_net = np.asarray(d_scan, dtype=np.float64) - float(base)
     with np.errstate(over="ignore", invalid="ignore"):
-        y = SCAN_Y_REF * 10.0 ** ((d_net - SCAN_D_REF) / SCAN_G_REF)
+        return SCAN_Y_REF * 10.0 ** ((d_net - SCAN_D_REF) / SCAN_G_REF)
+
+
+def scan_inversion(d_scan: np.ndarray, base: float) -> np.ndarray:
+    """``Y_out = 0.18 * 10^((D_scan - base - D_ref) / G_ref)``; non-finite results become 1."""
+    y = _scan_raw(d_scan, base)
     return np.where(np.isfinite(y), y, 1.0)
 
 
@@ -77,14 +82,16 @@ def read_scan(state: EmulsionState, ctx: RunContext, *, grain: bool = True) -> R
     """Standard scan as a linear sRGB image ``(H, W, 3)`` (spec 2.8)."""
     d_scan, stats = density_frame(state, scan_product(state.grid), grain=grain)
     base = base_density(state)
-    y = scan_inversion(d_scan, base)
+    y_raw = _scan_raw(d_scan, base)
+    replaced = ~np.isfinite(y_raw)
+    y = np.where(replaced, 1.0, y_raw)
     meta: dict = {
         "device": "scan_standard",
         "grain_mode": grain,
         "base_density": base,
         "d_ref": SCAN_D_REF,
         "g_ref": SCAN_G_REF,
-        "opaque_pixels": int(np.count_nonzero(~np.isfinite(d_scan))),
+        "opaque_pixels": int(np.count_nonzero(replaced)),
     }
     if stats is not None:
         meta["grain"] = grain_meta(stats)
