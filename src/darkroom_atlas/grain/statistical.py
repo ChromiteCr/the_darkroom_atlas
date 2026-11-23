@@ -13,7 +13,10 @@ Per pixel and size class ``c``, from the developed fields (spec 2.0.3):
 Classes with ``p >= 4 r_c``, ``r_c = sqrt(a_c / pi)``, are *counted*: ``N_c ~ Poisson(mu_c)``
 from :func:`~darkroom_atlas.grain.poisson.poisson_inverse` of one uniform per pixel (stream
 ``grain/emulsion/<c>``, ``c`` the 0-based class index). The others are *mean-only*: they
-contribute the factor ``exp(-mu_c q_c)`` and no random draw. The pixel transmittance is
+contribute the factor ``exp(-mu_c q_c)`` and no random draw. Where physical silver enlarges
+a counted class to ``q_c >= 1`` (``(1 - q_c)^N`` would no longer average to
+``exp(-mu_c q_c)``), that class is mean-only in that pixel; its uniform is still drawn, so the
+streams do not change. The pixel transmittance is
 
 ``T_pix = prod_counted (1 - q_c)^N_c * prod_mean_only exp(-mu_c q_c) * (1 + eps)``,
 
@@ -30,8 +33,10 @@ value is computed element-wise (sums over classes as explicit adds), so a pixel'
 does not depend on the window it is computed in (spec 3.6).
 """
 
+import itertools
 import math
 import warnings
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 import numpy as np
@@ -59,6 +64,7 @@ __all__ = [
     "class_stream",
     "counted_classes",
     "epsilon_variance",
+    "exact_expansion",
     "grain_meta",
     "grain_statistics",
     "statistical_transmittance",
@@ -86,8 +92,11 @@ _U_EPS = 2.0**-53
 # Pixels per boolean_excess_variance call: bounds its (pixels, 48) work arrays.
 _VAR_CHUNK_PX = 8192
 
-# Tolerance on F <= 1 and X <= F for rounding in the developed fields.
+# Relative tolerance on F <= 1, X <= F and Y <= X for rounding in the developed fields.
 _FRACTION_TOL = 1e-9
+
+# Upper bound on the terms of an exact float expansion (a finite float64 sum needs < 45).
+_EXPANSION_MAX_TERMS = 64
 
 
 def class_stream(c: int) -> str:
@@ -111,11 +120,22 @@ def counted_classes(developed_areas_um2: np.ndarray, pixel_um: float) -> np.ndar
     return float(pixel_um) >= COUNTED_RADIUS_FACTOR * np.sqrt(a / math.pi)
 
 
-def _count_variance_factor(mu: np.ndarray, q: np.ndarray, counted: np.ndarray) -> np.ndarray:
-    """``sum_{c counted} mu_c q_c^2`` as element-wise adds."""
-    out = np.zeros(mu.shape[:-1], dtype=np.float64)
+def _count_variance(
+    t: np.ndarray, mu: np.ndarray, q: np.ndarray, counted: np.ndarray
+) -> np.ndarray:
+    """``Var_count = T^2 (exp(sum_{c counted} mu_c q_c^2) - 1)``, sums as element-wise adds.
+
+    Where ``expm1`` overflows (or meets ``T^2 = 0``) the value is ``exp(2 ln T + s) - T^2``.
+    """
+    s = np.zeros(mu.shape[:-1], dtype=np.float64)
     for c in np.flatnonzero(counted):
-        out = out + mu[..., c] * (q[..., c] * q[..., c])
+        s = s + mu[..., c] * (q[..., c] * q[..., c])
+    t2 = t * t
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        out = t2 * np.expm1(s)
+        bad = ~np.isfinite(out)
+        if np.any(bad):
+            out = np.where(bad, np.exp(2.0 * np.log(t) + s) - t2, out)
     return out
 
 
@@ -146,7 +166,7 @@ def epsilon_variance(
         if not np.all(np.isfinite(value)) or np.any(value < 0.0):
             raise ValueError(f"{name} must be finite and non-negative")
     t2 = t * t
-    var_count = t2 * np.expm1(_count_variance_factor(mu, q, counted))
+    var_count = _count_variance(t, mu, q, counted)
     denominator = t2 + var_count
     excess = np.maximum(v_bool - var_count, 0.0)
     safe = np.where(denominator > 0.0, denominator, 1.0)
@@ -158,16 +178,18 @@ class GrainStatistics:
     """Per-pixel grain statistics of a window (spec 2.7.1); arrays are read-only.
 
     ``mean_t`` is the silver transmittance ``T = 10^-D_Ag`` ``(h, w)``; ``mu`` and ``q`` are
-    ``(h, w, K)``; ``intensity_per_um2`` (``nu_c F_c``) and ``radius_um`` (``r~_c``) are the
+    ``(h, w, K)``; ``count_q`` ``(h, w, K)`` is ``q_c`` where class ``c`` enters the count
+    product in that pixel (counted and ``q_c < 1``) and 0 elsewhere; ``intensity_per_um2`` (``nu_c F_c``) and ``radius_um`` (``r~_c``) are the
     Boolean-model inputs, ``(h, w, K)``; ``mean_factor`` is the deterministic part
-    ``prod_mean_only exp(-mu_c q_c)`` times the mean factor of physical silver without
-    disks, ``(h, w)``; ``var_bool``, ``var_count`` and ``var_eps`` are ``(h, w)``;
-    ``counted`` is ``(K,)`` bool.
+    ``prod_mean_only exp(-mu_c q_c)`` (demoted pixel-classes included) times the mean factor
+    of physical silver without disks, ``(h, w)``; ``var_bool``, ``var_count`` and ``var_eps``
+    are ``(h, w)``; ``counted`` is the frame-level ``(K,)`` bool.
     """
 
     mean_t: np.ndarray
     mu: np.ndarray
     q: np.ndarray
+    count_q: np.ndarray
     intensity_per_um2: np.ndarray
     radius_um: np.ndarray
     mean_factor: np.ndarray
@@ -186,28 +208,49 @@ class GrainStatistics:
 class GrainBlockStats:
     """What the statistical mode records for ``meta["grain"]`` of one window (spec 2.7.1).
 
-    Sums are kept (not fractions) so several windows can be merged with :meth:`merge`.
-    ``disk_area_sum`` is ``sum_pix sum_c nu_c F_c pi r~_c^2`` and ``disk_area2_sum``
-    ``sum_pix sum_c nu_c F_c (pi r~_c^2)^2``.
+    The sums ``sum_pix sum_c nu_c F_c pi r~_c^2`` and ``sum_pix sum_c nu_c F_c (pi r~_c^2)^2``
+    are kept as exact float expansions (``disk_area_parts``, ``disk_area2_parts``: floats
+    whose exact sum is the exact sum of the per-pixel terms), so merging windows in any order
+    or partition gives the same bits (spec 3.6). ``demoted_pixels`` counts the pixels where a
+    counted class had ``q_c >= 1`` and was taken as mean-only there.
     """
 
     mean_only_classes: tuple[int, ...]
     pixels: int
     truncated_pixels: int
-    disk_area_sum: float
-    disk_area2_sum: float
+    disk_area_parts: tuple[float, ...]
+    disk_area2_parts: tuple[float, ...]
+    demoted_pixels: int = 0
+
+    def __post_init__(self) -> None:
+        for name in ("disk_area_parts", "disk_area2_parts"):
+            parts = tuple(float(v) for v in getattr(self, name))
+            if not all(math.isfinite(v) for v in parts):
+                raise ValueError(f"{name} must be finite")
+            object.__setattr__(self, name, parts)
 
     def merge(self, other: "GrainBlockStats") -> "GrainBlockStats":
-        """Combine with the stats of another window of the same frame."""
+        """Combine with the stats of another window of the same frame (order-independent)."""
         if other.mean_only_classes != self.mean_only_classes:
             raise ValueError("cannot merge grain stats with different mean-only classes")
         return GrainBlockStats(
             self.mean_only_classes,
             self.pixels + other.pixels,
             self.truncated_pixels + other.truncated_pixels,
-            self.disk_area_sum + other.disk_area_sum,
-            self.disk_area2_sum + other.disk_area2_sum,
+            exact_expansion(self.disk_area_parts + other.disk_area_parts),
+            exact_expansion(self.disk_area2_parts + other.disk_area2_parts),
+            self.demoted_pixels + other.demoted_pixels,
         )
+
+    @property
+    def disk_area_sum(self) -> float:
+        """``sum_pix sum_c nu_c F_c pi r~_c^2``, correctly rounded."""
+        return math.fsum(self.disk_area_parts)
+
+    @property
+    def disk_area2_sum(self) -> float:
+        """``sum_pix sum_c nu_c F_c (pi r~_c^2)^2``, correctly rounded."""
+        return math.fsum(self.disk_area2_parts)
 
     @property
     def truncated_fraction(self) -> float:
@@ -220,6 +263,23 @@ class GrainBlockStats:
         if not self.disk_area_sum > 0.0:
             return 0.0
         return math.sqrt(self.disk_area2_sum / (math.pi * self.disk_area_sum))
+
+
+def exact_expansion(values: Iterable[float]) -> tuple[float, ...]:
+    """Floats ``r_1, r_2, ...`` whose exact sum is the exact sum of ``values``.
+
+    ``r_1 = fsum(values)``, ``r_k = fsum(values - r_1 - ... - r_{k-1})``, until the remainder
+    is 0. The result depends only on the exact sum, not on the order or grouping of the
+    values, so expansions of disjoint windows can be concatenated and re-expanded.
+    """
+    terms = [float(v) for v in values]
+    parts: list[float] = []
+    for _ in range(_EXPANSION_MAX_TERMS):
+        r = math.fsum(itertools.chain(terms, (-p for p in parts)))
+        if r == 0.0:
+            return tuple(parts)
+        parts.append(r)
+    raise RuntimeError("exact_expansion did not converge")  # pragma: no cover
 
 
 def aperture_bias(effective_radius_um: float, aperture_um: float) -> float:
@@ -236,7 +296,7 @@ def grain_meta(stats: GrainBlockStats, aperture_um: float | None = None) -> dict
 
     Keys: ``mean_only_classes`` (0-based class indices), ``b_ap`` (``None`` without an
     aperture), ``effective_radius_um``, ``aperture_um``, ``truncated_fraction``,
-    ``truncated_pixels`` and ``pixels``. Warns when ``b_ap > 0.05``.
+    ``truncated_pixels``, ``pixels`` and ``demoted_pixels``. Warns when ``b_ap > 0.05``.
     """
     r_eff = stats.effective_radius_um
     b_ap = None if aperture_um is None else aperture_bias(r_eff, aperture_um)
@@ -255,6 +315,7 @@ def grain_meta(stats: GrainBlockStats, aperture_um: float | None = None) -> dict
         "truncated_fraction": stats.truncated_fraction,
         "truncated_pixels": stats.truncated_pixels,
         "pixels": stats.pixels,
+        "demoted_pixels": stats.demoted_pixels,
     }
 
 
@@ -311,7 +372,9 @@ def grain_statistics(state: EmulsionState, rows: slice, cols: slice) -> GrainSta
     """Per-pixel statistics of the statistical grain mode over a window (spec 2.7.1).
 
     Needs ``emulsion/silver``, ``initiated``, ``silver_m2`` and ``silver_physical``.
-    Raises ``ValueError`` on negative or non-finite fields or ``initiated > 1``.
+    Raises ``ValueError`` on negative or non-finite fields, on ``initiated > 1``, on developed
+    silver above the initiated grains (``X_c > F_c``, including silver with ``F_c = 0``) and on
+    ``Y_c > X_c``, each beyond a relative rounding tolerance of 1e-9.
     """
     window = resolve_window(state, rows, cols)
     const = imaging_constants(state)
@@ -328,6 +391,8 @@ def grain_statistics(state: EmulsionState, rows: slice, cols: slice) -> GrainSta
     pixel_area = pitch * pitch
 
     developed = silver / const.class_silver_g_m2  # X_c
+    _check_not_above("emulsion/silver (X)", developed, "emulsion/initiated (F)", initiated)
+    _check_not_above("emulsion/silver_m2 (Y)", m2, "emulsion/silver (X)", developed)
     initiated_pos = initiated > 0.0
     f_safe = np.where(initiated_pos, initiated, 1.0)
     x_mean = np.clip(np.where(initiated_pos, developed / f_safe, 0.0), 0.0, 1.0)
@@ -345,26 +410,32 @@ def grain_statistics(state: EmulsionState, rows: slice, cols: slice) -> GrainSta
     lam = nu * initiated
     radius = np.sqrt(a * scale[..., None] * np.sqrt(x2_mean) / math.pi)
     counted = counted_classes(a, pitch)
+    # Pointwise: a counted class with q_c >= 1 is mean-only in that pixel.
+    in_count = counted & (q < 1.0)
+    count_q = np.where(in_count, q, 0.0)
 
     total = np.zeros(chemical.shape, dtype=np.float64)
     mean_only = LN10 * physical_mean
     for c in range(mu.shape[-1]):
         mq = mu[..., c] * q[..., c]
         total = total + mq
-        if not counted[c]:
+        if counted[c]:
+            mean_only = mean_only + np.where(in_count[..., c], 0.0, mq)
+        else:
             mean_only = mean_only + mq
     mean_t = np.exp(-(total + LN10 * physical_mean))
     mean_factor = np.exp(-mean_only)
 
     var_bool = _boolean_variance(lam, radius, mean_t, pixel_area)
-    var_count = (mean_t * mean_t) * np.expm1(_count_variance_factor(mu, q, counted))
-    var_eps = epsilon_variance(var_bool, mean_t, mu, q, counted)
+    var_count = _count_variance(mean_t, mu, count_q, counted)
+    var_eps = epsilon_variance(var_bool, mean_t, mu, count_q, counted)
     counted_ro = np.array(counted, dtype=bool)
     counted_ro.flags.writeable = False
     return GrainStatistics(
         mean_t=_read_only(mean_t),
         mu=_read_only(mu),
         q=_read_only(q),
+        count_q=_read_only(count_q),
         intensity_per_um2=_read_only(lam),
         radius_um=_read_only(radius),
         mean_factor=_read_only(mean_factor),
@@ -373,6 +444,17 @@ def grain_statistics(state: EmulsionState, rows: slice, cols: slice) -> GrainSta
         var_eps=_read_only(var_eps),
         counted=counted_ro,
     )
+
+
+def _check_not_above(name_lo: str, lo: np.ndarray, name_hi: str, hi: np.ndarray) -> None:
+    """Raise unless ``lo <= hi`` within the relative tolerance ``_FRACTION_TOL``."""
+    bad = lo > hi + _FRACTION_TOL * np.maximum(hi, lo)
+    if np.any(bad):
+        n = int(np.count_nonzero(bad))
+        raise ValueError(
+            f"{name_lo} exceeds {name_hi} in {n} pixel-class entries; the developed fields "
+            "must satisfy Y <= X <= F (spec 2.0.3)"
+        )
 
 
 def _survival(q: np.ndarray, n: np.ndarray) -> np.ndarray:
@@ -410,7 +492,7 @@ def statistical_transmittance_with_stats(
     for c in np.flatnonzero(stats.counted):
         u = pixel_uniform(state.seed, class_stream(c), abs_rows, abs_cols, frame_width)
         n = poisson_inverse(u, stats.mu[..., c]).astype(np.float64)
-        t = t * _survival(stats.q[..., c], n)
+        t = t * _survival(stats.count_q[..., c], n)
     u = pixel_uniform(state.seed, OVERLAP_STREAM, abs_rows, abs_cols, frame_width)
     z = ndtri(np.clip(u, _U_EPS, 1.0 - _U_EPS))
     t = t * (1.0 + np.sqrt(stats.var_eps) * z)
@@ -419,12 +501,20 @@ def statistical_transmittance_with_stats(
 
     area = math.pi * stats.radius_um * stats.radius_um
     weighted = stats.intensity_per_um2 * area
+    # Per-pixel class sums as explicit adds, then exact (order-free) sums over the pixels.
+    disk = np.zeros((h, w), dtype=np.float64)
+    disk2 = np.zeros((h, w), dtype=np.float64)
+    for c in range(weighted.shape[-1]):
+        disk = disk + weighted[..., c]
+        disk2 = disk2 + weighted[..., c] * area[..., c]
+    demoted = stats.counted & (stats.count_q != stats.q)
     block = GrainBlockStats(
         mean_only_classes=tuple(int(c) for c in np.flatnonzero(~stats.counted)),
         pixels=h * w,
         truncated_pixels=truncated,
-        disk_area_sum=float(np.sum(weighted)),
-        disk_area2_sum=float(np.sum(weighted * area)),
+        disk_area_parts=exact_expansion(disk.ravel().tolist()),
+        disk_area2_parts=exact_expansion(disk2.ravel().tolist()),
+        demoted_pixels=int(np.count_nonzero(np.any(demoted, axis=-1))),
     )
     return _read_only(t), block
 

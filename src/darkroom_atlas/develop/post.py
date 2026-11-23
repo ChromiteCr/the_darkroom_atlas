@@ -193,7 +193,12 @@ def fix_bw(state: EmulsionState, step: ProcessStep, ctx: StepContext) -> Emulsio
     tau_fix = _bath_constant(ctx, step, "clearing_time_constant")
     tau_dye = _bath_constant(ctx, step, "dye_removal_time")
     time_s = _time(step)
-    layer = next(layer for layer in state.material.emulsion_layers if layer.id == _LAYER)
+    layer = next((layer for layer in state.material.emulsion_layers if layer.id == _LAYER), None)
+    if layer is None:
+        raise ValueError(
+            f"material {state.material.id!r} has no emulsion layer {_LAYER!r}, which the "
+            "bw-mechanistic fix step needs"
+        )
     if layer.development is None:
         raise ValueError(f"material {state.material.id!r}: emulsion layer needs development")
     f_fix = layer.development.fixing_factor.to("1")

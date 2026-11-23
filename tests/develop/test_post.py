@@ -3,6 +3,7 @@
 import importlib.util
 import itertools
 import math
+import subprocess
 import sys
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from darkroom_atlas.pipeline import RunContext, StepContext, process
 from darkroom_atlas.readout.products import visual_product
 from darkroom_atlas.registry import get_step
 from darkroom_atlas.spectral import DEFAULT_GRID
+from darkroom_atlas.state import EmulsionState
 
 
 def _load_synthetic():
@@ -81,6 +83,28 @@ def test_registered_pointwise(kind):
     entry = get_step("bw-mechanistic", kind)
     assert entry.interaction_range_um == 0.0
     assert entry.fn is getattr(post, f"{kind}_bw")
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="darkroom_atlas.models does not import darkroom_atlas.develop.post yet; the owner "
+    "of models/__init__.py must add the import (then remove this marker)",
+)
+def test_steps_registered_through_models_import():
+    # A real run imports the models package, not post itself: the four steps must be
+    # registered by that import alone (spec 2.0.4).
+    code = (
+        "import sys\n"
+        "import darkroom_atlas.models, darkroom_atlas.pipeline, darkroom_atlas.runner\n"
+        "from darkroom_atlas.registry import get_step\n"
+        "for kind in ('stop', 'fix', 'wash', 'dry'):\n"
+        "    assert get_step('bw-mechanistic', kind).interaction_range_um == 0.0, kind\n"
+        "assert 'darkroom_atlas.develop.post' in sys.modules\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=False, timeout=120
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_bath_constants(data_lib):
@@ -331,6 +355,18 @@ def test_fix_and_wash_need_constants(film, ctx, data_lib):
             ctx,
             data_lib,
         )
+
+
+def test_fix_needs_emulsion_layer(film, ctx, data_lib):
+    layers = [
+        layer.model_copy(update={"id": "other"}) if layer.id == "emulsion" else layer
+        for layer in film.layers
+    ]
+    odd = film.model_copy(update={"layers": layers})
+    s = _developed(film)
+    bare = EmulsionState(odd, s.geometry, s.grid, s.seed, {})
+    with pytest.raises(ValueError, match="no emulsion layer"):
+        _run("fix", bare, _step("fix", "fixer-thiosulfate", "1min"), ctx, data_lib)
 
 
 def test_skip_fix_leaves_halide_density(film, ctx, data_lib):

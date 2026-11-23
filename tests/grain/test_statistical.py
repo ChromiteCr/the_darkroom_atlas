@@ -19,6 +19,7 @@ from darkroom_atlas.grain.statistical import (
     class_stream,
     counted_classes,
     epsilon_variance,
+    exact_expansion,
     grain_meta,
     grain_statistics,
     statistical_transmittance,
@@ -132,24 +133,74 @@ def test_epsilon_variance_formula():
 
 
 def test_block_stats_merge_and_meta():
-    a = GrainBlockStats((4, 5), 100, 2, 3.0, 6.0)
-    b = GrainBlockStats((4, 5), 50, 1, 1.0, 2.0)
+    a = GrainBlockStats((4, 5), 100, 2, (3.0,), (6.0,), 1)
+    b = GrainBlockStats((4, 5), 50, 1, (1.0,), (2.0,))
     m = a.merge(b)
-    assert m.pixels == 150 and m.truncated_pixels == 3
+    assert m.pixels == 150 and m.truncated_pixels == 3 and m.demoted_pixels == 1
+    assert m.disk_area_sum == 4.0 and m.disk_area2_sum == 8.0
     assert m.truncated_fraction == pytest.approx(0.02)
     assert m.effective_radius_um == pytest.approx(math.sqrt(8.0 / (math.pi * 4.0)))
     with pytest.raises(ValueError, match="mean-only"):
-        a.merge(GrainBlockStats((5,), 1, 0, 0.0, 0.0))
+        a.merge(GrainBlockStats((5,), 1, 0, (), ()))
+    with pytest.raises(ValueError, match="finite"):
+        GrainBlockStats((), 1, 0, (math.inf,), ())
     meta = grain_meta(m, aperture_um=48.0)
     assert meta["mean_only_classes"] == [4, 5]
     assert meta["b_ap"] == pytest.approx(1.15 * m.effective_radius_um / 48.0)
     assert meta["truncated_fraction"] == m.truncated_fraction
+    assert meta["demoted_pixels"] == 1
     assert grain_meta(m)["b_ap"] is None
     with pytest.warns(UserWarning, match="b_ap"):
-        grain_meta(GrainBlockStats((), 1, 0, 1.0, 100.0), aperture_um=10.0)
+        grain_meta(GrainBlockStats((), 1, 0, (1.0,), (100.0,)), aperture_um=10.0)
     with pytest.raises(ValueError, match="aperture_um"):
         aperture_bias(1.0, 0.0)
-    assert GrainBlockStats((), 0, 0, 0.0, 0.0).effective_radius_um == 0.0
+    assert GrainBlockStats((), 0, 0, (), ()).effective_radius_um == 0.0
+
+
+def test_exact_expansion():
+    # 1 + 1e-20 - 1 is lost by float adds; the expansion keeps it.
+    parts = exact_expansion([1.0, 1e-20, -1.0])
+    assert parts == (1e-20,)
+    assert exact_expansion([]) == ()
+    assert exact_expansion([0.5, -0.5]) == ()
+    rng = np.random.default_rng(3)
+    values = (rng.random(10_000) * 10.0 ** rng.uniform(-8, 8, 10_000)).tolist()
+    whole = exact_expansion(values)
+    assert sum(1 for _ in whole) >= 1 and whole[0] == math.fsum(values)
+    # Any grouping and order gives the same expansion.
+    left, right = exact_expansion(values[:3333]), exact_expansion(values[3333:][::-1])
+    assert exact_expansion(right + left) == whole
+
+
+def test_block_stats_independent_of_partition(film):
+    # meta["grain"] sums do not depend on the windows or the merge order (spec 3.6).
+    shape = (60, 70)
+    s = _random_state(film, shape, seed=2)
+    _, ref = statistical_transmittance_with_stats(s, *ALL)
+
+    def merged(windows):
+        stats = [statistical_transmittance_with_stats(s, *w)[1] for w in windows]
+        out = stats[0]
+        for st in stats[1:]:
+            out = out.merge(st)
+        return out
+
+    h, w = shape
+    rows = [(slice(r, min(r + 7, h)), slice(None)) for r in range(0, h, 7)]
+    cols = [(slice(None), slice(c, min(c + 11, w))) for c in range(0, w, 11)][::-1]
+    rng = np.random.default_rng(0)
+    cells = [
+        (slice(r, min(r + 13, h)), slice(c, min(c + 9, w)))
+        for r in range(0, h, 13)
+        for c in range(0, w, 9)
+    ]
+    cells = [cells[i] for i in rng.permutation(len(cells))]
+    for windows in (rows, cols, cells):
+        m = merged(windows)
+        assert m.disk_area_parts == ref.disk_area_parts
+        assert m.disk_area2_parts == ref.disk_area2_parts
+        assert m.effective_radius_um == ref.effective_radius_um
+        assert m.pixels == ref.pixels and m.truncated_pixels == ref.truncated_pixels
 
 
 def test_stream_names():
@@ -341,6 +392,138 @@ def test_trix_prior_centre_statistical(pitch):
     assert 0.0 < meta["b_ap"] and 0.0 <= meta["truncated_fraction"] <= 1.0
 
 
+def _enlarged_state(film, shape, initiated, physical=0.2, seed=0):
+    """Little chemical silver and much physical silver: phi enlarges counted disks to q > 1."""
+    return syn.state(
+        film,
+        shape,
+        6.0,
+        initiated=initiated,
+        developed=0.5 * initiated,
+        developed_m2=0.4 * initiated,
+        physical=physical,
+        seed=seed,
+    )
+
+
+def _untruncated(state, g):
+    """``T_pix`` before the [0, 1] truncation, rebuilt from the public pieces (spec 2.7.1)."""
+    h, w = g.mean_t.shape
+    t = np.array(g.mean_factor)
+    for c in np.flatnonzero(g.counted):
+        u = stat.pixel_uniform(state.seed, class_stream(c), (0, h), (0, w), w)
+        n = stat.poisson_inverse(u, g.mu[..., c]).astype(np.float64)
+        t = t * np.exp(n * np.log1p(-g.count_q[..., c]))
+    u = stat.pixel_uniform(state.seed, OVERLAP_STREAM, (0, h), (0, w), w)
+    z = stat.ndtri(np.clip(u, 2.0**-53, 1.0 - 2.0**-53))
+    return t * (1.0 + np.sqrt(g.var_eps) * z)
+
+
+@pytest.mark.parametrize(
+    ("initiated", "x_bar", "x2_ratio", "physical"),
+    [(1e-4, 0.5, 0.4, 0.2), (1e-2, 0.9, 0.85, 2.0)],
+)
+def test_enlarged_counted_class_is_mean_only(film, initiated, x_bar, x2_ratio, physical):
+    # phi so large that q_c >= 1: (1 - q)^N would no longer average to exp(-mu q), so the
+    # class is mean-only in those pixels and the untruncated mean stays Nutting's
+    # (spec 2.7.1, 2.5). The (1 + eps) truncation still biases the clipped sample, as
+    # spec 2.7.1 says; truncated_fraction records it.
+    n = 400
+    s = syn.state(
+        film,
+        (n, n),
+        6.0,
+        initiated=initiated,
+        developed=x_bar * initiated,
+        developed_m2=x2_ratio * initiated,
+        physical=physical,
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        g = grain_statistics(s, *ALL)
+        t, block = statistical_transmittance_with_stats(s, *ALL)
+    assert g.counted.all() and float(np.max(g.q)) > 1.0
+    expected = 10.0 ** -float(silver_density(s, slice(0, 1), slice(0, 1))[0, 0])
+    np.testing.assert_allclose(g.mean_t, expected, rtol=1e-12)
+    # The deterministic part times the counted product's mean is T exactly.
+    q, cq, mu = g.q[0, 0], g.count_q[0, 0], g.mu[0, 0]
+    demoted = q >= 1.0
+    assert demoted.any()
+    np.testing.assert_array_equal(cq[demoted], 0.0)
+    np.testing.assert_array_equal(cq[~demoted], q[~demoted])
+    assert float(g.mean_factor[0, 0]) * math.exp(-float(np.sum(mu * cq))) == pytest.approx(
+        expected, rel=1e-13
+    )
+    raw = _untruncated(s, g)
+    np.testing.assert_array_equal(np.clip(raw, 0.0, 1.0), t)
+    se = float(np.std(raw)) / n
+    assert abs(float(np.mean(raw)) - expected) <= 3.0 * se
+    assert float(np.var(raw)) == pytest.approx(float(g.var_pixel[0, 0]), rel=0.02)
+    assert block.demoted_pixels == t.size and block.mean_only_classes == ()
+    assert block.truncated_pixels > 0
+
+
+def test_enlarged_tiny_initiation_no_overflow(film):
+    # initiated = 1e-12: q ~ 1e8 and no grain is drawn; T and the variances stay finite and
+    # nothing overflows.
+    s = syn.state(
+        film,
+        (50, 50),
+        6.0,
+        initiated=1e-12,
+        developed=0.5e-12,
+        developed_m2=0.4e-12,
+        physical=0.2,
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        g = grain_statistics(s, *ALL)
+        t = statistical_transmittance(s, *ALL)
+    expected = 10.0 ** -float(silver_density(s, slice(0, 1), slice(0, 1))[0, 0])
+    np.testing.assert_allclose(g.mean_t, expected, rtol=1e-12)
+    np.testing.assert_allclose(g.mean_factor, expected, rtol=1e-12)  # every class demoted
+    for name in ("var_bool", "var_count", "var_eps", "var_pixel"):
+        assert np.isfinite(getattr(g, name)).all(), name
+    assert np.isfinite(t).all() and ((t >= 0.0) & (t <= 1.0)).all()
+
+
+def test_epsilon_variance_no_overflow():
+    # exp(sum mu q^2) overflows while T^2 underflows: Var_count is exp(2 ln T + s) - T^2.
+    mu = np.array([[800.0]])
+    q = np.array([[0.999]])
+    t = np.exp(-800.0 * 0.999)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        got = epsilon_variance(np.array([0.0]), np.array([t]), mu, q, np.array([True]))
+    assert np.isfinite(got).all()
+
+
+def test_demotion_tiling_invariance(film):
+    # Some pixels demote a counted class (q >= 1), others do not: tiles equal the frame.
+    shape = (40, 50)
+    rng = np.random.default_rng(8)
+    f = rng.uniform(1e-5, 0.3, (*shape, K))
+    f[::3] = 1e-5
+    s = syn.state(
+        film,
+        shape,
+        6.0,
+        initiated=f,
+        developed=0.5 * f,
+        developed_m2=0.4 * f,
+        physical=rng.uniform(0.0, 0.2, shape),
+    )
+    full, block = statistical_transmittance_with_stats(s, *ALL)
+    assert 0 < block.demoted_pixels < full.size
+    for tile in (1, 7, 16):
+        pieced = np.empty(shape)
+        for r in range(0, shape[0], tile):
+            for c in range(0, shape[1], tile):
+                rows, cols = slice(r, min(r + tile, shape[0])), slice(c, min(c + tile, shape[1]))
+                pieced[rows, cols] = statistical_transmittance(s, rows, cols)
+        assert np.array_equal(pieced, full), tile
+
+
 # ---- determinism and tiling ------------------------------------------------------------
 
 
@@ -430,6 +613,21 @@ def test_bad_fields(film):
         statistical_transmittance(
             s.with_fields({"emulsion/silver_physical": np.full((5, 6), np.nan)}), *ALL
         )
+    # Developed silver above the initiated grains (X = 2 F), silver with F = 0, Y > X.
+    bad_x = syn.state(film, (6, 6), 4.0, initiated=0.05, developed=0.10, developed_m2=0.10)
+    with pytest.raises(ValueError, match=r"X\) exceeds emulsion/initiated"):
+        statistical_transmittance(bad_x, *ALL)
+    no_f = syn.state(film, (6, 6), 4.0, initiated=0.0, developed=0.01, developed_m2=0.0)
+    with pytest.raises(ValueError, match=r"X\) exceeds emulsion/initiated"):
+        statistical_transmittance(no_f, *ALL)
+    bad_y = syn.state(film, (6, 6), 4.0, initiated=0.2, developed=0.1, developed_m2=0.15)
+    with pytest.raises(ValueError, match=r"Y\) exceeds emulsion/silver"):
+        grain_statistics(bad_y, *ALL)
+    # Within the rounding tolerance the fields are accepted.
+    edge = syn.state(
+        film, (2, 2), 4.0, initiated=0.2, developed=0.2 * (1 + 1e-12), developed_m2=0.2
+    )
+    assert np.isfinite(statistical_transmittance(edge, *ALL)).all()
     with pytest.raises(KeyError):
         statistical_transmittance(s.drop("emulsion/silver_m2"), *ALL)
     with pytest.raises(ValueError, match="empty"):
