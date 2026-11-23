@@ -85,11 +85,6 @@ def test_registered_pointwise(kind):
     assert entry.fn is getattr(post, f"{kind}_bw")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="darkroom_atlas.models does not import darkroom_atlas.develop.post yet; the owner "
-    "of models/__init__.py must add the import (then remove this marker)",
-)
 def test_steps_registered_through_models_import():
     # A real run imports the models package, not post itself: the four steps must be
     # registered by that import alone (spec 2.0.4).
