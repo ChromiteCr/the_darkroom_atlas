@@ -8,6 +8,7 @@ YAML rows ``#<block>/<id>/<developer>[/<dilution>][@<temperature F>]`` (spec 7.6
     kodak/tri-x-400/tables.yaml#development_times/normal-small-tank/d-76/1+1@70
     kodak/t-max-100/tables.yaml#facts/base-plus-fog/char-tmax-dev-06min
     kodak/t-max-100/ci-small-tank-d76.csv#conditions/ci_cross_check
+    kodak/t-max-100/tables.yaml#development_times/normal-rotary-tube-sheets/~note
     developers/xtol.yaml#development_times/table4-large-tank-fresh/t-max-100/120/ei100/ci0.56
 
 :func:`classify` maps an id to its class by explicit rules over ids; an id that no rule
@@ -122,6 +123,11 @@ _R_CONTRAST_COLS = (
     "contrast columns of the temperature-factor block: no pre-registered CI target (7.2)"
 )
 _R_NOT_OBS = "not an observation of any D1 metric (7.2)"
+_R_PROSE = "free text (note, statement, footnotes): not an observation of any D1 metric (7.2)"
+_R_PROSE_HELD = (
+    "free text of a unit with held-out items; it may quote held-out cells, so it is removed "
+    "with them (7.6 design-time exposure, 7.7)"
+)
 _R_DEV_DUP = (
     "developer-publication copy of 400TX rows: cells shared with F-4017 are identical (staged "
     "developers/README.md cross-check) and the rest are not selected (7.6)"
@@ -357,6 +363,25 @@ _RULES: tuple[_Rule, ...] = (
         evaluated=False,
     ),
     _rule(_MT + r"filter_factors/[a-z0-9+-]+", "unused", "filter factors are not used (7.2, 7.6)"),
+    # ---- free text of blocks, tables and facts ("<unit>/~<key>", 7.6, 7.7) -------------------
+    # T-Max: every unit that holds held-out cells, plus push_exposure, whose note quotes them.
+    _rule(
+        _MT + r"((development_times|push_processing)/[a-z0-9-]+|facts/base-plus-fog|"
+        r"development_time_adjustment_factors|push_exposure|rack_and_tank|replenishment|"
+        r"xtol_contrast_index_times)/~[a-z_]+",
+        "held_out",
+        _R_PROSE_HELD,
+        evaluated=False,
+    ),
+    _rule(_MT + r"(reciprocity|filter_factors)/~[a-z_]+", "unused", _R_PROSE),
+    _rule(_XT + r"[a-z0-9_/+.-]+/~[a-z_]+", "unused", _R_PROSE),
+    _rule(
+        r"developers/(xtol|hc-110|t-max-dev)\.yaml#development_times/[a-z0-9-]+/~[a-z_]+",
+        "held_out",
+        _R_PROSE_HELD,
+        evaluated=False,
+    ),
+    # d-76.yaml and t-max-rs.yaml free text falls under their whole-block rules below.
     # ---- CSV header sub-items (7.6 design-time exposure) -------------------------------------
     # handled in classify(): "<csv>#conditions/ci_cross_check"
     # ---- developer publications (7.6) --------------------------------------------------------
@@ -550,6 +575,18 @@ def _cells(
         yield Item(f"{rel_id}{_temp(t)}", units, fields, null_fields=True)
 
 
+# Prose keys of a block, table or fact that holds rows or sub-items. Each is its own sub-item
+# "<unit id>/~<key>" so that free text quoting held-out cells is classified and filtered
+# like any other sub-item (7.6 design-time exposure, 7.7 "已去掉留出子项").
+_PROSE_KEYS = ("statement", "note", "contrast_aim", "footnotes", "push_footnote")
+
+
+def _prose(unit_id: str, units: tuple[_Path, ...], node: Mapping) -> Iterator[Item]:
+    for key in _PROSE_KEYS:
+        if key in node:
+            yield Item(f"{unit_id}/~{key}", units, ((*units[-1], key),))
+
+
 def _rows(block: Mapping, name: str) -> list:
     rows = block.get(name) or []
     if not isinstance(rows, list):
@@ -563,11 +600,14 @@ def _walk_tables(rel: str, data: Mapping[str, Any]) -> Iterator[Item]:
             continue
         top: _Path = (key,)
         base = f"{rel}#{key}/"
+        if isinstance(block, Mapping):
+            yield from _prose(f"{rel}#{key}", (top,), block)
         if key in ("facts", "developer_definitions"):
             for i, fact in enumerate(block):
                 path = (key, i)
                 subs = fact.get("left_end_of_characteristic_curves") if key == "facts" else None
                 if subs:
+                    yield from _prose(f"{base}{fact['id']}", (top, path), fact)
                     for j, sub in enumerate(subs):
                         p = (*path, "left_end_of_characteristic_curves", j)
                         stem = PurePosixPath(str(sub["curve"])).stem
@@ -592,6 +632,7 @@ def _walk_tables(rel: str, data: Mapping[str, Any]) -> Iterator[Item]:
         elif key == "development_times":
             for ti, table in enumerate(block):
                 temps = table["temperature_f"]
+                yield from _prose(f"{base}{table['id']}", (top, (key, ti)), table)
                 for ri, row in enumerate(_rows(table, "rows")):
                     path = (key, ti, "rows", ri)
                     units = (top, (key, ti), path)
@@ -637,6 +678,7 @@ def _walk_tables(rel: str, data: Mapping[str, Any]) -> Iterator[Item]:
                         yield Item(rid, units, fields, null_fields=True)
         elif key == "push_processing":
             for ti, table in enumerate(block):
+                yield from _prose(f"{base}{table['id']}", (top, (key, ti)), table)
                 for ri, row in enumerate(_rows(table, "rows")):
                     path = (key, ti, "rows", ri)
                     yield Item(f"{base}{table['id']}/{_dev(row)}", (top, (key, ti), path), (path,))
@@ -679,6 +721,7 @@ def _walk_developer(rel: str, data: Mapping[str, Any]) -> Iterator[Item]:
                 yield Item(f"{rel}#{key}/{entry['id']}", (top, (key, i)), ((key, i),))
         elif key == "development_times":
             for ti, table in enumerate(block):
+                yield from _prose(f"{rel}#{key}/{table['id']}", (top, (key, ti)), table)
                 for ri, row in enumerate(_rows(table, "rows")):
                     material = row.get("material")
                     if material is None:
@@ -1030,7 +1073,8 @@ class TrainingLibrary(Library):
     """Filtered view of ``base`` for calibration (spec 7.7).
 
     Reading a held-out curve raises :class:`LeakageError`; tables and developer facts come
-    back without their held-out rows and sub-items, and held-out header fields are removed.
+    back without their held-out rows and sub-items (free text beside held-out cells included),
+    and held-out header fields are removed.
     """
 
     def __init__(self, base: Library) -> None:

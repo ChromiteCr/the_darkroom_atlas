@@ -81,7 +81,11 @@ def test_split_registry_complete(root: Path, registry: splits.Registry, items: l
     n_null = sum(
         1 for t in j78["development_times"] for r in t["rows"] if r.get("material") is None
     )
-    j78_rows = [i for i in items if i.startswith("developers/d-76.yaml#development_times/")]
+    j78_rows = [
+        i
+        for i in items
+        if i.startswith("developers/d-76.yaml#development_times/") and "/~" not in i
+    ]
     assert n_null == len(j78_rows) > 0, counts
     assert set(j78_rows) <= registry.unused, counts
 
@@ -97,16 +101,17 @@ def test_tables_rows_and_cells_complete(root: Path, items: list[str]) -> None:
         rel = f"kodak/{film}/tables.yaml"
         data = yaml.safe_load((root / rel).read_text(encoding="utf-8"))
         n_cells = sum(len(t["temperature_f"]) * len(t["rows"]) for t in data["development_times"])
-        ids = [i for i in items if i.startswith(f"{rel}#development_times/")]
+        cells = [i for i in items if "/~" not in i]  # free-text sub-items are counted below
+        ids = [i for i in cells if i.startswith(f"{rel}#development_times/")]
         assert len(ids) == n_cells
-        assert sum(i.startswith(f"{rel}#reciprocity/") and i.count("/") == 3 for i in items) == len(
+        assert sum(i.startswith(f"{rel}#reciprocity/") and i.count("/") == 3 for i in cells) == len(
             data["reciprocity"]["rows"]
         )
         xt = data["xtol_contrast_index_times"]
         n_xt = len(xt["rows"]) * (
             len(xt["full_strength_temperature_f"]) + len(xt["diluted_1_1_temperature_f"])
         )
-        assert sum(i.startswith(f"{rel}#xtol_contrast_index_times/") for i in items) == n_xt
+        assert sum(i.startswith(f"{rel}#xtol_contrast_index_times/") for i in cells) == n_xt
 
 
 def test_module_constants_match_default_root() -> None:
@@ -290,6 +295,13 @@ _HELD_OUT_NOT_EVALUATED = [
     ),
     f"{_M}ci-small-tank-d76.csv#conditions/ci_cross_check",
     f"{_M}char-d76-07.5min.csv#conditions/ci_cross_check",
+    # Free text quoting held-out cells (7.6 design-time exposure, 7.7).
+    f"{_MT}development_times/normal-rotary-tube-sheets/~note",
+    f"{_MT}development_times/normal-small-tank-rolls/~contrast_aim",
+    f"{_MT}development_time_adjustment_factors/~note",
+    f"{_MT}push_exposure/~note",
+    f"{_MT}facts/base-plus-fog/~statement",
+    "developers/hc-110.yaml#development_times/roll-dilution-b-small-tank/~note",
 ]
 
 # Prefixes of developer-publication rows whose class 7.6 fixes as a group.
@@ -347,7 +359,11 @@ def test_developer_publication_rows(registry: splits.Registry, items: list[str])
         assert set(ids) <= target, prefix
     # Every T-Max row of the three held-out developers' publications is held out.
     for name in ("xtol", "hc-110", "t-max-dev"):
-        rows = [i for i in items if i.startswith(f"developers/{name}.yaml#development_times/")]
+        rows = [
+            i
+            for i in items
+            if i.startswith(f"developers/{name}.yaml#development_times/") and "/~" not in i
+        ]
         tmax = [i for i in rows if "/t-max-100/" in i]
         assert tmax and set(tmax) <= registry.held_out
         assert set(rows) - set(tmax) <= registry.unused
@@ -470,6 +486,76 @@ def test_training_library_filters_held_out(
         }
         assert "kodak/t-max-100" not in materials
     assert lib.developer_facts("d-76")["facts"]
+
+
+def _strings(node: object, path: tuple = ()) -> list[tuple[tuple, str]]:
+    if isinstance(node, dict):
+        return [s for k, v in node.items() for s in _strings(v, (*path, k))]
+    if isinstance(node, list):
+        return [s for i, v in enumerate(node) for s in _strings(v, (*path, i))]
+    return [(path, node)] if isinstance(node, str) else []
+
+
+# Names of the developers held out for T-Max 100. "T-MAX RS" (unused, kept) does not match.
+_HELD_OUT_NAMES = re.compile(r"xtol|hc-?110|t-?max dev(eloper)?\b", re.IGNORECASE)
+_TITLE_KEYS = {"table", "push_table", "where"}  # publication table titles, no values
+
+
+def test_training_library_free_text_has_no_held_out_values(root: Path, tmp_path: Path) -> None:
+    """Notes, statements, footnotes and contrast aims quoting held-out cells are removed (7.7)."""
+    lib = TrainingLibrary(_library_copy(root, tmp_path))
+    tables = lib.reference_tables("kodak/t-max-100")
+    leaks = [
+        (p, s[:80])
+        for p, s in _strings(tables)
+        if p[0] != "sources" and p[-1] not in _TITLE_KEYS and _HELD_OUT_NAMES.search(s)
+    ]
+    assert not leaks
+    # The specific quotes found in review are gone; training cells and conditions remain.
+    flat = " ".join(s for _, s in _strings(tables))
+    for quote in ("8¾, 7¾, 6¾", "1.2 x 6¼", "gives 7¾ min", "CI 0.56", "-3.15 for D-76 and T-MAX"):
+        assert quote not in flat, quote
+    small = next(t for t in tables["development_times"] if t["id"] == "normal-small-tank-rolls")
+    assert "agitation" in small and "contrast_aim" not in small and "footnotes" not in small
+    assert {r["developer"] for r in small["rows"]} == {"t-max-rs", "d-76"}
+    for name in ("xtol", "hc-110-pre2019", "t-max-dev"):
+        facts = lib.developer_facts(name)
+        for t in facts.get("development_times", []):
+            assert "note" not in t and "footnotes" not in t, (name, t["id"])
+    # Tri-X free text is unused, not held out, and passes through.
+    tx = lib.reference_tables("kodak/tri-x-400")
+    assert tx["development_times"][0]["note"]
+
+
+def test_free_text_of_units_with_held_out_items_is_held_out(
+    root: Path, registry: splits.Registry
+) -> None:
+    """A note or footnote beside held-out cells is held out with them (7.6, 7.7)."""
+    for path in sorted(root.rglob("*.yaml")):
+        rel = path.relative_to(root).as_posix()
+        walked = splits.walk_yaml(rel, yaml.safe_load(path.read_text(encoding="utf-8")))
+        held_units = {u for it in walked if it.id in registry.held_out for u in it.units}
+        for it in walked:
+            if "/~" in it.id and it.units[-1] in held_units:
+                assert it.id in registry.held_out, it.id
+                assert it.id not in registry.held_out_evaluated, it.id
+                assert registry.not_evaluated_reason[it.id], it.id
+
+
+def test_free_text_ids() -> None:
+    items = splits.walk_yaml(
+        "kodak/tri-x-400/tables.yaml",
+        {"reciprocity": {"note": "n", "statement": "s", "rows": []}, "push_exposure": {}},
+    )
+    assert [i.id for i in items] == [
+        "kodak/tri-x-400/tables.yaml#reciprocity/~statement",
+        "kodak/tri-x-400/tables.yaml#reciprocity/~note",
+    ]
+    assert items[0].fields == (("reciprocity", "statement"),)
+    with pytest.raises(KeyError):
+        classify(f"{_MT}development_times/normal-small-tank-rolls/~unknown key!")
+    with pytest.raises(LeakageError, match="held out"):
+        assert_trainable(f"{_MT}push_exposure/~note")
 
 
 def test_training_library_refuses_unregistered_curves(root: Path, tmp_path: Path) -> None:
