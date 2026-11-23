@@ -8,12 +8,26 @@ axis, so FFT sizes and in-block reductions have a fixed shape and every block's 
 a pure function of its padded input. :func:`run_blocks` returns results in row-major block
 order whatever the number of workers, so cross-block sums made in that order are
 bit-identical for any worker count.
+
+With several workers, block outputs never travel back through the main process (spec §4.4):
+a worker opens its inputs and the preallocated outputs from
+:class:`~darkroom_atlas.fieldstore.FieldDescriptor` objects, writes its inner block into the
+outputs itself and returns only a small summary, which the main process registers with
+:meth:`~darkroom_atlas.state.FrameAssembler.mark`.
+
+The development grid is made of fixed chemistry cells of :data:`CHEMISTRY_CELL_UM` anchored
+at the frame origin, independent of the pixel pitch (spec §3.1, §3.6):
+:func:`cell_count` gives the cells along one frame axis, :func:`owned_pixels` the pixels a
+block of cells owns (those whose centres lie in it, so every pixel belongs to exactly one
+block) and :func:`overlapping_pixels` the pixels that overlap a range of cells.
+:func:`workers_for_budget` turns the memory budget into a worker count (spec §4.6).
 """
 
 import math
 import multiprocessing
 import os
 import threading
+import warnings
 from collections.abc import Callable, Iterator, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import contextmanager
@@ -22,7 +36,33 @@ from numbers import Integral
 
 import numpy as np
 
-__all__ = ["Block", "block_grid", "padded_window", "run_blocks", "worker_environment"]
+__all__ = [
+    "CHEMISTRY_CELL_UM",
+    "MAIN_PROCESS_GB",
+    "WORKER_GB",
+    "Block",
+    "block_grid",
+    "cell_count",
+    "overlapping_pixels",
+    "owned_pixels",
+    "padded_window",
+    "run_blocks",
+    "worker_environment",
+    "workers_for_budget",
+]
+
+CHEMISTRY_CELL_UM = 24.0
+"""Side of a chemistry cell on the film, um, whatever the pixel pitch (spec §3.1, §3.6)."""
+
+MAIN_PROCESS_GB = 1.5
+"""Memory kept back for the main process in the worker formula, GB (spec §4.6)."""
+
+WORKER_GB = 0.5
+"""Memory of one development worker process, GB (spec §4.6)."""
+
+# Relative slack when counting cells, so a frame length that is a whole number of cells up
+# to rounding (pitch from long edge / pixels) does not get an extra cell.
+_CELL_COUNT_RTOL = 1e-9
 
 # Worker processes run single-threaded BLAS so reductions do not depend on thread count
 # (spec §3.6).
@@ -129,12 +169,15 @@ def run_blocks[T](
     """Apply ``fn`` to each block and return the results in the order of ``blocks``.
 
     With ``workers == 1`` (or a single block) the blocks run in a plain loop in this
-    process. Otherwise they run in a pool of ``min(workers, len(blocks))`` freshly spawned
+    process. Otherwise they run in one pool of ``min(workers, len(blocks))`` freshly spawned
     processes started with :func:`worker_environment`. ``fn`` and its results must then be
-    picklable: a module-level function, or a ``functools.partial`` of one with picklable
-    arguments. Everything bound into ``fn`` is pickled into every task, so pass large
-    arrays as file-backed data (for example a path to reopen) rather than in-memory
-    arrays. Exceptions raised by ``fn`` propagate.
+    small and picklable: ``fn`` is a module-level function, or a ``functools.partial`` of
+    one, that receives its large inputs and outputs as
+    :class:`~darkroom_atlas.fieldstore.FieldDescriptor` objects, opens them with
+    :func:`~darkroom_atlas.fieldstore.open_field` (inputs ``"r"``, outputs ``"r+"``),
+    writes its inner block into the outputs itself and returns a summary (the inner
+    region, block fluxes, counts), never a block array (spec §4.4). Everything bound into
+    ``fn`` is pickled into every task. Exceptions raised by ``fn`` propagate.
     """
     workers = _int_at_least("workers", workers, 1)
     blocks = list(blocks)
@@ -150,6 +193,101 @@ def run_blocks[T](
         ProcessPoolExecutor(max_workers=workers, mp_context=context) as pool,
     ):
         return list(pool.map(fn, blocks))
+
+
+def workers_for_budget(
+    memory_budget_gb: float, requested: int | None = None, *, cpu_count: int | None = None
+) -> int:
+    """Number of worker processes for a memory budget (spec §4.6).
+
+    ``min(cpu_count, max(1, floor((budget - MAIN_PROCESS_GB) / WORKER_GB)))``, 9 for the
+    default 6 GB. A ``requested`` count is used when smaller, with a ``RuntimeWarning`` when
+    it exceeds the budget's count. ``cpu_count`` defaults to ``os.cpu_count()``.
+    """
+    if (
+        isinstance(memory_budget_gb, bool)
+        or not isinstance(memory_budget_gb, (int, float))
+        or not math.isfinite(memory_budget_gb)
+        or memory_budget_gb <= 0.0
+    ):
+        raise ValueError(
+            f"memory_budget_gb must be a positive, finite number, got {memory_budget_gb!r}"
+        )
+    if cpu_count is None:
+        cpus = os.cpu_count() or 1
+    else:
+        cpus = _int_at_least("cpu_count", cpu_count, 1)
+    # Small epsilon so an exact multiple (6 GB -> 9) is not lost to binary rounding.
+    budget = max(1, math.floor((memory_budget_gb - MAIN_PROCESS_GB) / WORKER_GB + 1e-9))
+    allowed = min(cpus, budget)
+    if requested is None:
+        return allowed
+    requested = _int_at_least("requested", requested, 1)
+    if requested > budget:
+        warnings.warn(
+            f"{requested} workers exceed the {memory_budget_gb:g} GB memory budget "
+            f"({budget} workers of {WORKER_GB} GB each); using {min(requested, allowed)}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    return min(requested, allowed)
+
+
+def cell_count(n_px: int, pitch_um: float, cell_um: float = CHEMISTRY_CELL_UM) -> int:
+    """Chemistry cells covering ``n_px`` pixels of pitch ``pitch_um`` along one axis.
+
+    ``ceil(n_px * pitch / cell)``: the grid starts at the frame origin, and a last cell
+    reaching past the frame edge counts (its outside area is unexposed film, spec §3.6).
+    """
+    n_px = _int_at_least("n_px", n_px, 1)
+    pitch_um, cell_um = _length("pitch_um", pitch_um), _length("cell_um", cell_um)
+    cells = n_px * pitch_um / cell_um
+    return max(1, math.ceil(cells - _CELL_COUNT_RTOL * cells))
+
+
+def owned_pixels(
+    cells: slice, pitch_um: float, n_px: int, cell_um: float = CHEMISTRY_CELL_UM
+) -> slice:
+    """Pixels along one axis owned by the cells ``[i0, i1)`` (spec §3.6).
+
+    A block owns the pixels whose centres lie in ``[i0 cell, i1 cell)``, i.e. pixels
+    ``ceil(i0 cell / p - 1/2)`` up to ``ceil(i1 cell / p - 1/2) - 1``, clipped to the frame
+    of ``n_px`` pixels. Adjacent blocks evaluate the same expression at their shared
+    boundary, so the owned ranges of a row of blocks partition the frame; the block ending
+    at the last cell owns up to the frame edge. The result may be empty when a block lies
+    beyond the last pixel centre.
+    """
+    i0, i1 = _cell_slice(cells)
+    pitch_um, cell_um = _length("pitch_um", pitch_um), _length("cell_um", cell_um)
+    n_px = _int_at_least("n_px", n_px, 1)
+
+    def first_centre(i: int) -> int:
+        return min(max(math.ceil(i * cell_um / pitch_um - 0.5), 0), n_px)
+
+    start = first_centre(i0)
+    stop = n_px if i1 >= cell_count(n_px, pitch_um, cell_um) else first_centre(i1)
+    return slice(start, max(start, stop))
+
+
+def overlapping_pixels(
+    cells: slice, pitch_um: float, cell_um: float = CHEMISTRY_CELL_UM
+) -> tuple[int, int]:
+    """Pixel range ``[j0, j1)`` overlapping cells ``[i0, i1)`` along one axis, unclipped.
+
+    ``j0 = floor(i0 cell / p)``, ``j1 = ceil(i1 cell / p)``. Cells may be negative (a padded
+    block near the frame edge), and so may the result; positions outside the frame are
+    unexposed film for the caller to fill (spec §3.6).
+    """
+    if not isinstance(cells, slice) or cells.step not in (None, 1):
+        raise ValueError(f"cells must be a slice with step 1, got {cells!r}")
+    i0, i1 = cells.start, cells.stop
+    for bound in (i0, i1):
+        if isinstance(bound, bool) or not isinstance(bound, Integral):
+            raise TypeError(f"cells must have integer bounds, got {cells!r}")
+    if i1 <= i0:
+        raise ValueError(f"cells {cells!r} is empty")
+    pitch_um, cell_um = _length("pitch_um", pitch_um), _length("cell_um", cell_um)
+    return math.floor(i0 * cell_um / pitch_um), math.ceil(i1 * cell_um / pitch_um)
 
 
 @contextmanager
@@ -174,3 +312,26 @@ def _int_at_least(name: str, value: object, minimum: int) -> int:
     if not is_int or value < minimum:
         raise ValueError(f"{name} must be an integer >= {minimum}, got {value!r}")
     return int(value)
+
+
+def _length(name: str, value: object) -> float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value <= 0.0
+    ):
+        raise ValueError(f"{name} must be a positive, finite number, got {value!r}")
+    return float(value)
+
+
+def _cell_slice(cells: object) -> tuple[int, int]:
+    if not isinstance(cells, slice) or cells.step not in (None, 1):
+        raise ValueError(f"cells must be a slice with step 1, got {cells!r}")
+    i0, i1 = cells.start, cells.stop
+    for bound in (i0, i1):
+        if isinstance(bound, bool) or not isinstance(bound, Integral) or bound < 0:
+            raise ValueError(f"cells must have integer bounds >= 0, got {cells!r}")
+    if i1 <= i0:
+        raise ValueError(f"cells {cells!r} is empty")
+    return int(i0), int(i1)

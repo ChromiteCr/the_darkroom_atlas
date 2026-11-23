@@ -26,7 +26,7 @@ import numpy as np
 
 from darkroom_atlas._frozen import FrozenDict, freeze_mapping, readonly_array
 from darkroom_atlas.data.models import NAME_PATTERN, RESERVED_LAYER_IDS, Material
-from darkroom_atlas.fieldstore import FieldStore
+from darkroom_atlas.fieldstore import FieldDescriptor, FieldStore
 from darkroom_atlas.spectral import SpectralGrid
 from darkroom_atlas.tiling import Tile
 from darkroom_atlas.units import pixel_pitch_um
@@ -333,37 +333,80 @@ class FieldSpec:
         object.__setattr__(self, "dtype", dt.name)
 
 
+# Side of the square buckets that index written regions for the overlap check: each write
+# is compared only with the regions sharing a bucket, so checking costs O(1) per block.
+_BUCKET_PX = 128
+
+Rect = tuple[int, int, int, int]  # (r0, r1, c0, c1)
+
+
+class _Coverage:
+    """Regions written into one field since the last reset, indexed by bucket."""
+
+    def __init__(self) -> None:
+        self.rects: list[Rect] = []
+        self.area = 0
+        self._buckets: dict[tuple[int, int], list[int]] = {}
+
+    @staticmethod
+    def _cells(rect: Rect) -> itertools.product:
+        r0, r1, c0, c1 = rect
+        return itertools.product(
+            range(r0 // _BUCKET_PX, (r1 - 1) // _BUCKET_PX + 1),
+            range(c0 // _BUCKET_PX, (c1 - 1) // _BUCKET_PX + 1),
+        )
+
+    def overlap(self, rect: Rect) -> Rect | None:
+        """A region written before that overlaps ``rect``, or None."""
+        r0, r1, c0, c1 = rect
+        for cell in self._cells(rect):
+            for index in self._buckets.get(cell, ()):
+                a0, a1, b0, b1 = self.rects[index]
+                if r0 < a1 and a0 < r1 and c0 < b1 and b0 < c1:
+                    return self.rects[index]
+        return None
+
+    def add(self, rect: Rect) -> None:
+        index = len(self.rects)
+        self.rects.append(rect)
+        self.area += (rect[1] - rect[0]) * (rect[3] - rect[2])
+        for cell in self._cells(rect):
+            self._buckets.setdefault(cell, []).append(index)
+
+
 class _Assembly:
     """Book-keeping for one field of a FrameAssembler."""
 
-    def __init__(self, spec: FieldSpec, store_key: str) -> None:
+    def __init__(self, spec: FieldSpec, name: str) -> None:
         self.spec = spec
-        self.store_key = store_key
+        self.name = name  # store name
         self.array: np.ndarray | None = None  # allocated on the first non-uniform write
         self.allocated = False
+        self.mapped = False
+        self.issued = False  # a descriptor was handed out for workers to write
         self.uniform: np.ndarray | None = None  # (1, 1, *trailing) while all writes match
-        self.written: list[tuple[int, int, int, int]] = []  # (r0, r1, c0, c1)
-
-
-_SERIAL = itertools.count(1)
+        self.coverage = _Coverage()
 
 
 class FrameAssembler:
     """Assemble whole-frame fields from per-block (or per-tile) results (spec §4.4).
 
-    Each field of ``specs`` is allocated once, through ``store`` (RAM only when None), with
-    shape ``(*geometry.shape_hw, *spec.trailing)`` and ``spec.dtype``; :meth:`write` copies
-    a block's values straight into its inner region. Every pixel of every field must be
-    written exactly once: overlapping writes raise ``ValueError`` at once, gaps raise in
-    :meth:`finish`. Values are cast to the field's dtype only when the cast is safe.
+    Each field of ``specs`` is allocated once, through ``store`` (RAM only when None), under
+    the store name ``f"{name_prefix}{spec.key}"`` (steps pass ``name_prefix=f"s{index}:"``,
+    spec §4.3), with shape ``(*geometry.shape_hw, *spec.trailing)`` and ``spec.dtype``.
+    :meth:`write` copies a block's values straight into its inner region. Worker processes
+    can instead write their inner block themselves into the outputs :meth:`descriptors`
+    hands out (opened ``"r+"``); the main process then registers the region with
+    :meth:`mark`. Every pixel of every field must be written (or marked) exactly once since
+    construction or the last :meth:`reset`: overlapping writes raise ``ValueError`` at once,
+    gaps raise in :meth:`finish`. Values are cast to the field's dtype only when the cast is
+    safe. Copying and book-keeping cost O(pixels) in all, whatever the number of blocks.
 
     A field whose every write is a broadcast view (all strides of the two frame axes 0) of
     one bit-identical value is never allocated: :meth:`finish` returns it as a read-only
     broadcast view of a ``(1, 1, *trailing)`` array. Allocation is therefore deferred to the
-    field's first non-uniform write, which also fills in the regions written before.
-
-    Store keys are ``"<field key>#<serial>"`` (see :attr:`store_keys`), so several
-    assemblers can share one store; releasing the files is up to the store's owner.
+    field's first non-uniform write (or to :meth:`descriptors`), which also fills in the
+    regions written before. Releasing the store's files is up to the store's owner.
     """
 
     def __init__(
@@ -371,39 +414,37 @@ class FrameAssembler:
         geometry: FrameGeometry,
         specs: Sequence[FieldSpec],
         store: FieldStore | None = None,
+        *,
+        name_prefix: str = "",
     ) -> None:
         if not isinstance(geometry, FrameGeometry):
             raise TypeError(f"geometry must be a FrameGeometry, got {type(geometry).__name__}")
         if store is not None and not isinstance(store, FieldStore):
             raise TypeError(f"store must be a FieldStore or None, got {type(store).__name__}")
+        if not isinstance(name_prefix, str):
+            raise TypeError(f"name_prefix must be a string, got {type(name_prefix).__name__}")
         self.geometry = geometry
         self._store = FieldStore(None) if store is None else store
         self._fields: dict[str, _Assembly] = {}
-        serial = next(_SERIAL)
         for spec in specs:
             if not isinstance(spec, FieldSpec):
                 raise TypeError(f"specs must be FieldSpec instances, got {type(spec).__name__}")
             if spec.key in self._fields:
                 raise ValueError(f"duplicate field spec {spec.key!r}")
-            self._fields[spec.key] = _Assembly(spec, f"{spec.key}#{serial}")
+            self._fields[spec.key] = _Assembly(spec, f"{name_prefix}{spec.key}")
         if not self._fields:
             raise ValueError("a FrameAssembler needs at least one FieldSpec")
         self._finished = False
 
     @property
-    def store_keys(self) -> dict[str, str]:
-        """Field key -> key of its array in the store (for fields that were allocated)."""
-        return {k: a.store_key for k, a in self._fields.items() if a.allocated}
+    def store_names(self) -> dict[str, str]:
+        """Field key -> store name of its array (for fields that were allocated)."""
+        return {k: a.name for k, a in self._fields.items() if a.allocated}
 
     def write(self, key: str, inner: tuple[slice, slice], values: np.ndarray) -> None:
         """Write ``values`` (shape ``(rows, cols, *trailing)``) into region ``inner``."""
-        if self._finished:
-            raise ValueError("this FrameAssembler is finished")
-        try:
-            item = self._fields[key]
-        except KeyError:
-            known = ", ".join(self._fields)
-            raise KeyError(f"no field spec {key!r}; specs: {known}") from None
+        self._check_open()
+        item = self._item(key)
         rows, cols = _window(inner, self.geometry.shape_hw)
         spec = item.spec
         values = np.asarray(values)
@@ -418,27 +459,22 @@ class FrameAssembler:
                 f"field {key!r}: cannot safely cast values of dtype {values.dtype} to {spec.dtype}"
             )
         rect = (rows.start, rows.stop, cols.start, cols.stop)
-        for r0, r1, c0, c1 in item.written:
-            if rect[0] < r1 and r0 < rect[1] and rect[2] < c1 and c0 < rect[3]:
-                raise ValueError(
-                    f"field {key!r}: region {(rows, cols)} overlaps region "
-                    f"{(slice(r0, r1), slice(c0, c1))} written before"
-                )
+        self._check_overlap(key, item, rect)
 
         if item.array is None and values.strides[:2] == (0, 0):
             value = np.array(values[:1, :1], dtype=spec.dtype)
-            if item.uniform is None and not item.written:
+            if item.uniform is None and not item.coverage.rects:
                 item.uniform = value
-                item.written.append(rect)
+                item.coverage.add(rect)
                 return
             if item.uniform is not None and value.tobytes() == item.uniform.tobytes():
-                item.written.append(rect)
+                item.coverage.add(rect)
                 return
         if item.array is None:
             self._allocate(item)
         assert item.array is not None
         item.array[rows, cols] = values
-        item.written.append(rect)
+        item.coverage.add(rect)
 
     def write_state(self, tile_state: "EmulsionState", tile: Tile) -> None:
         """Write the inner part of ``tile_state`` (window ``tile.outer`` of the frame).
@@ -470,6 +506,57 @@ class FrameAssembler:
         for key in self._fields:
             self.write(key, inner, tile_state.fields[key][inner_in_outer])
 
+    def descriptors(self) -> dict[str, FieldDescriptor]:
+        """Descriptors of the memory-mapped output fields, for workers to open ``"r+"``.
+
+        Allocates every field not allocated yet (filling in uniform writes made so far). A
+        worker writes its inner block straight into these maps (and flushes them); the main
+        process then calls :meth:`mark` with that block's region. Fields that stay in RAM
+        (store without ``root``, or below its threshold) are absent and must be written
+        with :meth:`write`.
+        """
+        self._check_open()
+        out: dict[str, FieldDescriptor] = {}
+        for key, item in self._fields.items():
+            if not item.allocated:
+                self._allocate(item)
+            if item.mapped:
+                item.issued = True
+                out[key] = self._store.descriptor(item.name)
+        return out
+
+    def mark(self, inner: tuple[slice, slice]) -> None:
+        """Register region ``inner`` as written by a worker in every field of :meth:`descriptors`.
+
+        ``ValueError`` if no descriptors were handed out or the region overlaps one written
+        (or marked) before in any of those fields.
+        """
+        self._check_open()
+        issued = [(key, item) for key, item in self._fields.items() if item.issued]
+        if not issued:
+            raise ValueError(
+                "mark registers regions written through descriptors(); no descriptors were "
+                "handed out (fields in RAM must be written with write())"
+            )
+        rows, cols = _window(inner, self.geometry.shape_hw)
+        rect = (rows.start, rows.stop, cols.start, cols.stop)
+        for key, item in issued:
+            self._check_overlap(key, item, rect)
+        for _, item in issued:
+            item.coverage.add(rect)
+
+    def reset(self) -> None:
+        """Forget every write and mark, keeping the allocated outputs (re-pass, spec §3.7).
+
+        The next pass overwrites the outputs in place; a field that was only ever written
+        uniformly starts over.
+        """
+        self._check_open()
+        for item in self._fields.values():
+            item.coverage = _Coverage()
+            if not item.allocated:
+                item.uniform = None
+
     def finish(self) -> dict[str, np.ndarray]:
         """Check that every pixel of every field was written once; return read-only fields.
 
@@ -480,11 +567,10 @@ class FrameAssembler:
             raise ValueError("this FrameAssembler is already finished")
         h, w = self.geometry.shape_hw
         for key, item in self._fields.items():
-            area = sum((r1 - r0) * (c1 - c0) for r0, r1, c0, c1 in item.written)
-            if area != h * w:
+            if item.coverage.area != h * w:
                 raise ValueError(
-                    f"field {key!r}: {area} of {h * w} pixels written; every pixel must be "
-                    "written exactly once"
+                    f"field {key!r}: {item.coverage.area} of {h * w} pixels written; every "
+                    "pixel must be written (or marked) exactly once"
                 )
         out: dict[str, np.ndarray] = {}
         for key, item in self._fields.items():
@@ -494,20 +580,44 @@ class FrameAssembler:
                 out[key] = np.broadcast_to(item.uniform, (h, w, *item.spec.trailing))
             else:
                 item.array = None
-                out[key] = self._store.freeze(item.store_key)
+                out[key] = self._store.freeze(item.name)
         self._finished = True
         return out
+
+    # ----------------------------------------------------------------------------------
+
+    def _item(self, key: str) -> _Assembly:
+        try:
+            return self._fields[key]
+        except KeyError:
+            known = ", ".join(self._fields)
+            raise KeyError(f"no field spec {key!r}; specs: {known}") from None
+
+    def _check_open(self) -> None:
+        if self._finished:
+            raise ValueError("this FrameAssembler is finished")
+
+    @staticmethod
+    def _check_overlap(key: str, item: _Assembly, rect: Rect) -> None:
+        hit = item.coverage.overlap(rect)
+        if hit is not None:
+            raise ValueError(
+                f"field {key!r}: region {(slice(rect[0], rect[1]), slice(rect[2], rect[3]))} "
+                f"overlaps region {(slice(hit[0], hit[1]), slice(hit[2], hit[3]))} written "
+                "before"
+            )
 
     def _allocate(self, item: _Assembly) -> None:
         spec = item.spec
         shape = (*self.geometry.shape_hw, *spec.trailing)
-        array = self._store.allocate(item.store_key, shape, spec.dtype)
+        array = self._store.allocate(item.name, shape, spec.dtype)
         if item.uniform is not None:
-            for r0, r1, c0, c1 in item.written:
+            for r0, r1, c0, c1 in item.coverage.rects:
                 array[r0:r1, c0:c1] = item.uniform
             item.uniform = None
         item.array = array
         item.allocated = True
+        item.mapped = self._store.is_mapped(item.name)
 
 
 def _field_prefixes(material: Any) -> frozenset[str] | None:

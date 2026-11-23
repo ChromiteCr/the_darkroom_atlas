@@ -10,8 +10,9 @@ unexposed_state` it writes
 
 and ``meta["exposure"]`` (spec §2.1.9). ``n_z`` and the number of size classes follow
 ``RunContext.profile`` (spec §3.1); the film format is ``RunContext.film_format`` or the
-material's ``default_format``. Large fields are memory-mapped under
-``RunContext.scratch_dir`` (spec §4.3).
+material's ``default_format``. Large fields are memory-mapped in the run's store
+``RunContext.store`` (spec §4.3), or, for a run without one, in a store of their own under
+``RunContext.scratch_dir``.
 """
 
 import uuid
@@ -91,13 +92,11 @@ def expose_bw(
     classes = size_classes(layer, PROFILE_CLASSES[ctx.profile])
     stack = optical_stack(material, film_format, classes, ctx.grid)
     response = depth_response(stack, n_z)
-    store = (
-        None
-        if ctx.scratch_dir is None
-        else FieldStore(ctx.scratch_dir / f"expose-{uuid.uuid4().hex[:12]}")
-    )
-    # The store is not closed: the state refers to its files, which the runner deletes
-    # with the scratch directory.
+    store = ctx.store
+    if store is None and ctx.scratch_dir is not None:
+        # No run store: one of our own. It is not closed, since the state refers to its
+        # files, which the runner deletes with the scratch directory.
+        store = FieldStore(ctx.scratch_dir / f"expose-{uuid.uuid4().hex[:12]}")
     volume, surface, optics_meta = exposure_fields(
         light,
         time_s,

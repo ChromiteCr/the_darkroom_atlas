@@ -651,10 +651,38 @@ def test_fused_segment_writes_to_scratch_dir(scratch, exposed, lib, tmp_path, mo
     _assert_states_equal(result, reference)
     mapped = result.fields["y/c"]
     assert isinstance(mapped, np.memmap) and mapped.mode == "r"
-    assert any(tmp_path.rglob("*.dat"))
+    assert any(tmp_path.rglob("*.bin"))
     # Without a scratch directory the fields stay in memory.
     in_ram = process(state, proc, RunContext(lib, tile_px=16))
     assert not isinstance(in_ram.fields["y/c"], np.memmap)
+
+
+def test_fused_segment_uses_run_store(scratch, exposed, lib, tmp_path):
+    # Spec §4.3: the run's one store (RunContext.store) holds the assembled fields under
+    # f"s{step_index}:{key}", the index of the segment's last step.
+    proc = _fusion_model("storetest")
+    state = _fusion_state(exposed, "storetest")
+    reference = process(state, proc, RunContext(lib))
+    with FieldStore(tmp_path / "run", ram_threshold_bytes=0) as store:
+        ctx = RunContext(lib, tile_px=16, store=store)
+        result = process(state, proc, ctx)
+        _assert_states_equal(result, reference)
+        # Segments (0, 1), (2,), (3, 4): x/a from the first, y/c from the last.
+        assert "s1:x/a" in store and "s4:y/c" in store
+        mapped = result.fields["y/c"]
+        assert isinstance(mapped, np.memmap) and mapped.mode == "r"
+        assert Path(mapped.filename).parent == tmp_path / "run"
+        assert Path(mapped.filename).name.startswith("s4_y_c-")
+        assert not any(tmp_path.glob("process-*"))  # no store of its own
+    # The store takes no part in comparison, hashing or repr.
+    plain = RunContext(lib, tile_px=16)
+    with FieldStore(None) as other:
+        with_store = RunContext(lib, tile_px=16, store=other)
+        assert with_store == plain and hash(with_store) == hash(plain)
+        assert "store" not in repr(with_store)
+        assert with_store.store is other
+    with pytest.raises(TypeError, match="store"):
+        RunContext(lib, store=tmp_path)
 
 
 def test_tiled_rejects_inconsistent_fields_in_fused_step(scratch, exposed, lib):

@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from darkroom_atlas.data.library import Library
-from darkroom_atlas.fieldstore import FieldStore
+from darkroom_atlas.fieldstore import FieldStore, open_field
 from darkroom_atlas.spectral import DEFAULT_GRID
 from darkroom_atlas.state import (
     EmulsionState,
@@ -210,7 +210,7 @@ def _write_all(assembler, key, full, tile_px):
         assembler.write(key, tile.inner, full[tile.inner])
 
 
-def test_assembler_each_pixel_once():
+def test_assembler_each_pixel_once(tmp_path):
     geom = FrameGeometry.from_long_edge((H, W))
     full = np.random.default_rng(0).random((H, W, 3))
     tiles = list(iter_tiles((H, W), 16, 0))
@@ -250,6 +250,70 @@ def test_assembler_each_pixel_once():
     with pytest.raises(ValueError, match="x/b"):
         asm.finish()
 
+    # mark: regions written straight into the mapped outputs count like write() (§4.4).
+    with FieldStore(tmp_path, ram_threshold_bytes=0) as store:
+        asm = FrameAssembler(geom, [FieldSpec("x/a", (3,))], store, name_prefix="s4:")
+        with pytest.raises(ValueError, match="descriptors"):
+            asm.mark(tiles[0].inner)  # nothing handed out yet
+        (desc,) = asm.descriptors().values()
+        assert asm.store_names == {"x/a": "s4:x/a"}
+        writer = open_field(desc, "r+")
+        for tile in tiles[1:]:
+            writer[tile.inner] = full[tile.inner]
+            asm.mark(tile.inner)
+        writer.flush()
+        with pytest.raises(ValueError, match="overlaps"):
+            asm.mark(tiles[1].inner)  # marked twice
+        with pytest.raises(ValueError, match="overlaps"):
+            asm.write("x/a", tiles[2].inner, full[tiles[2].inner])  # marked, then written
+        with pytest.raises(ValueError, match="exactly once"):
+            asm.finish()  # tile 0 missing
+        asm.write("x/a", tiles[0].inner, full[tiles[0].inner])
+        with pytest.raises(ValueError, match="overlaps"):
+            asm.mark(tiles[0].inner)  # written, then marked
+
+        # reset: forget the pass, keep the outputs, and overwrite them in a second pass.
+        asm.reset()
+        with pytest.raises(ValueError, match="exactly once"):
+            asm.finish()
+        assert asm.descriptors() == {"x/a": desc}  # same allocation
+        second = 2.0 * full
+        for tile in tiles:
+            writer[tile.inner] = second[tile.inner]
+            asm.mark(tile.inner)
+        writer.flush()
+        del writer
+        out = asm.finish()["x/a"]
+        assert isinstance(out, np.memmap) and out.mode == "r"
+        np.testing.assert_array_equal(out, second)
+        with pytest.raises(ValueError, match="finished"):
+            asm.reset()
+        with pytest.raises(ValueError, match="finished"):
+            asm.mark(tiles[0].inner)
+        with pytest.raises(ValueError, match="finished"):
+            asm.descriptors()
+
+    # reset also works for written (not marked) fields and for uniform ones.
+    asm = FrameAssembler(geom, [FieldSpec("x/a", (3,)), FieldSpec("x/u")])
+    _write_all(asm, "x/a", full, 16)
+    for tile in tiles:
+        shape = full[tile.inner].shape[:2]
+        asm.write("x/u", tile.inner, np.broadcast_to(1.0, shape))
+    asm.reset()
+    _write_all(asm, "x/a", full[::-1, ::-1], 25)
+    for tile in iter_tiles((H, W), 25, 0):
+        shape = full[tile.inner].shape[:2]
+        asm.write("x/u", tile.inner, np.broadcast_to(2.0, shape))
+    out = asm.finish()
+    np.testing.assert_array_equal(out["x/a"], full[::-1, ::-1])
+    assert out["x/u"].strides == (0, 0) and (out["x/u"] == 2.0).all()
+
+    # Fields in RAM have no descriptor; mark needs one.
+    asm = FrameAssembler(geom, [FieldSpec("x/a", (3,))])
+    assert asm.descriptors() == {}
+    with pytest.raises(ValueError, match="descriptors"):
+        asm.mark(tiles[0].inner)
+
 
 def test_assembler_uniform_fields_stay_broadcast():
     geom = FrameGeometry.from_long_edge((H, W))
@@ -263,7 +327,7 @@ def test_assembler_uniform_fields_stay_broadcast():
         # Different scalars in different tiles: allocated and filled in correctly.
         asm.write("x/m", tile.inner, np.broadcast_to(float(i % 2), shape))
     out = asm.finish()
-    assert asm.store_keys.keys() == {"x/m"}
+    assert asm.store_names.keys() == {"x/m"}
     for key in ("x/u", "x/v"):
         assert out[key].strides[:2] == (0, 0) and out[key].base is not None
         assert not out[key].flags.writeable
@@ -303,11 +367,16 @@ def test_assembler_uses_store_memmap(tmp_path):
         out = asm.finish()["x/a"]
         assert isinstance(out, np.memmap) and out.mode == "r"
         np.testing.assert_array_equal(out, full)
-        assert asm.store_keys["x/a"] in store
-        # Two assemblers producing the same field key can share a store.
-        asm2 = FrameAssembler(geom, [FieldSpec("x/a", (2,))], store=store)
+        assert asm.store_names["x/a"] in store
+        # Two assemblers producing the same field key share a store under distinct
+        # prefixes (steps use f"s{index}:", spec §4.3); the same name twice raises.
+        asm2 = FrameAssembler(geom, [FieldSpec("x/a", (2,))], store=store, name_prefix="s7:")
         _write_all(asm2, "x/a", full, 25)
-        asm2.finish()
+        assert asm2.store_names == {"x/a": "s7:x/a"}
+        np.testing.assert_array_equal(asm2.finish()["x/a"], out)
+        asm3 = FrameAssembler(geom, [FieldSpec("x/a", (2,))], store=store, name_prefix="s7:")
+        with pytest.raises(ValueError, match="already allocated"):
+            _write_all(asm3, "x/a", full, 25)
 
 
 def test_assembler_write_state_matches_paste(empty):
@@ -356,25 +425,72 @@ def test_assembler_rejects_bad_input(empty):
         asm.write("x/a", (slice(0, 2), slice(0, 2)), np.zeros((2, 2, 2)))
 
 
-def _assembly_seconds(blocks_per_side, block_px=64, trailing=6, repeats=9):
+class _CountingArray(np.ndarray):
+    """An array that counts the elements assigned into it."""
+
+    assigned = 0
+
+    def __setitem__(self, key, value):
+        _CountingArray.assigned += np.asarray(self[key]).size
+        super().__setitem__(key, value)
+
+
+class _CountingStore(FieldStore):
+    """A RAM store whose fields count every element written into them."""
+
+    def allocate(self, name, shape, dtype="float64"):
+        array = super().allocate(name, shape, dtype).view(_CountingArray)
+        self._entries[name].array = array
+        return array
+
+
+def _assemble(blocks_per_side, block_px, values, store=None):
     side = blocks_per_side * block_px
-    geom = FrameGeometry.from_long_edge((side, side))
-    values = np.ones((block_px, block_px, trailing))
-    tiles = list(iter_tiles((side, side), block_px, 0))
-    best = math.inf
-    for _ in range(repeats):
-        start = time.perf_counter()
-        asm = FrameAssembler(geom, [FieldSpec("x/a", (trailing,))])
-        for tile in tiles:
-            asm.write("x/a", tile.inner, values)
-        asm.finish()
-        best = min(best, time.perf_counter() - start)
-    return best
+    asm = FrameAssembler(
+        FrameGeometry.from_long_edge((side, side)), [FieldSpec("x/a", values.shape[2:])], store
+    )
+    for tile in iter_tiles((side, side), block_px, 0):
+        asm.write("x/a", tile.inner, values)
+    return asm.finish()["x/a"]
 
 
 def test_assembler_linear_cost():
-    # Same block size, 4 blocks vs 64 blocks: area ratio 16 (spec §10 D1a). Frames stay
-    # small (12 MB at most) so both sizes see the same allocator and cache behaviour and the
-    # ratio measures the algorithm (D0's repeated paste measured about 100 here).
-    ratio = _assembly_seconds(8) / _assembly_seconds(2)
-    assert ratio <= 1.5 * 16
+    # Spec §10 D1a: assembling costs O(pixels), not O(blocks x pixels) as D0's repeated
+    # paste did. Deterministic part: every pixel is copied into the frame exactly once, for
+    # 4, 16 and 64 blocks (D0's paste copied the whole frame once per block).
+    block_px, trailing = 64, 6
+    values = np.ones((block_px, block_px, trailing))
+    for blocks_per_side in (2, 4, 8):
+        _CountingArray.assigned = 0
+        out = _assemble(blocks_per_side, block_px, values, _CountingStore(None))
+        assert _CountingArray.assigned == out.size
+
+    # Timing part: 64 and 16 blocks against 4 (area ratios 16 and 4), each within 1.5 x the
+    # ratio of a plain block-by-block NumPy copy into a new frame of the same size, which is
+    # the O(pixels) floor. Normalising by that floor rather than by the area ratio cancels
+    # the cache and memory-bandwidth effects of the larger frames, which a loaded machine
+    # amplifies; D0's paste would still come out 16 times above it at 64 blocks. Best of
+    # many repetitions, sizes interleaved.
+    sizes = (2, 4, 8)
+    best = {(n, kind): math.inf for n in sizes for kind in ("assembler", "copy")}
+    for _ in range(15):
+        for n in sizes:
+            start = time.perf_counter()
+            _assemble(n, block_px, values)
+            middle = time.perf_counter()
+            _plain_copy(n, block_px, values)
+            end = time.perf_counter()
+            best[n, "assembler"] = min(best[n, "assembler"], middle - start)
+            best[n, "copy"] = min(best[n, "copy"], end - middle)
+    relative = {n: best[n, "assembler"] / best[n, "copy"] for n in sizes}
+    growth = {n: relative[n] / relative[2] for n in sizes}
+    assert growth[8] <= 1.5, (growth, best)
+    assert growth[4] <= 1.5, (growth, best)
+
+
+def _plain_copy(blocks_per_side, block_px, values):
+    side = blocks_per_side * block_px
+    out = np.zeros((side, side, *values.shape[2:]))
+    for tile in iter_tiles((side, side), block_px, 0):
+        out[tile.inner] = values
+    return out

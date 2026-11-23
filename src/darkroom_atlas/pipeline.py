@@ -24,7 +24,10 @@ copies), grown by the sum over the segment's steps of
 steps in turn, and only the segment's final fields are written into the frame with a
 :class:`~darkroom_atlas.state.FrameAssembler` (O(pixels) in all). A final field that is
 still the input's own array in every tile (no step touched it) is passed through without
-being copied. Without ``tile_px`` every step runs on the whole frame.
+being copied. Without ``tile_px`` every step runs on the whole frame. Assembled fields are
+allocated in the run's :class:`~darkroom_atlas.fieldstore.FieldStore`
+(``RunContext.store``) under the store names ``f"s{index}:{key}"``, ``index`` being the
+segment's last step (spec §4.3).
 
 A tiled handler must return the same field names, each with the same dtype and trailing
 dimensions, and the same ``meta`` for every tile (differing fields raise ``ValueError``):
@@ -95,6 +98,13 @@ class RunContext:
     number of worker processes, ``memory_budget_gb`` the memory budget that bounds them
     (section 4.6) and ``scratch_dir`` the directory for memory-mapped fields (``None``:
     every field stays in memory). The runner owns ``scratch_dir``: it creates and removes it.
+
+    ``store`` is the run's one :class:`~darkroom_atlas.fieldstore.FieldStore` (section
+    4.3): created and closed by the runner, it takes no part in comparison, hashing or
+    ``repr`` and is not recorded in the manifest or ``recipe_hash``. Steps reach it as
+    ``StepContext.run.store``. Without a store, a ``process`` call with ``scratch_dir`` set
+    maps its fields into a store of its own under ``scratch_dir``; with neither, every
+    field stays in memory.
     """
 
     library: Library
@@ -107,6 +117,7 @@ class RunContext:
     workers: int = 1
     memory_budget_gb: float = 6.0
     scratch_dir: Path | None = None
+    store: FieldStore | None = field(default=None, compare=False, hash=False, repr=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.library, Library):
@@ -135,6 +146,8 @@ class RunContext:
                     f"scratch_dir must be None or a path, got {type(self.scratch_dir).__name__}"
                 )
             object.__setattr__(self, "scratch_dir", Path(self.scratch_dir))
+        if self.store is not None and not isinstance(self.store, FieldStore):
+            raise TypeError(f"store must be None or a FieldStore, got {type(self.store).__name__}")
 
 
 @dataclass(frozen=True)
@@ -299,7 +312,7 @@ def process(state: EmulsionState, proc: Process, ctx: RunContext) -> EmulsionSta
         for index, (step, handler, bath) in enumerate(zip(proc.steps, handlers, baths, strict=True))
     ]
 
-    store: FieldStore | None = None
+    store: FieldStore | None = ctx.store
     for indices in _group(handlers):
         segment = [steps[i] for i in indices]
         whole_frame = ctx.tile_px is None or segment[0].handler.interaction_range_um is None
@@ -370,11 +383,11 @@ def _group(handlers: list[RegisteredStep]) -> list[tuple[int, ...]]:
 
 
 def _field_store(ctx: RunContext) -> FieldStore | None:
-    """A store for the fields one ``process`` call assembles (``None``: in memory).
+    """A store for the fields one ``process`` call assembles when the run has none.
 
-    Each call gets its own subdirectory of ``ctx.scratch_dir``, so file names never clash
-    with other stores sharing the directory. The store is not closed: the returned state
-    refers to its files, which the runner deletes with the scratch directory.
+    ``None`` (in memory) without ``ctx.scratch_dir``. Otherwise each call gets its own
+    subdirectory of ``ctx.scratch_dir``. The store is not closed: the returned state refers
+    to its files, which the runner deletes with the scratch directory.
     """
     if ctx.scratch_dir is None:
         return None
@@ -396,6 +409,8 @@ def _run_tiled(
         math.ceil(item.handler.interaction_range_um / pitch)  # type: ignore[operator]
         for item in segment
     )
+    # Store names of the segment's final fields (spec §4.3): the last step's index.
+    name_prefix = f"s{segment[-1].ctx.step_index}:"
     first: list[tuple[frozenset[str], dict[str, str]] | None] = [None] * len(segment)
     assemblers: dict[str, FrameAssembler] = {}
     done: list[Tile] = []
@@ -419,7 +434,7 @@ def _run_tiled(
                 if _same_view(value, window.fields.get(key)):
                     continue  # still the input's array: pass it through
                 spec = FieldSpec(key, value.shape[2:], value.dtype.name)
-                assembler = FrameAssembler(state.geometry, [spec], store)
+                assembler = FrameAssembler(state.geometry, [spec], store, name_prefix=name_prefix)
                 # Earlier tiles passed this field through unchanged.
                 for earlier in done:
                     assembler.write(key, earlier.inner, state.fields[key][earlier.inner])

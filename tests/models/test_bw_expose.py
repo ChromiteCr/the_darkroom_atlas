@@ -13,6 +13,7 @@ import yaml
 from darkroom_atlas.data.library import DataError, Library
 from darkroom_atlas.data.models import Material
 from darkroom_atlas.emulsion import size_classes
+from darkroom_atlas.fieldstore import FieldStore
 from darkroom_atlas.light import LowRankLight
 from darkroom_atlas.models import bw
 from darkroom_atlas.optics.expose import uniform_exposure
@@ -160,13 +161,34 @@ def reference_fields(lib, film):
 
 
 def test_expose_workers_with_scratch_dir(lib, film, tmp_path, reference_fields):
-    # Workers read the convolution source from a file in the scratch directory; the file
-    # is removed afterwards and the result is unchanged.
+    # Workers read the convolution source from a mapped file in the scratch directory and
+    # write their blocks into mapped outputs; fields below the threshold end up in RAM, the
+    # transient files are removed and the result is unchanged.
     ctx = RunContext(lib, long_edge_mm=55.0, workers=3, scratch_dir=tmp_path)
     state = expose(film, _tiling_light(), TIME_S, ctx)
     for key, ref in reference_fields.items():
         assert np.array_equal(state.fields[key], ref), key
-    assert not list(tmp_path.rglob("exposure-source-*"))
+        assert not isinstance(state.fields[key], np.memmap)
+    assert not [p for p in tmp_path.rglob("*") if p.is_file()]
+
+
+@pytest.mark.parametrize("workers", [1, 3])
+def test_expose_uses_run_store(lib, film, tmp_path, reference_fields, workers):
+    # Spec §4.3-§4.4: with RunContext.store the exposure fields are allocated there (mapped
+    # above its threshold); with workers > 1 the workers write them in place. Only the two
+    # field files remain, and the result is bit-identical.
+    with FieldStore(tmp_path / "run", ram_threshold_bytes=0) as store:
+        ctx = RunContext(lib, long_edge_mm=55.0, workers=workers, store=store)
+        state = expose(film, _tiling_light(), TIME_S, ctx)
+        files = sorted(p.name for p in (tmp_path / "run").iterdir())
+        assert len(files) == 2
+        for key, ref in reference_fields.items():
+            field = state.fields[key]
+            assert isinstance(field, np.memmap) and field.mode == "r"
+            assert np.array_equal(field, ref), key
+            name = Path(field.filename).name
+            assert name.startswith("expose-") and key.replace("/", "_") in name
+        assert not any(tmp_path.glob("expose-*"))  # no store of its own
 
 
 def test_expose_bw_reports_missing_fields(lib):

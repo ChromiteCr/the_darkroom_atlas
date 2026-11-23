@@ -25,14 +25,16 @@ def _line_transfer(kernel: np.ndarray, nu: np.ndarray, pitch: float) -> np.ndarr
     return (lsf[None, :] * np.cos(2 * math.pi * nu[:, None] * m[None, :])).sum(axis=1)
 
 
-def _pixel_sampled_otf(nu, pitch, weight, length, n_alias=4000):
-    """Exact transfer function of the pixel-integrated, pixel-sampled continuous PSF.
+def _pixel_sampled_otf(nu, pitch, weight, length, n_alias=8):
+    """Box-filtered, aliased OTF of spec §2.1.10: sum_{k=-8..8} P^(nu + k/p) sinc(nu p + k).
 
-    Poisson summation: sum_k P^(nu + k/p) sinc((nu + k/p) p).
+    The transfer function of the pixel-integrated, pixel-sampled continuous PSF along x
+    (the box's y factor vanishes at k' != 0).
     """
     k = np.arange(-n_alias, n_alias + 1)
     nu_k = nu[:, None] + k[None, :] / pitch
-    return (scatter_otf(nu_k, weight, length) * np.sinc(nu_k * pitch)).sum(axis=1)
+    box = np.sinc(nu[:, None] * pitch + k[None, :])
+    return (scatter_otf(nu_k, weight, length) * box).sum(axis=1)
 
 
 @pytest.mark.parametrize("length", LENGTHS)
@@ -50,8 +52,8 @@ def test_scatter_kernel_normalised(length, weight):
 @pytest.mark.parametrize("length", LENGTHS)
 @pytest.mark.parametrize("weight", [1.0, 0.4])
 def test_scatter_kernel_otf(length, weight):
-    # The kernel holds pixel integrals, so its transfer function is compared with that of the
-    # pixel-integrated continuous PSF (pixel aperture and aliasing included).
+    # Spec §2.1.10 (revised): the kernel holds pixel integrals, so its DTFT is compared with
+    # the box-filtered, aliased OTF, not with P^(nu) itself.
     nu = np.linspace(0.0, 0.25 / PITCH, 41)
     kernel = scatter_kernel(PITCH, weight, length)
     expected = _pixel_sampled_otf(nu, PITCH, weight, length)
@@ -60,8 +62,9 @@ def test_scatter_kernel_otf(length, weight):
 
 @pytest.mark.xfail(
     strict=True,
-    reason="literal §2.1.10 reading: a pixel-integrated kernel cannot match the continuous "
-    "P^(nu) to 2e-3 (pixel aperture and aliasing give 1e-2 at a_P = p)",
+    reason="spec §2.1.10 (revised) notes that a pixel-integrated kernel cannot match the "
+    "continuous P^(nu) to 2e-3 (it differs by 0.002-0.018 w_P); kept as the record of why "
+    "test_scatter_kernel_otf compares with the box-filtered, aliased OTF",
 )
 def test_scatter_kernel_otf_vs_continuous():
     nu = np.linspace(0.0, 0.25 / PITCH, 41)

@@ -9,11 +9,13 @@ from scipy import signal
 
 from darkroom_atlas.data.library import Library
 from darkroom_atlas.emulsion import size_classes
+from darkroom_atlas.fieldstore import FieldStore
 from darkroom_atlas.light import Light, LowRankLight
 from darkroom_atlas.optics.expose import (
     _uniform,
     depth_weights,
     exposure_fields,
+    mixing_weights,
     uniform_exposure,
 )
 from darkroom_atlas.optics.halation import halation_fraction, halation_kernel
@@ -326,6 +328,30 @@ def test_exposure_fields_rejects_bad_input(stack):
         exposure_fields(other, TIME_S, stack, response, geometry)
 
 
+@pytest.mark.parametrize("low_rank", [True, False])
+def test_exposure_fields_workers_write_directly(stack, tmp_path, low_rank):
+    # Spec §4.4: with workers > 1 the blocks are written by the workers into mapped outputs
+    # (the store's, or temporary ones copied into RAM); bit-identical to one process.
+    response = _response(stack)
+    light = _random_light((130, 140), seed=9)
+    if not low_rank:
+        light = light.to_light()
+    geometry = FrameGeometry((130, 140), 15.0)
+    ref_v, ref_s, ref_meta = exposure_fields(light, TIME_S, stack, response, geometry, block_px=64)
+    with FieldStore(tmp_path / "s", ram_threshold_bytes=0) as store:
+        for target in (None, store, FieldStore(tmp_path / "ram")):
+            vol, surf, meta = exposure_fields(
+                light, TIME_S, stack, response, geometry, block_px=64, workers=3, store=target
+            )
+            assert np.array_equal(vol, ref_v) and np.array_equal(surf, ref_s)
+            assert meta == ref_meta
+            assert isinstance(vol, np.memmap) == (target is store)
+            assert not vol.flags.writeable and not surf.flags.writeable
+        # Only the two output fields stay; the transient source file is gone.
+        assert len(list((tmp_path / "s").iterdir())) == 2
+    assert not [p for p in (tmp_path / "ram").rglob("*") if p.is_file()]
+
+
 def _shifted_copy(array: np.ndarray, offset: int) -> np.ndarray:
     raw = np.empty(array.nbytes + 64, dtype=np.uint8)
     start = (-raw.ctypes.data) % 64 + offset
@@ -351,7 +377,7 @@ def test_block_result_independent_of_alignment(stack, low_rank):
     hal = halation_kernel(pitch, stack.base).kernel
     if low_rank:
         source = np.array(light.coefficients)
-        mix = (TIME_S * (light.basis @ plus), TIME_S * (light.basis @ minus))
+        mix = mixing_weights(light.basis, plus, minus, TIME_S)
     else:
         source = light.project(TIME_S * np.concatenate([plus, minus], axis=1))
         mix = None
