@@ -23,12 +23,13 @@ from darkroom_atlas.validate.reference import (
 )
 from darkroom_atlas.validate.splits import (
     HELD_OUT,
-    HELD_OUT_EVALUATED,
     TRAINING,
     UNUSED,
     WITHIN_CHECKS,
     LeakageError,
     TrainingLibrary,
+    classify,
+    enumerate_items,
 )
 
 _TX, _TM = "kodak/tri-x-400", "kodak/t-max-100"
@@ -89,7 +90,8 @@ def test_training_observations_require_training_library(library):
         training_observations(library)  # type: ignore[arg-type]
 
 
-def test_training_observations_refuse_a_held_out_item(library, monkeypatch):
+def test_calibration_loader_refuses_held_out(library, monkeypatch):
+    # Spec 7.7: the calibration data loader (training_observations) raises on a held-out id.
     real = ref_mod.reference_conditions
     held = f"{_TM}/tables.yaml#development_times/normal-small-tank-rolls/xtol@68"
     assert held in HELD_OUT
@@ -143,29 +145,145 @@ development_times:
 """
 
 
-def test_held_out_observations_on_synthetic_reference(library, tmp_path):
+def _synthetic_char(minutes: int, gamma: float) -> str:
+    """A synthetic T-MAX Developer characteristic curve (not Kodak data)."""
+    log_h = np.linspace(-3.0, 0.0, 31)
+    density = 0.20 + gamma * np.log1p(np.exp(4.0 * (log_h + 2.2))) / 4.0
+    rows = "".join(f"{x:.4f},{y:.4f}\n" for x, y in zip(log_h, density, strict=True))
+    return (
+        "# material: kodak/t-max-100\n# quantity: characteristic_curve\n"
+        "# x_unit: log10(lux*s)\n# y_unit: 1\n# origin: datasheet\n"
+        "# ref: synthetic test curve, not Kodak data\n"
+        f"# conditions: developer=t-max-dev; dilution=not stated; time={minutes}min; "
+        "temperature=20 C; agitation=small tank; format=not stated; densitometry=diffuse visual\n"
+        + rows
+    )
+
+
+# Table ids the split registry classifies as evaluated held-out (7.6).
+_TABLE_ID = {
+    "xtol": "table1-small-tank-full-strength",
+    "hc-110": "roll-dilution-b-small-tank",
+    "t-max-dev": "small-tank-rolls",
+}
+
+
+def _synthetic_developer(name: str, ci: float | None, minutes: list) -> str:
+    """A developer-publication file with one T-Max row (and, for T-MAX Dev, a push row)."""
+    ci_field = f"    ci: {ci}\n" if ci is not None else ""
+    ei_field = "" if name == "hc-110" else "    ei: '100/200'\n"  # J-24 rows print no EI
+    push = (
+        "  - {film_as_printed: T-MAX 100, material: kodak/t-max-100, format: roll, ei: '400',"
+        " minutes: [6.0, 5.0, null]}\n"
+        if name == "t-max-dev"
+        else ""
+    )
+    return (
+        f"schema_version: 1\ndeveloper: {name}\ndevelopment_times:\n"
+        f"- id: {_TABLE_ID[name]}\n  tank: small tank\n"
+        f"  dilution: {'B' if name == 'hc-110' else 'full strength'}\n"
+        "  temperature_c: [20, 21, 24]\n  temperature_f: [68, 70, 75]\n  rows:\n"
+        "  - film_as_printed: T-MAX 100\n    material: kodak/t-max-100\n"
+        f"    format: {'135/120' if name == 'xtol' else 'roll'}\n"
+        + ei_field
+        + ci_field
+        + f"    minutes: {minutes}\n".replace("None", "null")
+        + push
+    )
+
+
+def _synthetic_held_out(library, tmp_path) -> Library:
     # Spec 8.3: the held-out pipeline is exercised on synthetic data, not on Kodak's files.
     ref = tmp_path / "reference" / _TM
     ref.mkdir(parents=True)
     (ref / "ci-small-tank-xtol.csv").write_text(_SYNTHETIC_CI, encoding="utf-8")
     (ref / "tables.yaml").write_text(_SYNTHETIC_TABLES, encoding="utf-8")
+    for minutes, gamma in ((6, 0.45), (7, 0.55), (10, 0.75), (12, 0.90)):
+        text = _synthetic_char(minutes, gamma)
+        (ref / f"char-tmax-dev-{minutes:02d}min.csv").write_text(text, encoding="utf-8")
+    dev = tmp_path / "reference" / "developers"
+    dev.mkdir()
+    for name, ci, minutes in (
+        ("xtol", 0.62, [8.0, 7.0, 5.0]),
+        ("hc-110", None, [6.0, None, 4.0]),
+        ("t-max-dev", None, [None, None, None]),
+    ):
+        text = _synthetic_developer(name, ci, minutes)
+        (dev / f"{name}.yaml").write_text(text, encoding="utf-8")
     proc = tmp_path / "processes" / _TM
     proc.mkdir(parents=True)
     src = library.path_of("process", f"{_TM}/d-76-stock-20c-small-tank-6.5min")
     shutil.copy(src, proc / src.name)
-    synthetic = Library(tmp_path)
+    return Library(tmp_path)
+
+
+_DT = "#development_times"
+_X_ROW = f"developers/xtol.yaml{_DT}/{_TABLE_ID['xtol']}/t-max-100/135-120/ei100-200/ci0.62"
+_HC_ROW = f"developers/hc-110.yaml{_DT}/{_TABLE_ID['hc-110']}/t-max-100/roll"
+_TMD_ROW = f"developers/t-max-dev.yaml{_DT}/{_TABLE_ID['t-max-dev']}/t-max-100/roll/ei100-200"
+
+
+def test_held_out_observations_on_synthetic_reference(library, tmp_path):
+    synthetic = _synthetic_held_out(library, tmp_path)
     obs = held_out_observations(synthetic, CalibrationRecord.model_construct(frozen=True))
     kinds = Counter(o.kind for o in obs)
-    assert kinds == {"ci": 1, "table_ci": 4}  # the null 72 F cell is skipped
+    # 4 tables.yaml cells (the null 72 F cell skipped), 3 J-109 and 2 J-24 cells; the
+    # all-null T-MAX Dev row and its push row (not evaluated) give nothing.
+    assert kinds == {"ci": 1, "table_ci": 9, "density": 4, "speed": 1}
     for o in obs:
-        assert set(observation_sources(o)) <= HELD_OUT_EVALUATED
+        for source in observation_sources(o):
+            assert classify(source).split == "held_out" and classify(source).evaluated
         assert not o.in_objective and np.all(np.isnan(o.sigma))
-        assert o.condition is not None and o.condition.developer == "xtol"
+        assert o.condition is not None and o.condition.material_id == _TM
     ci = _one(obs, f"{_TM}/ci-small-tank-xtol.csv")
     assert ci.x[0] == 300.0 and ci.x[-1] == 660.0 and ci.y[0] == pytest.approx(0.40)
     cell = _one(obs, f"{_TM}/tables.yaml#development_times/normal-small-tank-rolls/xtol@65")
     assert cell.x[0] == 540.0 and cell.y[0] == 0.56
     assert cell.condition.temperature_c == (65 - 32) * 5 / 9
+    j109 = [o for o in obs if o.item_id == _X_ROW]
+    assert [o.x[0] for o in j109] == [480.0, 420.0, 300.0]
+    assert all(o.y[0] == 0.62 for o in j109)  # J-109: the row's own CI (spec 7.2)
+    assert j109[1].condition.temperature_c == (70 - 32) * 5 / 9
+    assert j109[0].condition.dilution == "stock"
+    j24 = [o for o in obs if o.item_id == _HC_ROW]
+    assert [o.y[0] for o in j24] == [0.56, 0.56]  # J-24: CI_aim 0.56 (spec 7.2)
+    assert j24[0].condition.developer == "hc-110-pre2019"
+    assert j24[0].condition.dilution == "1+31"
+    speed = _one(
+        [o for o in obs if o.kind == "speed"], next(o.item_id for o in obs if o.kind == "speed")
+    )
+    assert len(observation_sources(speed)) == 4 and math.isfinite(speed.y[0])
+    assert not speed.in_objective  # 8.3: log H_m* of the held-out T-MAX Dev series
+
+
+def test_every_evaluated_held_out_item_yields_an_observation(library, tmp_path):
+    synthetic = _synthetic_held_out(library, tmp_path)
+    obs = held_out_observations(synthetic, CalibrationRecord.model_construct(frozen=True))
+    covered = {s for o in obs for s in observation_sources(o)}
+    evaluated = {
+        i
+        for i in enumerate_items(synthetic.root / "reference")
+        if classify(i).split == "held_out" and classify(i).evaluated
+    }
+    # Reasoned exclusions: cells or rows whose reference value is null (spec 7.2).
+    null_ids = {
+        f"{_TM}/tables.yaml#development_times/normal-small-tank-rolls/xtol@72",
+        _TMD_ROW,
+    }
+    assert null_ids <= evaluated
+    assert evaluated - null_ids == covered, sorted(evaluated ^ covered)
+
+
+def test_held_out_observations_refuse_to_skip_an_item(library, tmp_path, monkeypatch):
+    synthetic = _synthetic_held_out(library, tmp_path)
+    real = ref_mod._film_observations
+
+    def lossy(material_id, lib, items, *, mode):
+        return [o for o in real(material_id, lib, items, mode=mode) if o.item_id != _HC_ROW]
+
+    monkeypatch.setattr(ref_mod, "_film_observations", lossy)
+    with pytest.raises(ValueError, match="hc-110.yaml"):
+        held_out_observations(synthetic, CalibrationRecord.model_construct(frozen=True))
 
 
 # ---- coverage ----------------------------------------------------------------------------------
@@ -274,9 +392,12 @@ def test_table_ci_sigma(library, training):
 def test_ph_sigma(training):
     xtol = _one(training, "bath:xtol#ph_anchors/stock")
     assert xtol.y[0] == 8.20 and xtol.sigma[0] == 0.05 and xtol.condition is None
-    cc = _one(training, "bath:d-76-published#ph_anchors/stock")
+    cc = _one(training, "bath:d-76-published#ph_anchors/stock#delta_cc")
     assert cc.sigma[0] == 0.10  # Carlton & Crabtree colorimetric (spec 7.2)
-    assert _one(training, "bath:hc-110-pre2019#ph_anchors/1+15").sigma[0] == 0.10
+    assert ref_mod.takes_delta_cc(cc) and not ref_mod.takes_delta_cc(xtol)
+    assert [o.item_id for o in training if ref_mod.takes_delta_cc(o)] == [cc.item_id]
+    hc = _one(training, "bath:hc-110-pre2019#ph_anchors/1+15")
+    assert hc.sigma[0] == 0.10 and not ref_mod.takes_delta_cc(hc)  # CIS-61, its own sigma
 
 
 def test_spectral_sigma_and_shape(library, training):
@@ -295,12 +416,16 @@ def test_spectral_sigma_and_shape(library, training):
 
 def test_mtf_tail_sigma(library, training, within):
     tx = _one(training, f"{_TX}/mtf-d76-large-tank.csv")
+    # Pre-registered tail bands (6.7 step 8): any change to them must fail here.
+    assert tx.x.tolist() == [30.0, 40.0, 50.0, 60.0, 70.0]
+    assert tx.sigma.tolist() == [2.0, 2.0, 3.0, 3.0, 3.0]
     assert np.array_equal(tx.sigma, np.where(tx.x >= 50, 3.0, 2.0))
     curve = library.reference_curve(tx.item_id)
     last_full = curve.x[np.flatnonzero(curve.y >= 100)[-1]]
     assert np.all(tx.x > last_full) and tx.in_objective
     tm = _one(training, f"{_TM}/mtf-d76-small-tank.csv")
-    assert np.all(tm.sigma == 2.0) and 150.0 in tm.x
+    assert tm.x.tolist() == [50.0, 60.0, 70.0, 80.0, 100.0, 120.0, 150.0]
+    assert np.all(tm.sigma == 2.0)
     peak = _one(within, f"{_TX}/mtf-d76-large-tank.csv")
     assert not peak.in_objective and np.all(peak.x < tx.x[0])
 

@@ -18,7 +18,13 @@ from darkroom_atlas.validate.conditions import (
     reference_conditions,
     tank_kind,
 )
-from darkroom_atlas.validate.splits import TRAINING, WITHIN_CHECKS, LeakageError, TrainingLibrary
+from darkroom_atlas.validate.splits import (
+    HELD_OUT_EVALUATED,
+    TRAINING,
+    WITHIN_CHECKS,
+    LeakageError,
+    TrainingLibrary,
+)
 
 _TX, _TM = "kodak/tri-x-400", "kodak/t-max-100"
 
@@ -177,6 +183,8 @@ def test_conditions_for_bad_input(library):
         ("d-76", "1+1 (printed 1:1)", "1+1"),
         ("xtol", "not stated in the figure", "stock"),
         ("hc-110-pre2019", "B (Kodak's dilution letter)", "1+31"),
+        ("xtol", "full strength", "stock"),
+        ("xtol", "1:1 (developer:water)", "1+1"),
         ("t-max-dev", "not stated in the figure", "1+4"),
         ("t-max-dev", "1+7 (printed 1:7)", "1+7"),
     ],
@@ -201,3 +209,35 @@ def test_mapping_helpers_reject_unknown_values():
     assert film_format_for("120-size") == "120"
     assert film_format_for("35 mm and 120-size") == "135"
     assert film_format_for(None) == "135"
+
+
+def test_held_out_conditions_cover_every_evaluated_curve_and_cell(library):
+    # Structure only: no held-out time is compared or printed (spec 7.7).
+    nulls: set[str] = set()
+    items = reference_conditions(_TM, library, split="held_out", require_process=False, nulls=nulls)
+    conditions = conditions_for(_TM, library, split="held_out")
+    assert len(conditions) == len(items)
+    assert all(a == b.condition for a, b in zip(conditions, items, strict=True))
+    evaluated = {i for i in HELD_OUT_EVALUATED if i.startswith(_TM + "/") or "/t-max-100/" in i}
+    sources = {c.source for c in conditions}
+    missing = sorted(evaluated - sources - nulls)
+    assert not missing, "held-out items without a condition:\n" + "\n".join(missing)
+    assert sources <= HELD_OUT_EVALUATED
+    tanks = cond_mod._templates(library)
+    for item in items:
+        c = item.condition
+        assert isinstance(c, Condition), item.item_id
+        assert c.material_id == _TM and c.developer in ("xtol", "hc-110-pre2019", "t-max-dev")
+        library.bath(c.developer)
+        assert (c.agitation, c.tank) == tanks[item.tank], item.item_id
+        assert item.process_id is None or item.process_id in library.ids("process")
+    assert conditions_for(_TX, library, split="held_out") == []
+
+
+def test_process_id_for_held_out(library):
+    items = reference_conditions(_TM, library, split="held_out", require_process=False)
+    char = next(i for i in items if i.item_id == f"{_TM}/char-tmax-dev-06min.csv")
+    assert process_id_for(char.condition, library) == f"{_TM}/t-max-dev-1+4-20c-small-tank-6min"
+    cell = next(i for i in items if i.process_id is None)
+    with pytest.raises(NoProcessError, match="no process file"):
+        process_id_for(cell.condition, library)

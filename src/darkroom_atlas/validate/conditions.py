@@ -9,6 +9,11 @@ development times at which the strip is read. :func:`parse_conditions_header` sp
 naming rule in its README): agitation, tank and the exact temperature come from that file,
 never from the header's free text. :func:`reference_conditions` returns the same together
 with the process id and the table data a residual needs (CI aim, column temperature).
+
+Held-out items have no process file (processes README, "Not here"): their agitation and tank
+come from the process files of the same tank type, and ``process_id`` is ``None``. Held-out
+table cells include the T-Max rows of the developer publications
+(``developers/{xtol,hc-110,t-max-dev}.yaml``, spec 7.6), one condition per cell of a row.
 """
 
 import itertools
@@ -199,20 +204,23 @@ def bath_for_developer(name: str) -> str:
 def dilution_for(bath: str, text: str | None) -> str:
     """Explicit dilution of a header or table ``dilution`` text for ``bath``.
 
-    A printed ``1+n`` is kept. Otherwise HC-110 dilution B is 1+31 and T-MAX Developer 1+4
-    (processes README); D-76 and XTOL read as stock (also when the dilution is not stated).
+    A printed ``1+n`` is kept, and XTOL ``1:1`` (developer:water, J-109) is 1+1. Otherwise
+    HC-110 dilution B is 1+31 and T-MAX Developer 1+4 (processes README); D-76 and XTOL read
+    as stock (also when the dilution is not stated or printed "full strength").
     """
     value = (text or "").strip().lower()
     m = re.match(r"^1\+(\d+)\b", value)
     if m:
         return f"1+{m.group(1)}"
+    if bath == "xtol" and re.match(r"^1:1\b", value):
+        return "1+1"  # J-109 p. 2: 1:1 is developer:water
     if bath == "hc-110-pre2019":
         if not value.startswith("b"):
             raise ValueError(f"HC-110 dilution {text!r}: only dilution B is used (spec 7.6)")
         return _CONCENTRATE_DILUTION[bath]
     if bath in _CONCENTRATE_DILUTION:
         return _CONCENTRATE_DILUTION[bath]
-    if value.startswith(("stock", "not stated")) or not value:
+    if value.startswith(("stock", "not stated", "full strength")) or not value:
         return "stock"
     raise ValueError(f"cannot read a dilution of {bath} from {text!r}")
 
@@ -522,7 +530,8 @@ def _csv_wants(reader: _Reader, rel: str, kind: str) -> _Want:
 
 
 def _linspace(a: float, b: float, n: int) -> list[float]:
-    return [a + (b - a) * i / (n - 1) for i in range(n)]
+    # The end point is b exactly: a + (b - a) can round past the curve's span.
+    return [a + (b - a) * i / (n - 1) for i in range(n - 1)] + [b]
 
 
 def _field_index(fields: tuple, key: str) -> tuple[tuple, int] | None:
@@ -538,7 +547,7 @@ def _get(data: Any, path: tuple) -> Any:
     return data
 
 
-def _table_wants(reader: _Reader, wanted: set[str]) -> list[_Want]:
+def _table_wants(reader: _Reader, wanted: set[str], nulls: set[str]) -> list[_Want]:
     from darkroom_atlas.validate.splits import walk_yaml
 
     film = reader.material_id
@@ -558,6 +567,7 @@ def _table_wants(reader: _Reader, wanted: set[str]) -> list[_Want]:
             row, table = _get(data, row_path), _get(data, row_path[:2])
             minutes = row["minutes"][j]
             if minutes is None:
+                nulls.add(item.id)
                 continue
             bath = bath_for_developer(row["developer"])
             dilution = dilution_for(bath, row.get("dilution"))
@@ -589,6 +599,7 @@ def _table_wants(reader: _Reader, wanted: set[str]) -> list[_Want]:
                 row, blk = _get(data, row_path), data[block]
                 minutes = row[key][j]
                 if minutes is None:
+                    nulls.add(item.id)
                     continue
                 temp_f = int(blk[temps_key][j])
                 t = float(minutes) * 60.0
@@ -616,6 +627,7 @@ def _table_wants(reader: _Reader, wanted: set[str]) -> list[_Want]:
             row, sub = _get(data, row_path), _get(data, row_path[:3])
             factor = row["factor"][j]
             if factor is None:
+                nulls.add(item.id)
                 continue
             bath = bath_for_developer(sub["developers"][0])
             # The HC-110 block is read at dilution B, the dilution of the F-4016 tables.
@@ -670,6 +682,67 @@ def _table_wants(reader: _Reader, wanted: set[str]) -> list[_Want]:
     return out
 
 
+# Spec 7.2: CI_aim of the J-24 and J-86 time tables is 0.56; J-109 rows print their own CI.
+_DEVELOPER_CI_AIM = 0.56
+
+
+def _developer_row_id(item_id: str, film: str) -> bool:
+    """True for a ``developers/<file>.yaml#development_times/<table>/<film>/...`` row id."""
+    rel, sep, rest = item_id.partition("#")
+    parts = rest.split("/")
+    return (
+        bool(sep)
+        and rel.startswith("developers/")
+        and len(parts) >= 3
+        and parts[0] == "development_times"
+        and parts[2] == film
+    )
+
+
+def _developer_wants(reader: _Reader, wanted: set[str], nulls: set[str]) -> list[_Want]:
+    """One want per cell of the wanted developer-publication rows (spec 7.6, 7.2)."""
+    from darkroom_atlas.validate.splits import walk_yaml
+
+    out: list[_Want] = []
+    files = sorted({i.split("#", 1)[0] for i in wanted})
+    for rel in files:
+        bath = bath_for_developer(PurePosixPath(rel).stem)
+        data = reader.library.developer_facts(bath)
+        for item in walk_yaml(rel, data):
+            if item.id not in wanted:
+                continue
+            path = item.fields[0]
+            row, table = _get(data, path), _get(data, path[:2])
+            dilution = dilution_for(bath, table.get("dilution"))
+            tank = tank_kind(table["tank"])
+            aim = float(row["ci"]) if row.get("ci") is not None else _DEVELOPER_CI_AIM
+            film_format = film_format_for(row.get("format"))
+            cells = 0
+            for temp_f, minutes in zip(table["temperature_f"], row["minutes"], strict=True):
+                if minutes is None:
+                    continue
+                t = float(minutes) * 60.0
+                cells += 1
+                out.append(
+                    _Want(
+                        item.id,
+                        "table_ci",
+                        bath,
+                        dilution,
+                        fahrenheit_to_c(int(temp_f)),
+                        tank,
+                        (t,),
+                        t,
+                        film_format,
+                        ci_aim=aim,
+                        temperature_f=int(temp_f),
+                    )
+                )
+            if cells == 0:
+                nulls.add(item.id)
+    return out
+
+
 def _std_minutes(data: Mapping[str, Any], bath: str, dilution: str, t_std_c: float) -> float | None:
     for table in data.get("development_times") or []:
         if not str(table.get("id", "")).startswith("normal-small-tank"):
@@ -695,6 +768,7 @@ def reference_conditions(
     *,
     split: Split,
     require_process: bool = True,
+    nulls: set[str] | None = None,
 ) -> list[ConditionedItem]:
     """Every curve and table cell of ``material_id`` in ``split`` with its condition.
 
@@ -703,7 +777,9 @@ def reference_conditions(
     :class:`~darkroom_atlas.validate.splits.TrainingLibrary`; held out refuses one. Cells whose
     time is null are skipped. Raises :class:`NoProcessError` naming the item when no process
     file matches (unless ``require_process`` is false, then agitation and tank come from the
-    process files of the same tank type and ``process_id`` is ``None``).
+    process files of the same tank type and ``process_id`` is ``None``). If ``nulls`` is
+    given, the ids skipped because their reference value is null are added to it. Rows of
+    the developer publications (``developers/*.yaml``) of this film give one item per cell.
     """
     from darkroom_atlas.validate.splits import (
         LeakageError,
@@ -724,9 +800,10 @@ def reference_conditions(
         view = library if isinstance(library, TrainingLibrary) else TrainingLibrary(library)
     target = _SPLIT_CLASS[split]
     prefix = f"{material_id}/"
+    film = material_id.split("/", 1)[-1]
     ids = []
     for item_id in enumerate_items(view.root / "reference"):
-        if not item_id.startswith(prefix):
+        if not (item_id.startswith(prefix) or _developer_row_id(item_id, film)):
             continue
         c = classify(item_id)
         if c.split != target or (split == "held_out" and not c.evaluated):
@@ -742,18 +819,28 @@ def reference_conditions(
         kind = _csv_kind(rel.name)
         if kind is not None:
             wants.append(_csv_wants(reader, item_id, kind))
-    if any("/tables.yaml#" in i for i in ids):
-        wants.extend(_table_wants(reader, {i for i in ids if "/tables.yaml#" in i}))
+    skipped: set[str] = set() if nulls is None else nulls
+    table_ids = {i for i in ids if i.startswith(prefix) and "/tables.yaml#" in i}
+    if table_ids:
+        wants.extend(_table_wants(reader, table_ids, skipped))
+    developer_ids = {i for i in ids if i.startswith("developers/")}
+    if developer_ids:
+        wants.extend(_developer_wants(reader, developer_ids, skipped))
     return [builder.build(w, require_process=require_process) for w in wants]
 
 
 def conditions_for(material_id: str, library: Library, *, split: Split) -> list[Condition]:
     """One :class:`Condition` per reference curve or table cell of ``split`` (spec 10 D1e).
 
-    ``Condition.source`` is the item id (spec 7.6). Raises :class:`NoProcessError` naming
-    the item when no Kodak process file matches its condition.
+    ``Condition.source`` is the item id (spec 7.6). For ``train`` and ``within`` raises
+    :class:`NoProcessError` naming the item when no Kodak process file matches its condition.
+    Held-out items have no process file (processes README): their agitation and tank come
+    from the process files of the same tank type, as in ``held_out_observations``.
     """
-    return [c.condition for c in reference_conditions(material_id, library, split=split)]
+    items = reference_conditions(
+        material_id, library, split=split, require_process=split != "held_out"
+    )
+    return [c.condition for c in items]
 
 
 def process_id_for(condition: Condition, library: Library) -> str:
@@ -766,8 +853,16 @@ def process_id_for(condition: Condition, library: Library) -> str:
     split = {v: k for k, v in _SPLIT_CLASS.items()}.get(c.split)
     if split is None:
         raise NoProcessError(f"{condition.source}: {c.split} items have no condition")
-    for item in reference_conditions(condition.material_id, library, split=split):  # type: ignore[arg-type]
+    held = split == "held_out"
+    items = reference_conditions(
+        condition.material_id,
+        library,
+        split=split,  # type: ignore[arg-type]
+        require_process=not held,
+    )
+    for item in items:
         if item.item_id == condition.source and item.condition == condition:
-            assert item.process_id is not None
+            if item.process_id is None:
+                raise NoProcessError(f"{condition.source}: this held-out item has no process file")
             return item.process_id
     raise NoProcessError(f"{condition.source}: no process for this condition")

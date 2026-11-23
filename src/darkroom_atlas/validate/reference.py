@@ -11,7 +11,12 @@ every id it returns passes :func:`~darkroom_atlas.validate.splits.assert_trainab
 Item ids are the split registry's. An observation built from several files (the speed point
 of a development series) joins their ids with ``" + "`` (:func:`observation_sources`). pH
 anchors come from the bath files, outside the reference registry, as
-``bath:<bath id>#ph_anchors/<dilution>``.
+``bath:<bath id>#ph_anchors/<dilution>``; a colorimetric (Carlton & Crabtree) anchor carries
+the suffix ``#delta_cc`` (:func:`takes_delta_cc`): its residual is pH_sim + delta_CC - pH_ref
+with one offset for the whole series (spec 7.2). The bath files hold one such anchor so far
+(``d-76-published`` 8.5); with one member delta_CC absorbs it exactly, so the series gives no
+information until the other Carlton & Crabtree variants (8.1, 8.9, 9.2, 8.1, 8.6) are anchors
+too. XTOL Part A (10.19, sigma 0.3) is not a dilution of a bath and is not an anchor yet.
 
 Held-out observations carry ``sigma = NaN`` and ``in_objective = False``: they are scored
 against the pre-registered thresholds of spec 8.3, never fitted.
@@ -43,6 +48,7 @@ from darkroom_atlas.validate.splits import (
     TrainingLibrary,
     assert_trainable,
     classify,
+    enumerate_items,
 )
 
 __all__ = [
@@ -59,6 +65,7 @@ __all__ = [
     "observation_sources",
     "sigma_floor",
     "table_ci_sigma",
+    "takes_delta_cc",
     "training_observations",
     "within_check_observations",
 ]
@@ -78,6 +85,7 @@ KINDS: tuple[str, ...] = (
     "reciprocity",
 )
 PH_PREFIX = "bath:"
+DELTA_CC_SUFFIX = "#delta_cc"
 _JOIN = " + "
 
 _TX, _TM = "kodak/tri-x-400", "kodak/t-max-100"
@@ -180,6 +188,11 @@ class Observation:
             raise ValueError(f"{self.item_id}: an objective term needs finite sigma > 0")
         if not (math.isfinite(self.n_effective) and self.n_effective > 0.0):
             raise ValueError(f"{self.item_id}: n_effective must be positive")
+
+
+def takes_delta_cc(obs: Observation) -> bool:
+    """True for a Carlton & Crabtree pH anchor, whose residual adds delta_CC (spec 7.2)."""
+    return obs.kind == "ph" and obs.item_id.endswith(DELTA_CC_SUFFIX)
 
 
 def observation_sources(obs: Observation) -> tuple[str, ...]:
@@ -520,15 +533,15 @@ def _ph(library: Library) -> list[Observation]:
     for bath_id in library.ids("bath"):
         bath = library.bath(bath_id)
         for anchor in getattr(bath, "ph_anchors", None) or []:
+            colorimetric = anchor.method == "colorimetric"
             sigma = (
-                PH_SIGMA_COLORIMETRIC
-                if anchor.method == "colorimetric"
-                else float(anchor.ph.uncertainty)  # type: ignore[arg-type]
+                PH_SIGMA_COLORIMETRIC if colorimetric else float(anchor.ph.uncertainty)  # type: ignore[arg-type]
             )
+            suffix = DELTA_CC_SUFFIX if colorimetric else ""
             out.append(
                 Observation(
                     "ph",
-                    f"{PH_PREFIX}{bath_id}#ph_anchors/{anchor.dilution}",
+                    f"{PH_PREFIX}{bath_id}#ph_anchors/{anchor.dilution}{suffix}",
                     None,
                     [float(anchor.temperature.value)],
                     [float(anchor.ph.value)],  # type: ignore[arg-type]
@@ -559,7 +572,8 @@ def _film_observations(
             out.append(_density(item, curves[item.item_id], held_out=mode == "held"))
             c = item.condition
             series.setdefault((c.developer, c.dilution, c.film_format, item.tank), []).append(item)
-    if mode == "train":
+    if mode in ("train", "held"):
+        # A series that does not bracket Delta D = 0.80 has no log H_m* (8.3: not applicable).
         for members in series.values():
             speed = _speed(members, curves)
             if speed is not None:
@@ -636,22 +650,37 @@ def held_out_observations(library: Library, record: CalibrationRecord) -> list[O
     """Held-out evaluated items (spec 7.6); only for a record with ``frozen: true`` (7.7).
 
     Items without a Kodak process file get agitation and tank from the processes of the same
-    tank type (:func:`~darkroom_atlas.validate.conditions.reference_conditions`).
+    tank type (:func:`~darkroom_atlas.validate.conditions.reference_conditions`). Includes the
+    T-Max rows of ``developers/*.yaml`` and the log H_m* of the development series (8.3).
+    Raises ``ValueError`` listing every evaluated held-out item that gives no observation and
+    is not a null cell (8.2: a metric with reference data is never skipped).
     """
     if not bool(getattr(record, "frozen", False)):
         raise LeakageError("held-out observations need a frozen calibration record (7.7, 8.4)")
     if isinstance(library, TrainingLibrary):
         raise LeakageError("held-out observations cannot be read through a TrainingLibrary")
-    base = library.root / "reference"
     out: list[Observation] = []
+    nulls: set[str] = set()
     for material_id in _FILMS:
-        if not (base / material_id).is_dir():
-            continue
-        items = reference_conditions(material_id, library, split="held_out", require_process=False)
+        items = reference_conditions(
+            material_id, library, split="held_out", require_process=False, nulls=nulls
+        )
         out.extend(_film_observations(material_id, library, items, mode="held"))
+    covered: set[str] = set()
     for obs in out:
         for source in observation_sources(obs):
             c = classify(source)
             if c.split != "held_out" or not c.evaluated:
                 raise LeakageError(f"{source!r} is not an evaluated held-out item")
+            covered.add(source)
+    evaluated = {
+        i
+        for i in enumerate_items(library.root / "reference")
+        if (c := classify(i)).split == "held_out" and c.evaluated
+    }
+    missing = sorted(evaluated - covered - nulls)
+    if missing:
+        raise ValueError(
+            "evaluated held-out items without an observation (spec 8.2):\n" + "\n".join(missing)
+        )
     return out
