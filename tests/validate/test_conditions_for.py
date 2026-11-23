@@ -224,13 +224,17 @@ def test_held_out_conditions_cover_every_evaluated_curve_and_cell(library):
     assert not missing, "held-out items without a condition:\n" + "\n".join(missing)
     assert sources <= HELD_OUT_EVALUATED
     tanks = cond_mod._templates(library)
+    processes = set(library.ids("process"))
     for item in items:
-        c = item.condition
-        assert isinstance(c, Condition), item.item_id
-        assert c.material_id == _TM and c.developer in ("xtol", "hc-110-pre2019", "t-max-dev")
-        library.bath(c.developer)
-        assert (c.agitation, c.tank) == tanks[item.tank], item.item_id
-        assert item.process_id is None or item.process_id in library.ids("process")
+        # Locals keep a failure message free of the Condition repr (it shows times_s).
+        is_condition = isinstance(item.condition, Condition)
+        material, developer = item.condition.material_id, item.condition.developer
+        same_tank = (item.condition.agitation, item.condition.tank) == tanks[item.tank]
+        known = item.process_id is None or item.process_id in processes
+        assert is_condition and material == _TM, item.item_id
+        assert developer in ("xtol", "hc-110-pre2019", "t-max-dev"), item.item_id
+        library.bath(developer)
+        assert same_tank and known, item.item_id
     assert conditions_for(_TX, library, split="held_out") == []
 
 

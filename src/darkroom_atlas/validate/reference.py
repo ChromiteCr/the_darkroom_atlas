@@ -9,7 +9,9 @@ every id it returns passes :func:`~darkroom_atlas.validate.splits.assert_trainab
 :func:`held_out_observations` the held-out items, only for a frozen calibration record.
 
 Item ids are the split registry's. An observation built from several files (the speed point
-of a development series) joins their ids with ``" + "`` (:func:`observation_sources`). pH
+of a development series) joins their ids with ``" + "`` (:func:`observation_sources`). A row
+of a developer publication (``developers/*.yaml``) is one registry item but gives one
+observation per cell: those share ``item_id`` and differ by ``condition.temperature_c``. pH
 anchors come from the bath files, outside the reference registry, as
 ``bath:<bath id>#ph_anchors/<dilution>``; a colorimetric (Carlton & Crabtree) anchor carries
 the suffix ``#delta_cc`` (:func:`takes_delta_cc`): its residual is pH_sim + delta_CC - pH_ref
