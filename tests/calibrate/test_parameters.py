@@ -501,6 +501,73 @@ def test_calibration_values(lib: Library) -> None:
     assert nested.material("kodak/tri-x-400").layers[1].grain.sigma_log.value == 0.3
 
 
+def test_s_abs_values_read_back_unscaled(lib: Library) -> None:
+    s_abs = "calibration:kodak/tri-x-400/s_abs"
+    alpha0 = f"{TX}.optics.intrinsic_absorption.alpha0"
+    amp = f"{TX}.optics.dye_bands[0].amplitude"
+    overlay = LibraryOverlay(lib, {s_abs: 0.5})
+    # The parameter's own value, not the derived alpha0 * 10**s_abs.
+    assert parameter_value(overlay, alpha0) == parameter_value(lib, alpha0)
+    assert parameter_value(overlay, amp) == parameter_value(lib, amp)
+    assert parameter_value(overlay, s_abs) == 0.5
+
+
+def test_current_values_round_trip_through_a_fresh_overlay(lib: Library) -> None:
+    specs = parameter_specs(lib, "B") + parameter_specs(lib, "C")
+    theta = to_theta(specs, current_values(lib, specs)) + 0.02
+    overlay = LibraryOverlay(lib, from_theta(specs, theta))
+    again = LibraryOverlay(lib, current_values(overlay, specs))
+    for film in ("kodak/tri-x-400", "kodak/t-max-100"):
+        assert again.material(film) == overlay.material(film)
+    assert current_values(again, specs) == current_values(overlay, specs)
+
+
+def test_stacked_overlays_apply_derived_parametrisations_once(lib: Library) -> None:
+    s_abs = "calibration:kodak/tri-x-400/s_abs"
+    ar = "calibration:kodak/t-max-100/aspect_ratio"
+    t_g = f"{TM}.grain.thickness"
+    alpha0 = f"{TX}.optics.intrinsic_absorption.alpha0"
+    inner = LibraryOverlay(lib, {s_abs: 0.5, ar: 12.0, alpha0: 2.0})
+    outer = LibraryOverlay(inner, {s_abs: 0.5, t_g: 0.1})
+    flat = LibraryOverlay(lib, {s_abs: 0.5, ar: 12.0, alpha0: 2.0, t_g: 0.1})
+    for film in ("kodak/tri-x-400", "kodak/t-max-100"):
+        assert outer.material(film) == flat.material(film)
+    optics = outer.material("kodak/tri-x-400").layers[1].optics
+    assert optics.intrinsic_absorption.alpha0.value == pytest.approx(2.0 * 10**0.5, rel=1e-15)
+    assert parameter_value(outer, alpha0) == 2.0
+    grain = outer.material("kodak/t-max-100").layers[1].grain
+    assert grain.mean_diameter.value == pytest.approx(1.2, rel=1e-15)
+    # The outer value of a calibration-only parameter wins.
+    assert LibraryOverlay(inner, {s_abs: -0.2}).material("kodak/tri-x-400") == LibraryOverlay(
+        lib, {s_abs: -0.2, alpha0: 2.0}
+    ).material("kodak/tri-x-400")
+
+
+def test_stacked_aspect_ratio_conflicts_with_mean_diameter(lib: Library) -> None:
+    ar = "calibration:kodak/t-max-100/aspect_ratio"
+    d = f"{TM}.grain.mean_diameter"
+    with pytest.raises(ParameterError, match="both set"):
+        LibraryOverlay(LibraryOverlay(lib, {ar: 10.0}), {d: 1.0})
+    with pytest.raises(ParameterError, match="both set"):
+        LibraryOverlay(LibraryOverlay(lib, {d: 1.0}), {ar: 10.0})
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {f"{KIN}:agents.metol.activation_energy": 75.0},
+        {f"{KIN}:activity.delta_eps.sulfite": 0.1, "calibration:delta_cc": 0.2},
+        {"calibration:kodak/tri-x-400/s_abs": 0.5, "calibration:kodak/t-max-100/aspect_ratio": 9.0},
+        {f"{TX}.latent.tau0_median": 0.5, f"{TM}.grain.thickness": 0.1},
+    ],
+)
+def test_parameter_specs_ignore_overlay_values(lib: Library, overrides: dict[str, float]) -> None:
+    # Priors stay anchored at the data-file values (spec D1 7.1) whatever the overlay holds.
+    overlay = LibraryOverlay(LibraryOverlay(lib, overrides), {f"{TX}.grain.sigma_log": 0.3})
+    for stage in ("A", "B", "C", "D", "E"):
+        assert parameter_specs(overlay, stage) == parameter_specs(lib, stage)
+
+
 @pytest.mark.parametrize(
     "name",
     [

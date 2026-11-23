@@ -56,9 +56,16 @@ def test_weighted_svd_weights() -> None:
 def test_weighted_svd_wide_matrix() -> None:
     rng = np.random.default_rng(2)
     j = rng.normal(size=(3, 6))
-    s, v = weighted_svd(j, np.ones(3))
-    assert s.shape == (3,)
-    assert v.shape == (6, 3)
+    sigma = rng.uniform(0.1, 1.0, size=3)
+    s, v = weighted_svd(j, sigma)
+    a = _weighted(j, sigma)
+    # Every parameter direction is returned; the unconstrained ones have singular value 0.
+    assert s.shape == (6,)
+    assert v.shape == (6, 6)
+    np.testing.assert_allclose(s[:3], np.linalg.svd(a, compute_uv=False), rtol=1e-13)
+    assert np.all(s[3:] == 0.0)
+    np.testing.assert_allclose(v.T @ v, np.eye(6), atol=1e-13)
+    np.testing.assert_allclose(a @ v[:, 3:], 0.0, atol=1e-12 * s[0])
 
 
 @pytest.mark.parametrize(

@@ -33,7 +33,10 @@ and ``kinetics`` return the base library's models with the overridden values and
 to disk. It also applies the derived parametrisations of spec D1 7.1 and 7.5. With
 ``calibration:<id>/aspect_ratio`` it sets ``grain.mean_diameter = AR * grain.thickness``. With
 ``calibration:<id>/s_abs`` it multiplies ``alpha0`` and every dye-band ``amplitude`` by
-``10**s_abs``. Derived values are not checked against the file bounds: the ``[0.6, 1.5] um`` box
+``10**s_abs``. The derived values are applied once, on top of the data overrides of the whole
+overlay chain, and never feed back: :func:`parameter_value` reads each parameter's own value
+(the unscaled ``alpha0``), and :func:`parameter_specs` reads bounds and priors from the root
+library's files, so ``prior_mu`` stays at the data-file value. Derived values are not checked against the file bounds: the ``[0.6, 1.5] um`` box
 of the T-Max ``mean_diameter`` is a one-sided penalty, not a hard bound.
 """
 
@@ -353,6 +356,25 @@ def _set_value(obj: Any, tokens: list[str | int], value: float) -> Any:
     return _replace(obj, steps, _scaled(q, value))
 
 
+def _root(library: Library) -> Library:
+    """The library under every :class:`LibraryOverlay` of ``library``: the data files' values."""
+    while isinstance(library, LibraryOverlay):
+        library = library.base
+    return library
+
+
+def _raw(library: Library, kind: str, id_: str | None) -> Any:
+    """The model ``kind``/``id_`` with the data overrides of every overlay of ``library`` merged
+    in, before the derived parametrisations (``s_abs``, aspect ratio) are applied."""
+    if isinstance(library, LibraryOverlay):
+        return library._raw_model(kind, id_)
+    if kind == "material":
+        return library.material(id_)
+    if kind == "bath":
+        return library.bath(id_)
+    return library.kinetics()
+
+
 def _file_id(library: Library, kind: str, id_: str) -> str:
     path = library.path_of(kind, id_)
     return path.relative_to(library.root).with_suffix("").as_posix()
@@ -371,7 +393,7 @@ def _open(library: Library, file_id: str, name: str) -> tuple[str, str | None, A
     """``(kind, id, model, path)`` of the data file ``file_id`` read through ``library``."""
     if file_id == KINETICS_FILE_ID:
         try:
-            return "kinetics", None, library.kinetics(), library.root / _KINETICS_PATH
+            return "kinetics", None, _raw(library, "kinetics", None), library.root / _KINETICS_PATH
         except DataNotFound:
             raise ParameterError(f"unknown parameter {name!r}: no kinetics file") from None
     head, _, rest = file_id.partition("/")
@@ -383,7 +405,7 @@ def _open(library: Library, file_id: str, name: str) -> tuple[str, str | None, A
             raise ParameterError(
                 f"unknown parameter {name!r}: {file_id!r} is not the file of {rest!r}"
             )
-        model = library.material(rest) if kind == "material" else library.bath(rest)
+        model = _raw(library, kind, rest)
     except DataNotFound:
         raise ParameterError(f"unknown parameter {name!r}: no file {file_id!r}") from None
     return kind, rest, model, library.path_of(kind, rest)
@@ -395,7 +417,11 @@ def _field_tokens(kind: str, path: str) -> list[str | int]:
 
 
 def _quantity(library: Library, name: str) -> tuple[Quantity, Path, str]:
-    """The scalar :class:`Quantity` that data parameter ``name`` refers to, its file and path."""
+    """The scalar :class:`Quantity` that data parameter ``name`` refers to, its file and path.
+
+    Under an overlay this is the parameter's own value, before ``s_abs`` or the aspect ratio
+    derive ``alpha0``, the dye amplitudes or ``mean_diameter`` from it.
+    """
     file_id, path = _split_name(name)
     kind, _, model, file_path = _open(library, file_id, name)
     try:
@@ -419,7 +445,7 @@ def _calibration_param(library: Library, name: str) -> tuple[_CalibrationOnly, s
     if not decl.per_film:
         return decl, None
     try:
-        material = library.material(film)
+        material = _raw(library, "material", film)
     except DataNotFound:
         raise ParameterError(f"unknown parameter {name!r}: no material {film!r}") from None
     if decl is _ASPECT_RATIO and _film_layer(material, library).grain.morphology != "tabular":
@@ -598,7 +624,7 @@ def _calibration_spec(decl: _CalibrationOnly, name: str, default: float) -> Para
 def _calibration_default(library: Library, decl: _CalibrationOnly, film: str | None) -> float:
     if decl is not _ASPECT_RATIO:
         return 0.0
-    material = library.material(film)
+    material = _raw(library, "material", film)
     grain = _film_layer(material, library).grain
     ratio = float(grain.mean_diameter.value) / float(grain.thickness.value)
     if not decl.lower <= ratio <= decl.upper:
@@ -695,9 +721,12 @@ def parameter_specs(
     """The parameters that spec D1 7.1 assigns to ``stage`` (spec D1 7.3), in table order.
 
     ``stage`` is ``"A"`` to ``"E"`` or the matching :class:`StageRecord` name (``"A_activity"``,
-    ...). B and C list each of ``films`` in turn. E is C followed by D. ``prior_mu`` is taken
-    from the values that ``library`` returns (an overlay's values when it is one).
+    ...). B and C list each of ``films`` in turn. E is C followed by D. Every field, ``prior_mu``
+    included, comes from the data files under any :class:`LibraryOverlay`: the prior stays
+    anchored at the file value whatever an overlay holds (spec D1 7.1), so the result for an
+    overlay equals the result for its root library.
     """
+    library = _root(library)
     key = _stage(stage)
     if key == "A":
         specs = _stage_a(library)
@@ -718,15 +747,14 @@ def parameter_specs(
 def parameter_value(library: Library, name: str) -> float:
     """The current value of parameter ``name`` as ``library`` sees it.
 
-    A calibration-only parameter that no overlay sets has its neutral value: 0 for
+    This is the parameter's own value: under ``s_abs`` it is the unscaled ``alpha0`` or dye
+    amplitude, so the values read back feed a new overlay without scaling them twice. A calibration-only parameter that no overlay sets has its neutral value: 0 for
     ``delta_cc`` and ``s_abs``, and ``mean_diameter / thickness`` for the aspect ratio.
     """
     if isinstance(name, str) and name.startswith(CALIBRATION_PREFIX):
         lib = library
-        while isinstance(lib, LibraryOverlay):
-            if name in lib.calibration_values:
-                return lib.calibration_values[name]
-            lib = lib.base
+        if isinstance(lib, LibraryOverlay) and name in lib._calibration_chain():
+            return lib._calibration_chain()[name]
         decl, film = _calibration_param(library, name)
         return _calibration_default(library, decl, film)
     q, _, _ = _quantity(library, name)
@@ -752,13 +780,16 @@ class LibraryOverlay(Library):
     value, or a value outside the quantity's ``bounds`` (or the spec's box for a calibration-only
     parameter) raises :class:`ParameterError`. Every read goes through ``base`` (a
     ``TrainingLibrary`` in the calibration, spec D1 7.7), and nothing is written to disk.
+
+    ``base`` may itself be an overlay. The data overrides of the whole chain are merged first
+    (an outer value wins), and ``s_abs`` and the aspect ratio are applied once, on the merged
+    material, with the outermost value of each.
     """
 
     def __init__(self, base: Library, overrides: Mapping[str, float]) -> None:
         if not isinstance(base, Library):
             raise TypeError(f"base must be a Library, got {type(base).__name__}")
         super().__init__(base.root)
-        self._base = base
         data: dict[str, dict[str, float]] = {}
         calibration: dict[str, float] = {}
         for name, value in dict(overrides).items():
@@ -770,20 +801,22 @@ class LibraryOverlay(Library):
             lower, upper = q.bounds if q.bounds is not None else (-math.inf, math.inf)
             file_id = name.partition(":")[0]
             data.setdefault(file_id, {})[path] = _check_value(name, value, lower, upper)
-        for name in calibration:
+        self._base = base
+        self._data = {k: MappingProxyType(v) for k, v in data.items()}
+        self._calibration = MappingProxyType(calibration)
+        self._overrides = MappingProxyType(dict(overrides))
+        chain_data = self._data_chain()
+        for name in self._calibration_chain():
             film, _, key = name[len(CALIBRATION_PREFIX) :].rpartition("/")
             if key != _ASPECT_RATIO.key:
                 continue
-            layer = _film_layer(base.material(film), base)
+            layer = _film_layer(_raw(base, "material", film), base)
             path = f"{layer.id}.grain.mean_diameter"
-            if path in data.get(_file_id(base, "material", film), {}):
+            if path in chain_data.get(_file_id(base, "material", film), {}):
                 raise ParameterError(
                     f"{name} and {_file_id(base, 'material', film)}:{path} both set the grain "
                     "diameter; give one of them"
                 )
-        self._data = {k: MappingProxyType(v) for k, v in data.items()}
-        self._calibration = MappingProxyType(calibration)
-        self._overrides = MappingProxyType(dict(overrides))
 
     def __repr__(self) -> str:
         return f"LibraryOverlay({self._base!r}, {len(self._overrides)} overrides)"
@@ -800,21 +833,39 @@ class LibraryOverlay(Library):
 
     @property
     def calibration_values(self) -> Mapping[str, float]:
-        """The calibration-only overrides (``calibration:...``), read-only."""
+        """This overlay's own calibration-only overrides (``calibration:...``), read-only."""
         return self._calibration
 
-    # ---- overridden models ------------------------------------------------------------
+    # ---- the overlay chain ------------------------------------------------------------
 
-    def _apply(self, model: Any, kind: str, file_id: str) -> Any:
+    def _calibration_chain(self) -> dict[str, float]:
+        """Calibration-only values of the whole chain; an outer overlay's value wins."""
+        inner = self._base._calibration_chain() if isinstance(self._base, LibraryOverlay) else {}
+        return {**inner, **self._calibration}
+
+    def _data_chain(self) -> dict[str, dict[str, float]]:
+        """``{file id: {path: value}}`` of the whole chain; an outer overlay's value wins."""
+        inner = self._base._data_chain() if isinstance(self._base, LibraryOverlay) else {}
+        merged = {k: dict(v) for k, v in inner.items()}
+        for file_id, values in self._data.items():
+            merged.setdefault(file_id, {}).update(values)
+        return merged
+
+    def _raw_model(self, kind: str, id_: str | None) -> Any:
+        """The model with the chain's data overrides and no derived parametrisation."""
+        model = _raw(self._base, kind, id_)
+        file_id = KINETICS_FILE_ID if kind == "kinetics" else _file_id(self._base, kind, id_)
         for path, value in self._data.get(file_id, {}).items():
             model = _set_value(model, _field_tokens(kind, path), value)
         return model
 
+    # ---- overridden models ------------------------------------------------------------
+
     def material(self, id: str) -> Material:
-        material = self._base.material(id)
-        material = self._apply(material, "material", _file_id(self._base, "material", id))
-        s_abs = self._calibration.get(f"{CALIBRATION_PREFIX}{id}/{_S_ABS.key}")
-        ratio = self._calibration.get(f"{CALIBRATION_PREFIX}{id}/{_ASPECT_RATIO.key}")
+        material = self._raw_model("material", id)
+        calibration = self._calibration_chain()
+        s_abs = calibration.get(f"{CALIBRATION_PREFIX}{id}/{_S_ABS.key}")
+        ratio = calibration.get(f"{CALIBRATION_PREFIX}{id}/{_ASPECT_RATIO.key}")
         if s_abs is None and ratio is None:
             return material
         layer = _film_layer(material, self._base)
@@ -835,11 +886,10 @@ class LibraryOverlay(Library):
         return material
 
     def bath(self, id: str) -> Bath:
-        bath = self._base.bath(id)
-        return self._apply(bath, "bath", _file_id(self._base, "bath", id))
+        return self._raw_model("bath", id)
 
     def kinetics(self) -> KineticsFile:
-        return self._apply(self._base.kinetics(), "kinetics", KINETICS_FILE_ID)
+        return self._raw_model("kinetics", None)
 
     # ---- everything else is the base library's ---------------------------------------
 
