@@ -5,7 +5,7 @@ Layout (relative to the repository root)::
     .cache/datasheets/pdf/<file>                    publication PDFs (git-ignored)
     .cache/datasheets/overlays/<material>/<n>.png   checking images (git-ignored)
     tools/digitize/recipes/<pub>-<edition>/<n>.yaml recipes
-    tools/digitize/staged/<material>/<output>.csv   digitised curves
+    data/reference/<material>/<output>.csv          digitised curves (<material> = kodak/<film>)
 """
 
 import hashlib
@@ -37,7 +37,7 @@ REPO = Path(__file__).resolve().parents[2]
 PDF_DIR = REPO / ".cache" / "datasheets" / "pdf"
 OVERLAY_DIR = REPO / ".cache" / "datasheets" / "overlays"
 RECIPE_DIR = REPO / "tools" / "digitize" / "recipes"
-STAGED_DIR = REPO / "tools" / "digitize" / "staged"
+STAGED_DIR = REPO / "data" / "reference"
 
 ALLOWED_HOSTS = (
     "kodak.com",

@@ -1,7 +1,7 @@
 """Contrast index read off a digitised characteristic curve, for checking CI-versus-time curves.
 
 Run: ``uv run python -I -m tools.digitize.contrast CHAR.csv CI.csv MINUTES [CHAR.csv CI.csv
-MINUTES ...]`` with staged CSV paths. For each triple it prints the contrast index read off the
+MINUTES ...]`` with reference CSV paths. For each triple it prints the contrast index read off the
 characteristic curve, the value the CI curve gives at that development time (linear interpolation
 between its points, nothing outside its span), and the difference.
 
@@ -12,7 +12,7 @@ the centre along the fog line until the centre and both marks lie on one straigh
 slope of that line is the contrast index. A simpler chord (from 0.1 above fog to the density 2.0
 log exposure further on) is printed alongside; the two agree to a few hundredths.
 
-This reads only the staged CSVs (no PDF) and needs numpy only. It changes nothing; the numbers it
+This reads only the reference CSVs (no PDF) and needs numpy only. It changes nothing; the numbers it
 prints are quoted in the ``ci_cross_check`` conditions of the F-4016 recipes.
 """
 

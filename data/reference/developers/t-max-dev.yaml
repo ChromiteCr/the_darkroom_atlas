@@ -10,7 +10,7 @@
 # the PDF text layer with stacked fractions merged (tools/digitize/textrows.py) and checked cell by cell
 # against the rendered pages. `bold` is kept only where the publication defines bold type. Rows with
 # `material: null` name an older product and must not be attached to a current film. See
-# tools/digitize/staged/developers/README.md.
+# data/reference/developers/README.md.
 schema_version: 1
 developer: t-max-dev
 name: KODAK PROFESSIONAL T-MAX Developer

@@ -51,13 +51,13 @@ uv run --group digitize python -I -m tools.digitize check   # 重跑并逐字节
 ```
 tools/digitize/                       工具本身（Python 包）
 tools/digitize/recipes/<出版物>-<版次>/<图>.yaml   每张图一个配方
-tools/digitize/staged/<材料>/<名字>.csv            数字化结果（暂存）
-tools/digitize/staged/<材料>/tables.yaml           表格和单个数值
+data/reference/<材料>/<名字>.csv                数字化结果
+data/reference/<材料>/tables.yaml               表格和单个数值
 .cache/datasheets/pdf/                PDF（不提交）
 .cache/datasheets/overlays/<材料>/    核对图（不提交）
 ```
 
-结果先放在 `staged/`，没有直接进 `data/reference/`。原因是胶片数据文件还不存在，而数据库会拒绝没有对应材料的参考曲线。以后由别的任务把它们移过去。
+结果直接放在 `data/reference/`（`<材料>` 形如 `kodak/tri-x-400`），和数据库的参考数据在同一处（D1 规格 5.9）；之前暂存在 `tools/digitize/staged/`，已用 git mv 移过来，文件内容没有变。
 
 ## 配方怎么写
 
@@ -211,7 +211,7 @@ CSV 是数据库的参考曲线格式：先是若干行 `# 键: 值`，然后是
 - MTF：两个轴都约 ±0.02 个十倍程（约 5%）。
 - 光谱感光度：波长 ±1.8 nm，对数感光度 ±0.02。
 
-表格和单个数值在 `staged/kodak/t-max-100/tables.yaml`：互易律修正，各罐型（小罐、大罐卷片、大罐页片、盘冲、转筒卷片、转筒页片）在 18–24 °C 的显影时间，增感冲洗（第 1 页的推挡表和第 5–6 页的时间表），显影时间调整系数（温度补偿和反差调整），机洗（rack-and-tank）时间，补充液用量，RMS 颗粒度和分辨率，曝光指数，片基，片基加灰雾，滤镜系数，以及 J-109 表 1 里 T-MAX 100 的各 CI 目标时间。表格是用文字层解析出来的（脚本没有放进仓库，因为它不是配方），每一格都和渲染出的页面核对过；J-109 那几行的分母在文字层里另起一行，是照渲染页面读的。
+表格和单个数值在 `data/reference/kodak/t-max-100/tables.yaml`：互易律修正，各罐型（小罐、大罐卷片、大罐页片、盘冲、转筒卷片、转筒页片）在 18–24 °C 的显影时间，增感冲洗（第 1 页的推挡表和第 5–6 页的时间表），显影时间调整系数（温度补偿和反差调整），机洗（rack-and-tank）时间，补充液用量，RMS 颗粒度和分辨率，曝光指数，片基，片基加灰雾，滤镜系数，以及 J-109 表 1 里 T-MAX 100 的各 CI 目标时间。表格是用文字层解析出来的（脚本没有放进仓库，因为它不是配方），每一格都和渲染出的页面核对过；J-109 那几行的分母在文字层里另起一行，是照渲染页面读的。
 
 ### 版本交叉校验
 
@@ -241,7 +241,7 @@ CSV 是数据库的参考曲线格式：先是若干行 `# 键: 值`，然后是
 `tools/digitize/contrast.py` 从暂存的特性曲线 CSV 读出对比度指数，和 CI–时间曲线在同一显影时间的值比较。它只读 CSV，不读 PDF，只用 numpy：
 
 ```bash
-S=tools/digitize/staged/kodak/t-max-100
+S=data/reference/kodak/t-max-100
 uv run python -I -m tools.digitize.contrast \
   $S/char-d76-07.5min.csv $S/ci-small-tank-d76.csv 7.5 \
   $S/char-tmax-dev-10min.csv $S/ci-small-tank-tmax-dev.csv 10 \

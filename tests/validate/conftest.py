@@ -6,9 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-# The one place that says where the reference CSVs live (spec 0.1, 5.9). They move from
-# tools/digitize/staged/ to data/reference/ later; repoint this line then.
-_REFERENCE_KODAK = Path(__file__).resolve().parents[2] / "tools" / "digitize" / "staged" / "kodak"
+# The one place that says where the reference CSVs live (spec 0.1, 5.9).
+_REFERENCE_KODAK = Path(__file__).resolve().parents[2] / "data" / "reference" / "kodak"
 
 
 @pytest.fixture(scope="session")

@@ -23,7 +23,7 @@ from darkroom_atlas.validate.splits import (
     enumerate_items,
 )
 
-_STAGED = Path(__file__).resolve().parents[2] / "tools" / "digitize" / "staged"
+_STAGED = Path(__file__).resolve().parents[2] / "data" / "reference"
 
 
 @pytest.fixture(scope="module")

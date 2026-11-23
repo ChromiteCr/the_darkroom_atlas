@@ -286,12 +286,12 @@ def test_developer_facts_do_not_disturb_reference_curves(root):
 
 
 @pytest.mark.skipif(
-    not (TESTS.parent / "tools" / "digitize" / "staged" / "developers").is_dir(),
-    reason="staged digitising data not present",
+    not (TESTS.parent / "data" / "reference" / "developers").is_dir(),
+    reason="reference data not present",
 )
 def test_staged_reference_files_readable(tmp_path):
-    """The digitising team's staged files read through the accessors once merged (5.9)."""
-    staged = TESTS.parent / "tools" / "digitize" / "staged"
+    """The digitised reference files read through the accessors (5.9)."""
+    staged = TESTS.parent / "data" / "reference"
     lib = tmp_path / "library"
     shutil.copytree(FIXTURES, lib)
     shutil.copytree(staged / "developers", lib / "reference" / "developers")

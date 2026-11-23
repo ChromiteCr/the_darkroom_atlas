@@ -11,7 +11,7 @@ into "6¾" so that each table cell is one token, groups words into rows by basel
 J-86 marks suggested starting points in bold). Each word is printed with its left edge in PDF points
 (origin at the top of the page, as pdfplumber reports it).
 
-The output is a reading aid for transcribing tables into ``staged/developers/*.yaml``; every cell
+The output is a reading aid for transcribing tables into ``data/reference/developers/*.yaml``; every cell
 taken from it was also checked against the rendered page (``python -m tools.digitize render``).
 """
 
