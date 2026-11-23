@@ -72,7 +72,7 @@ u = (raw >> 11) * 2**-53
 
 每次运行写一份运行记录（`.run.json`），含输入与输出文件的哈希、所用数据文件的哈希、版本、种子、曝光参数和运行环境。数据文件包括材料、流程、药液、物种表，以及材料引用的每一个光谱曲线文件（`curve_files`，不论该材料的模型是否读取它）。
 
-其中的 `recipe_hash` 由决定结果的内容算出。它不含创建时间 `created_utc`、运行环境 `environment`、git 提交 `git_commit`、分块大小 `tile_px`，也不含输入和输出文件的路径 `input.path`、`output.path`（两者的哈希保留）。数据文件的路径按相对数据库根目录的形式记录，并计入哈希：同一份数据放在两个检出目录里得到相同的 `recipe_hash`，但在库内移动或改名一个数据文件会改变它。两次运行的 `recipe_hash` 相同就应当得到相同的图像。
+其中的 `recipe_hash` 由决定结果的内容算出。它不含创建时间 `created_utc`、运行环境 `environment`、git 提交 `git_commit`、分块大小 `tile_px`、进程数 `workers`（两者都不改变结果），也不含输入和输出文件的路径 `input.path`、`output.path`（两者的哈希保留）。数据文件的路径按相对数据库根目录的形式记录，并计入哈希：同一份数据放在两个检出目录里得到相同的 `recipe_hash`，但在库内移动或改名一个数据文件会改变它。两次运行的 `recipe_hash` 相同就应当得到相同的图像。
 
 ### 1.6 分块
 
@@ -621,7 +621,7 @@ Phi_b(x) = sum_r C_r(x) * Q_r,b ,     r = 1 … R    （RGB 场景 R = 3）
 
 设计估算（尚未实测）：整个黑白链路在 24 MP 下常驻内存约 5 至 6 GB，其中显影输出约 4.0 GB（每像素 21 个 float64）以内存映射存放；显影还没有实现，这一估算不能当作已经达到的指标。
 
-状态：`EmulsionState` 的 `fields` 是只读数组（可为内存映射或广播视图），不改变语义。`RunContext` 已有新字段 `film_format`、`profile`、`workers`、`memory_budget_gb`、`scratch_dir`，但运行记录（`manifest.py`）与运行器还没有接上它们：`recipe_hash` 现在只排除 `created_utc`、`environment`、`git_commit`、`tile_px`，没有记录 `film_format` 与 `profile`（二者会改变结果），也没有处理 `workers`（它不应改变结果）。临时目录的创建与清理、命令行选项也还没有接线。这些完成后再补这一节。
+状态：`EmulsionState` 的 `fields` 是只读数组（可为内存映射或广播视图），不改变语义。`RunContext` 的新字段 `film_format`、`profile`、`workers`、`memory_budget_gb`、`scratch_dir` 已接入运行器与运行记录：`film_format` 与 `profile` 记入运行记录并计入 `recipe_hash`（二者会改变结果），`workers` 记入但不计入哈希，临时目录的路径不写进运行记录。每次运行在输出目录下建自己的临时子目录，结束时删除，`--keep-scratch` 保留。
 
 ### 4.6 各阶段读写的状态字段
 
