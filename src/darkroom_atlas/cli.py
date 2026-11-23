@@ -3,6 +3,8 @@
 * ``atlas run INPUT -m MATERIAL -p PROCESS -o DIR``: run an image through a material and a
   process (:func:`darkroom_atlas.runner.run_image`) and print where the image and its run
   manifest were written, then any warnings.
+  ``--format``, ``--profile``, ``--workers``, ``--memory-gb``, ``--scratch`` and
+  ``--keep-scratch`` set the D1 options of :func:`~darkroom_atlas.runner.run_image`.
 * ``atlas check-data``: check every file of the data library and print each problem.
 
 Errors the user can fix (an unknown material, process or readout device, a missing input,
@@ -98,6 +100,35 @@ def run_command(
     long_edge_mm: Annotated[
         float, typer.Option("--long-edge-mm", help="Long edge of the frame on the film, mm.")
     ] = 36.0,
+    film_format: Annotated[
+        str | None,
+        typer.Option(
+            "--format", help="Film format, e.g. 135 (default: the material's).", show_default=False
+        ),
+    ] = None,
+    profile: Annotated[
+        str, typer.Option("--profile", help="Discretisation: image, calibration or reference.")
+    ] = "image",
+    workers: Annotated[
+        int | None,
+        typer.Option(
+            "--workers",
+            help="Worker processes (default: as many as the memory budget allows).",
+            show_default=False,
+        ),
+    ] = None,
+    memory_gb: Annotated[float, typer.Option("--memory-gb", help="Memory budget in GB.")] = 6.0,
+    scratch: Annotated[
+        Path | None,
+        typer.Option(
+            "--scratch",
+            help="Directory for the run's temporary files (default: the system's).",
+            show_default=False,
+        ),
+    ] = None,
+    keep_scratch: Annotated[
+        bool, typer.Option("--keep-scratch", help="Keep the run's temporary files.")
+    ] = False,
     data: DataOption = None,
 ) -> None:
     """Run an image through a material and a process; write the image and its run manifest."""
@@ -116,6 +147,12 @@ def run_command(
             tile_px=tile,
             long_edge_mm=long_edge_mm,
             library=Library(data),
+            film_format=film_format,
+            profile=profile,
+            workers=workers,
+            memory_budget_gb=memory_gb,
+            scratch_dir=scratch,
+            keep_scratch=keep_scratch,
         )
     except (DataError, RegistryError, OSError, ValueError) as exc:
         _fail(exc)

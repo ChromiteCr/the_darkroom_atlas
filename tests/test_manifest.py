@@ -147,3 +147,62 @@ def test_recipe_hash_ignores_volatile(manifest):
 def test_recipe_hash_tracks_recipe(manifest, dotted, value):
     other = RunManifest.model_validate(_changed(_data(), dotted, value))
     assert other.recipe_hash() != manifest.recipe_hash()
+
+
+# --------------------------------------------------------------------------------------
+# D1 fields (spec D1 4.7)
+# --------------------------------------------------------------------------------------
+
+
+def test_d1_fields_default():
+    manifest = RunManifest.model_validate(_data())
+    assert manifest.film_format is None
+    assert manifest.model_settings == {}
+    assert manifest.kinetics_file is None
+    assert manifest.calibration_runs == []
+    assert manifest.workers is None
+
+
+def test_d1_fields_round_trip(tmp_path):
+    data = _data()
+    data.update(
+        film_format="135",
+        model_settings={"profile": "image", "n_z": 2, "time_steps": (0.1, 1.6, 5.0)},
+        kinetics_file={"path": "chemistry/kinetics.yaml", "sha256": "f" * 64},
+        calibration_runs=["cal-2026-11-01"],
+        workers=3,
+    )
+    manifest = RunManifest.model_validate(data)
+    assert manifest.model_settings["time_steps"] == [0.1, 1.6, 5.0]
+    path = tmp_path / "m.run.json"
+    manifest.write(path)
+    assert RunManifest.read(path) == manifest
+
+
+def test_workers_not_in_recipe_hash():
+    base = RunManifest.model_validate(_data())
+    for workers in (1, 2, 9):
+        other = RunManifest.model_validate({**_data(), "workers": workers})
+        assert other.recipe_hash() == base.recipe_hash()
+    for name, value in (
+        ("film_format", "120"),
+        ("model_settings", {"profile": "reference"}),
+        ("kinetics_file", {"path": "chemistry/kinetics.yaml", "sha256": "f" * 64}),
+        ("calibration_runs", ["cal-1"]),
+    ):
+        other = RunManifest.model_validate({**_data(), name: value})
+        assert other.recipe_hash() != base.recipe_hash(), name
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("workers", 0),
+        ("model_settings", {"h": float("nan")}),
+        ("kinetics_file", {"path": "k.yaml", "sha256": "xyz"}),
+        ("calibration_runs", "cal-1"),
+    ],
+)
+def test_d1_fields_reject_bad_values(name, value):
+    with pytest.raises(ValidationError):
+        RunManifest.model_validate({**_data(), name: value})

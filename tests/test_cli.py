@@ -198,3 +198,33 @@ def test_entry_point_error_has_no_traceback(tmp_path):
     assert result.returncode == 2
     assert "Traceback" not in result.stderr
     assert "ideal" in result.stderr
+
+
+def test_run_d1_options(tmp_path, cli):
+    out_dir = tmp_path / "out"
+    scratch = tmp_path / "scratch"
+    extra = ["--workers", "1", "--memory-gb", "4", "--scratch", str(scratch), "--keep-scratch"]
+    result = cli.invoke(app, _run_args(out_dir, *extra, "--profile", "image"))
+    assert result.exit_code == 0, result.output
+    assert (out_dir / OUTPUT_NAME).is_file()
+    assert len(list(scratch.iterdir())) == 1
+    result = cli.invoke(app, _run_args(tmp_path / "again", "--scratch", str(scratch)))
+    assert result.exit_code == 0, result.output
+    assert len(list(scratch.iterdir())) == 1
+
+
+@pytest.mark.parametrize(
+    ("extra", "match"),
+    [
+        (["--profile", "fast"], "profile"),
+        (["--workers", "0"], "requested"),
+        (["--memory-gb", "0"], "memory_budget_gb"),
+        (["--format", "220"], "format"),
+    ],
+)
+def test_run_bad_d1_option(tmp_path, cli, extra, match):
+    out_dir = tmp_path / "out"
+    result = cli.invoke(app, _run_args(out_dir, *extra))
+    line = _assert_one_line_error(result)
+    assert match in line
+    assert not out_dir.exists()

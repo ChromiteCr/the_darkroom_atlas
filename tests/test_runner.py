@@ -256,3 +256,64 @@ def test_output_dir_is_a_file(tmp_path, lib):
     with pytest.raises(NotADirectoryError, match="taken"):
         _run(not_a_dir / "below", lib)
     assert not_a_dir.read_text(encoding="utf-8") == "occupied"
+
+
+# --------------------------------------------------------------------------------------
+# D1 options (spec D1 4.5, 4.7)
+# --------------------------------------------------------------------------------------
+
+
+def test_scratch_cleanup(tmp_path, lib):
+    scratch = tmp_path / "scratch"
+    _run(tmp_path / "out", lib, scratch_dir=scratch, tile_px=32)
+    assert scratch.is_dir()
+    assert list(scratch.iterdir()) == []
+    _, manifest = _run(tmp_path / "kept", lib, scratch_dir=scratch, keep_scratch=True)
+    (kept,) = scratch.iterdir()
+    assert kept.name.startswith("atlas-run-")
+    assert str(scratch) not in manifest.model_dump_json()
+
+
+def test_scratch_removed_when_the_run_fails(tmp_path, lib):
+    scratch = tmp_path / "scratch"
+    with pytest.raises(ValueError, match="D65"):
+        _run(tmp_path / "out", lib, scratch_dir=scratch, illuminant="X")
+    assert list(scratch.iterdir()) == []
+
+
+def test_workers_recorded_not_hashed(tmp_path, lib):
+    _, one = _run(tmp_path / "one", lib, workers=1)
+    _, two = _run(tmp_path / "two", lib, workers=2)
+    assert (one.workers, two.workers) == (1, 2)
+    assert one.recipe_hash() == two.recipe_hash()
+    _, default = _run(tmp_path / "default", lib)
+    assert default.workers >= 1
+
+
+def test_ideal_manifest_d1_fields(tmp_path, lib):
+    _, manifest = _run(tmp_path / "out", lib)
+    assert manifest.model_settings == {}
+    assert manifest.calibration_runs == []
+    assert manifest.film_format is None
+    assert manifest.kinetics_file is not None  # the repository library has one
+    assert manifest.kinetics_file.path == "chemistry/kinetics.yaml"
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "error", "match"),
+    [
+        ({"workers": 0}, ValueError, "requested"),
+        ({"memory_budget_gb": 0.0}, ValueError, "memory_budget_gb"),
+        ({"memory_budget_gb": float("nan")}, ValueError, "memory_budget_gb"),
+        ({"profile": "fast"}, ValueError, "profile"),
+        ({"film_format": ""}, ValueError, "film_format"),
+        ({"keep_scratch": "yes"}, TypeError, "keep_scratch"),
+    ],
+)
+def test_d1_option_errors_leave_no_output(tmp_path, lib, kwargs, error, match):
+    out_dir = tmp_path / "out"
+    scratch = tmp_path / "scratch"
+    with pytest.raises(error, match=match):
+        _run(out_dir, lib, scratch_dir=scratch, **kwargs)
+    assert not out_dir.exists()
+    assert not scratch.exists()

@@ -8,8 +8,9 @@ environment and the git commit for reference.
 
 :meth:`RunManifest.recipe_hash` condenses what determines the result into one SHA-256. It
 leaves out what may differ between equivalent runs: the creation time, the environment, the
-git commit, the tile size (tiling never changes the result) and where the input and output
-files are (their hashes are kept). Two runs with the same recipe hash used the same inputs,
+git commit, the tile size (tiling never changes the result), the number of worker processes
+(neither does parallelism) and where the input and output files are (their hashes are kept).
+Scratch directories are never recorded. Two runs with the same recipe hash used the same inputs,
 data and settings and produced the same output bytes.
 
 Data-file paths are relative to the library root and are part of the hash, so the same data
@@ -43,7 +44,7 @@ __all__ = [
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _GIT_COMMIT = re.compile(r"[0-9a-f]{40}([0-9a-f]{24})?")
-_VOLATILE_FIELDS = ("created_utc", "environment", "git_commit", "tile_px")
+_VOLATILE_FIELDS = ("created_utc", "environment", "git_commit", "tile_px", "workers")
 _PATH_FIELDS = ("input", "output")
 
 
@@ -121,6 +122,11 @@ class RunManifest(_Model):
     ISO, EV, exposure time, metering and energy scale), ``geometry`` holds ``shape_hw long_edge_mm pixel_pitch_um``,
     ``spectral_grid`` holds ``start_nm stop_nm step_nm`` and ``environment`` the versions of
     ``python numpy scipy colour`` and the ``platform``.
+
+    D1 fields (spec D1 4.7): ``film_format`` the run's film format, ``model_settings`` the
+    discretisation (profile, levels, size classes, time steps, blocks), ``kinetics_file`` the
+    shared chemistry constants, ``calibration_runs`` the calibration runs that wrote fitted
+    values into the data used, and ``workers`` the number of worker processes (not hashed).
     """
 
     schema_version: Literal[1] = 1
@@ -142,11 +148,17 @@ class RunManifest(_Model):
     git_commit: str | None = None
     output: FileRef
     warnings: list[str] = Field(default_factory=list)
+    film_format: str | None = None
+    model_settings: JsonDict = Field(default_factory=dict)
+    kinetics_file: FileRef | None = None
+    calibration_runs: list[str] = Field(default_factory=list)
+    workers: int | None = Field(default=None, ge=1)
 
     def recipe_hash(self) -> str:
         """SHA-256 (hex) of the canonical JSON of everything that determines the result.
 
-        Excluded: ``created_utc``, ``environment``, ``git_commit``, ``tile_px`` and the paths
+        Excluded: ``created_utc``, ``environment``, ``git_commit``, ``tile_px``, ``workers``
+        and the paths
         (not the hashes) of ``input`` and ``output``.
         """
         data = self.model_dump(mode="json")
