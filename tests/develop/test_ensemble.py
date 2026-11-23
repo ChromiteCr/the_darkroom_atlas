@@ -3,6 +3,7 @@
 
 import dataclasses
 import importlib.util
+import itertools
 import math
 import sys
 from pathlib import Path
@@ -59,6 +60,7 @@ SMALL_TANK = _h.SMALL_TANK
 columns = _h.columns
 developed_silver = _h.developed_silver
 make_schedule = _h.make_schedule
+make_solution = _h.make_solution
 run_strip = _h.run_strip
 strip_exposures = _h.strip_exposures
 with_solvent = _h.with_solvent
@@ -933,3 +935,250 @@ def test_run_ensemble_rejects_bad_input(film_cal, d76, kin_test):
     bad_film = dataclasses.replace(film_cal, component_ids=film_cal.component_ids[::-1])
     with pytest.raises(ValueError, match="components"):
         run_ensemble(bad_film, d76, kin_test, schedule, mem, **ok)
+
+
+# ---------------------------------------------------------------------------------------
+# Lateral coupling, compensation and the split (spec D1 2.4.13, 3.2, 3.5, 3.9)
+# ---------------------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def edge_run(film_image, d76, kin_test):
+    """A periodic strip, 128 cells of 12 um: a high-exposure band over half the period."""
+    nx = 128
+    i = np.arange(nx)
+    level = np.where((i >= nx // 4) & (i < 3 * nx // 4), 300.0, 3.0)
+    ev = np.repeat(level[:, None], film_image.grid.n_z, axis=1)
+    schedule = make_schedule("image", 450.0)
+    res = run_strip(
+        film_image,
+        d76,
+        kin_test,
+        schedule,
+        ev,
+        np.zeros_like(ev),
+        lateral=Lateral((1, nx), 12.0, "periodic"),
+    )
+    return nx, developed_silver(res)
+
+
+def test_edge_shows_adjacency(edge_run):
+    # Spec D1 2.4.13 (adjacency): near the edge the dense side overshoots its plateau (fresh
+    # developer from the thin side) and the thin side undershoots its plateau (bromide from
+    # the dense side). Plateaus are taken in the middle of each band, 384 um from the edges.
+    nx, m = edge_run
+    edge = nx // 4
+    high_plateau, low_plateau = m[nx // 2], m[0]
+    high_near = m[edge : edge + 8].max()
+    low_near = m[edge - 8 : edge].min()
+    assert high_near > 1.02 * high_plateau
+    assert low_near < 0.98 * low_plateau
+    # The pattern is mirror-symmetric about the band centre, and so is the result.
+    np.testing.assert_allclose(m, m[::-1], rtol=1e-9)
+
+
+def test_lateral_uniform_strip_matches_columns(film_image, d76, kin_test):
+    # Lateral diffusion leaves a uniform strip uniform: it equals the column without lateral.
+    schedule = make_schedule("image", 120.0)
+    ev = np.full((8, film_image.grid.n_z), 100.0)
+    lat = run_strip(
+        film_image,
+        d76,
+        kin_test,
+        schedule,
+        ev,
+        np.zeros_like(ev),
+        lateral=Lateral((2, 4), 24.0, "neumann"),
+    )
+    col = run_strip(film_image, d76, kin_test, schedule, ev[:1], np.zeros_like(ev[:1]))
+    np.testing.assert_allclose(
+        lat.silver, np.broadcast_to(col.silver, lat.silver.shape), rtol=1e-10
+    )
+
+
+def test_dilute_developer_shows_compensation(library, species, kfile, film_material):
+    # Compensation: in D-76 1+1 developed longer, the net shoulder silver relative to the net
+    # toe silver is lower than in stock (local exhaustion restrains the dense steps).
+    ratios = []
+    for dilution, minutes in (("stock", 7.5), ("1+1", 11.0)):
+        sol = make_solution(library, species, kfile, dilution=dilution)
+        kin = with_test_rates(resolve_kinetics(kfile, sol, species))
+        film = film_column_model(film_material, "135", 0.01, kin, sol, "image", species=species)
+        ev, es = strip_exposures(10, film.grid.n_z)
+        res = run_strip(film, sol, kin, make_schedule("image", 60.0 * minutes), ev, es)
+        net = developed_silver(res) - developed_silver(res)[0]
+        assert net[5] > 0.05
+        ratios.append(net[-1] / net[5])
+    assert ratios[1] < 0.95 * ratios[0], ratios
+
+
+def test_splitting_second_order(film_image, d76, kin_test):
+    # Spec D1 3.9: periodic strip, fixed steps halved: successive differences fall by 3.5-4.5.
+    # A lateral bromide wave over a presoaked, bath-equilibrated column (no reactions), so the
+    # only lateral-vertical coupling is the split itself.
+    kin = with_solvent(kin_test, k_diss=(0.0, "um/s"), k_pd=(0.0, "um/s"))
+    film = dataclasses.replace(film_image, hazards=np.zeros_like(film_image.hazards))
+    st = _setup(film, d76, kin, presoaked=True)
+    nx = 16
+    conc = np.broadcast_to(np.asarray(d76.totals), (nx, st.L, st.kc)).copy()
+    conc[:, :, st.i_br] = 5e-3 * (1.0 + np.cos(2.0 * np.pi * np.arange(nx) / nx))[:, None]
+    nbar = 1.0 / (1.0 + 10.0 ** (d76.ph - st.spec.pka[st.nf, 0]))
+    toth = np.full((nx, st.L), d76.toth) + st.gelatin[None] * nbar
+    zero = np.zeros((nx, st.n_z))
+    fields = []
+    for steps in (40, 80, 160, 320):
+        schedule = Schedule(
+            times_s=np.linspace(0.0, 20.0, steps + 1),
+            agitated=np.zeros(steps, bool),
+            record_steps={},
+        )
+        run = ens._integrate(
+            film,
+            d76,
+            kin,
+            schedule,
+            columns(zero, zero),
+            n_cells=nx,
+            cell_weights=np.ones(nx),
+            tank=INFINITE_TANK,
+            presoaked=True,
+            initial=(conc, toth),
+            lateral=Lateral((1, nx), 10.0, "periodic"),
+        )
+        fields.append(run.state.conc[:, :, st.i_br].copy())
+    d = [np.max(np.abs(a - b)) for a, b in itertools.pairwise(fields)]
+    ratios = [d[i] / d[i + 1] for i in range(len(d) - 1)]
+    assert all(3.5 <= r <= 4.5 for r in ratios), ratios
+
+
+# ---------------------------------------------------------------------------------------
+# Raster members (spec D1 2.4.4, 3.6, 3.8)
+# ---------------------------------------------------------------------------------------
+
+
+def test_raster_pbar_is_the_area_mean(film_image, d76, kin_test):
+    st = _setup(film_image, d76, kin_test)
+    rng = np.random.default_rng(5)
+    ev = 10.0 ** rng.uniform(-1, 3, (8, 12, st.n_z))
+    es = np.zeros_like(ev)
+    ras = ens._Raster(
+        2, 3, 24.0, 6.0, (0.0, 0.0), 8, 12, (slice(0, 2), slice(0, 3)), (0, 8), (0, 12)
+    )
+    pbar = ens._raster_pbar(st, ras, ev, es).reshape(
+        2, 3, *ens._latent(st, ev[:1, :1], es[:1, :1]).shape[2:]
+    )
+    p = ens._latent(st, ev, es)
+    for a in range(2):
+        for b in range(3):
+            block = p[4 * a : 4 * a + 4, 4 * b : 4 * b + 4].mean(axis=(0, 1))
+            np.testing.assert_allclose(pbar[a, b], block, rtol=0, atol=1e-13)
+    # Splitting every pixel into four identical 3 um pixels leaves p-bar unchanged.
+    fine = np.repeat(np.repeat(ev, 2, axis=0), 2, axis=1)
+    ras2 = dataclasses.replace(ras, pixel=3.0, h=16, w=24, rows=(0, 16), cols=(0, 24))
+    pbar2 = ens._raster_pbar(st, ras2, fine, np.zeros_like(fine)).reshape(pbar.shape)
+    assert np.max(np.abs(pbar2 - pbar)) <= 1e-13
+    # Cell area outside the pixel window counts as unexposed film (spec D1 3.6).
+    ras3 = dataclasses.replace(ras, h=6, rows=(0, 6))
+    pbar3 = ens._raster_pbar(st, ras3, ev[:6], es[:6]).reshape(pbar.shape)
+    zero = ens._zero_latent(st)
+    expected = 0.5 * p[4:6, 4:8].mean(axis=(0, 1)) + 0.5 * zero
+    np.testing.assert_allclose(pbar3[1, 1], expected, rtol=0, atol=1e-13)
+
+
+def test_kernel_reduction_multiple_members(film_cal, d76, kin_test):
+    # Spec D1 2.4.13: several members per cell, nearest-cell coupling: X, Y, P synthesised
+    # from the kernels equal the directly integrated member equations (<= 1e-12), and the cell
+    # chemistry depends on p-bar only (reordering the members changes nothing, <= 1e-13).
+    schedule = make_schedule("calibration", 150.0)
+    rng = np.random.default_rng(11)
+    ev = 10.0 ** rng.uniform(0.0, 3.0, (3, 4, film_cal.grid.n_z))  # 3 cells x 4 members
+    es = np.zeros_like(ev)
+    st = _setup(film_cal, d76, kin_test)
+    p = ens._latent(st, ev, es)  # (3, 4, nz, K, Nn)
+    pbar = p.mean(axis=1)
+    ev_cell = ev.mean(axis=1)
+    kern = ens._Kernels(omega=np.ascontiguousarray(pbar))
+    k_run = _integrate(film_cal, d76, kin_test, schedule, ev_cell, ev_cell * 0, kernels=kern)
+    basis = np.ascontiguousarray(np.moveaxis(p, 1, 3))  # (3, nz, K, 4, Nn)
+    direct = ens._Kernels(omega=np.full(basis.shape[:4], 0.25), basis=basis)
+    d_run = _integrate(film_cal, d76, kin_test, schedule, ev_cell, ev_cell * 0, kernels=direct)
+    for m in range(4):
+        pm = p[:, m]
+        x = (pm * k_run.state.g).sum(axis=-1)
+        assert np.max(np.abs(x - d_run.state.g[..., m])) <= 1e-12
+        y = (pm * k_run.state.h).sum(axis=-1)
+        assert np.max(np.abs(y - d_run.state.h[..., m])) <= 1e-12
+    scale = np.maximum(np.abs(k_run.state.conc), 1e-6)
+    assert np.max(np.abs(k_run.state.conc - d_run.state.conc) / scale) <= 1e-12
+    perm = basis[:, :, :, ::-1]
+    d2 = _integrate(
+        film_cal,
+        d76,
+        kin_test,
+        schedule,
+        ev_cell,
+        ev_cell * 0,
+        kernels=ens._Kernels(omega=direct.omega, basis=np.ascontiguousarray(perm)),
+    )
+    assert np.max(np.abs(d2.state.conc - d_run.state.conc) / scale) <= 1e-13
+
+
+def test_raster_uniform_matches_column(film_image, d76, kin_test):
+    # A uniform raster (6 um pixels over 24 um cells, a halo of one cell) gives every inner
+    # pixel the column result.
+    schedule = make_schedule("image", 60.0)
+    nz = film_image.grid.n_z
+    ev = np.full((16, 16, nz), 100.0)
+    weights = np.zeros((4, 4))
+    weights[1:3, 1:3] = 1.0
+    members = Members(ev, np.zeros_like(ev), layout="raster", pixel_um=6.0)
+    res = run_ensemble(
+        film_image,
+        d76,
+        kin_test,
+        schedule,
+        members,
+        n_cells=16,
+        cell_weights=weights.ravel(),
+        lateral=Lateral((4, 4), 24.0, "neumann"),
+        bulk=_constant_bulk(d76, schedule),
+    )
+    assert res.silver.shape == (64, 6)  # inner cells 2x2 own 8x8 pixels
+    col = run_strip(
+        film_image,
+        d76,
+        kin_test,
+        schedule,
+        ev[0, :1],
+        np.zeros((1, nz)),
+        tank=None,
+        bulk=_constant_bulk(d76, schedule),
+    )
+    np.testing.assert_allclose(res.silver, np.broadcast_to(col.silver, res.silver.shape), rtol=1e-9)
+    np.testing.assert_allclose(res.halide, col.halide[0], rtol=1e-12)
+
+
+def test_raster_edge_interpolates_between_cells(film_image, d76, kin_test):
+    # A step between two cells: pixel outputs are bilinear in the cell kernels at the pixel
+    # centres, so they vary monotonically across the step.
+    schedule = make_schedule("image", 60.0)
+    nz = film_image.grid.n_z
+    ev = np.full((4, 24, nz), 1.0)
+    ev[:, 12:] = 1000.0
+    members = Members(ev, np.zeros_like(ev), layout="raster", pixel_um=6.0)
+    res = run_ensemble(
+        film_image,
+        d76,
+        kin_test,
+        schedule,
+        members,
+        n_cells=6,
+        cell_weights=np.ones(6),
+        lateral=Lateral((1, 6), 24.0, "neumann"),
+        bulk=_constant_bulk(d76, schedule),
+    )
+    assert res.silver.shape == (96, 6)
+    m = developed_silver(res).reshape(4, 24)
+    # Within each half the member's own p dominates; across the cells the kernels interpolate.
+    assert np.all(m[:, 12:].min() > m[:, :12].max())
+    np.testing.assert_array_equal(m[0], m[3])

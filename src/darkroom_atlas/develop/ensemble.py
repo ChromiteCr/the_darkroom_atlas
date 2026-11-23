@@ -1303,10 +1303,12 @@ def _zero_latent(st: _Setup) -> np.ndarray:
     return _latent(st, zero, zero)[0, 0]
 
 
-def _synthesise(st: _Setup, p, g, hk, q, lam, dz, kappa):
+def _synthesise(st: _Setup, p, g, hk, q, lam, dz, kappa, basis=None):
     """Depth-merged member outputs (spec D1 2.4.10) from member ``p`` and cell kernels.
 
     ``p``, ``g``, ``hk``, ``q`` ``(M, nz, K, N_n)``; ``lam``, ``dz``, ``kappa`` ``(M, nz)``.
+    With ``basis`` ``(M, nz, K, Nb, N_n)`` the kernels are basis kernels and ``p`` their
+    weights.
     """
     classes = st.film.classes
     nz = st.n_z
@@ -1314,7 +1316,10 @@ def _synthesise(st: _Setup, p, g, hk, q, lam, dz, kappa):
     y = _lsum(p * hk)
     pq = _lsum(_lsum(p * q))  # (M, nz)
     e_n = -np.expm1(-st.h_n[None, None, :] * lam[:, :, None])
-    f = _lsum(p * e_n[:, :, None, :])
+    if basis is None:
+        f = _lsum(p * e_n[:, :, None, :])
+    else:
+        f = _lsum(p * _lsum(basis * e_n[:, :, None, None, :]))
     xz = _lsum(np.moveaxis(x, 1, 2))  # (M, K) sum over z
     silver = 1e12 * classes.silver_g_per_grain * classes.number_per_um2 / nz * xz
     initiated = _lsum(np.moveaxis(f, 1, 2)) / nz
@@ -1702,6 +1707,7 @@ def _integrate(
     def snapshot(step: int) -> EnsembleResult:
         return _result(
             st,
+            kernels,
             state,
             schedule,
             step,
@@ -1825,6 +1831,7 @@ def _integrate(
         )
     result = _result(
         st,
+        kernels,
         state,
         schedule,
         s_steps,
@@ -1845,6 +1852,7 @@ def _integrate(
 
 def _result(
     st,
+    kernels,
     state,
     schedule,
     step,
@@ -1870,7 +1878,7 @@ def _result(
         state.loc,
         state.g,
         state.h,
-        _Kernels(omega=np.zeros_like(state.g)),
+        kernels,
         bulk_n,
         car,
         n_act,
@@ -1878,7 +1886,20 @@ def _result(
         False,
     )
     kappa = ev_end.kappa
-    if raster is None:
+    if kernels.basis is not None:
+        # Test-only member basis: report the cell's area-mean member (omega-weighted kernels).
+        outs = _synthesise(
+            st,
+            kernels.omega,
+            state.g,
+            state.h,
+            state.q,
+            state.loc[:, :, 0],
+            state.loc[:, :, 1],
+            kappa,
+            basis=kernels.basis,
+        )
+    elif raster is None:
         outs = _synthesise(
             st, p_member, state.g, state.h, state.q, state.loc[:, :, 0], state.loc[:, :, 1], kappa
         )
