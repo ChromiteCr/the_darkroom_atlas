@@ -352,6 +352,37 @@ def test_exposure_fields_workers_write_directly(stack, tmp_path, low_rank):
     assert not [p for p in (tmp_path / "ram").rglob("*") if p.is_file()]
 
 
+@pytest.mark.parametrize("workers", [1, 3])
+def test_exposure_fields_released_through_store(stack, tmp_path, workers):
+    # Spec §4.3, §4.5: the exposure files are deleted after develop, by store name. The
+    # names are found from the returned fields; releasing both leaves no file behind.
+    response = _response(stack)
+    light = _random_light((130, 140), seed=4)
+    geometry = FrameGeometry((130, 140), 15.0)
+    root = tmp_path / "run"
+    with FieldStore(root, ram_threshold_bytes=0) as store:
+        vol, surf, _ = exposure_fields(
+            light, TIME_S, stack, response, geometry, block_px=64, workers=workers, store=store
+        )
+        names = {store.name_of(vol), store.name_of(surf)}
+        assert len(names) == 2
+        assert all(n.startswith("expose-") for n in names)
+        assert {n.split(":", 1)[1] for n in names} == {
+            "emulsion/exposure_volume",
+            "emulsion/exposure_surface",
+        }
+        assert len(list(root.iterdir())) == 2
+        for name in names:
+            store.release(name)
+            assert name not in store
+        assert list(root.iterdir()) == []
+        # A second exposure in the same store gets fresh names.
+        again, _, _ = exposure_fields(
+            light, TIME_S, stack, response, geometry, block_px=64, workers=workers, store=store
+        )
+        assert store.name_of(again) not in names
+
+
 def _shifted_copy(array: np.ndarray, offset: int) -> np.ndarray:
     raw = np.empty(array.nbytes + 64, dtype=np.uint8)
     start = (-raw.ctypes.data) % 64 + offset

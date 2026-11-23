@@ -146,6 +146,8 @@ def exposure_fields(
     ``(H, W, n_z)`` and are read-only (memory-mapped when ``store`` maps them); ``meta``
     holds ``halation_fraction`` (``f_H``), ``halation_radius_um`` (``R_H``),
     ``halation_truncated``, ``psf_radius_um`` (``R_P``), ``block_px`` and ``halo_px``.
+    The fields' store names carry a fresh ``"expose-<hex>:"`` prefix; a later step releases
+    them with ``store.release(store.name_of(field))`` (spec §4.3, §4.5).
     ``geometry`` must describe the whole frame of ``light``. ``workers > 1`` runs the blocks
     in worker processes, which write their blocks straight into memory-mapped outputs
     (spec §4.4); the convolution source reaches them as a mapped file under the store's
@@ -272,10 +274,10 @@ def _run_workers(
 ) -> dict[str, np.ndarray]:
     """Run the blocks in worker processes that write their inner blocks themselves (§4.4)."""
     h, w = geometry.shape_hw
-    field_bytes = h * w * kernels["n_z"] * 8
-    mapped = (
-        store is not None and store.root is not None and field_bytes > store.ram_threshold_bytes
-    )
+    # The assembler (that is, the store) decides which outputs are mapped; fields it keeps
+    # in RAM are written by the workers into transient maps and copied in once at the end.
+    outputs = assembler.descriptors()
+    mapped = set(outputs) == {_VOLUME, _SURFACE}
     scratch, owned = _scratch_dir(store)
     # Transient files: the source (unless it already is a mapped file) and, when the store
     # keeps the outputs in RAM, the outputs the workers write.
@@ -290,14 +292,16 @@ def _run_workers(
             transient.freeze(f"{prefix}source")
             source_desc = transient.descriptor(f"{prefix}source")
         target = assembler if mapped else FrameAssembler(geometry, specs, transient)
-        outputs = target.descriptors()
+        if not mapped:
+            outputs = target.descriptors()
         job = partial(_worker_job, source=source_desc, outputs=outputs, **kernels)
         for inner in run_blocks(job, blocks, workers=workers):
             target.mark(inner)
         fields = target.finish()
         if not mapped:
             for key, value in fields.items():
-                assembler.write(key, (slice(0, h), slice(0, w)), np.array(value))
+                # One copy, from the transient map into the RAM output.
+                assembler.write(key, (slice(0, h), slice(0, w)), value)
             fields = assembler.finish()
         return fields
     finally:

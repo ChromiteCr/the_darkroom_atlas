@@ -12,7 +12,8 @@ truncates a file that an earlier, still mapped field lives in.
 Once a field is written, :meth:`FieldStore.freeze` returns it read-only: a RAM field is
 marked read-only in place, a mapped field is flushed and reopened with ``mode="r"``, which
 :func:`darkroom_atlas._frozen.readonly_array` shares without copying.
-:meth:`FieldStore.release` deletes a field's backing file.
+:meth:`FieldStore.release` deletes a field's backing file; :meth:`FieldStore.name_of`
+finds the store name of a field handed on (for example a state field a later step drops).
 
 Arrays never cross process boundaries: a mapped field is described by a picklable
 :class:`FieldDescriptor` (:meth:`FieldStore.descriptor`, :func:`descriptor_of`) and a worker
@@ -47,7 +48,8 @@ class FieldDescriptor:
     """Where a memory-mapped field lives: what crosses process boundaries (spec §4.3).
 
     ``path`` is the backing file, ``dtype`` the NumPy dtype name, ``shape`` the array shape
-    and ``offset`` the byte offset of element 0 in the file (C order).
+    and ``offset`` the byte offset of element 0 in the file (C order). A dtype name carries
+    no byte order, so non-native byte orders raise ``ValueError``.
     """
 
     path: Path
@@ -57,7 +59,7 @@ class FieldDescriptor:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "path", Path(self.path))
-        object.__setattr__(self, "dtype", np.dtype(self.dtype).name)
+        object.__setattr__(self, "dtype", _native(np.dtype(self.dtype)).name)
         object.__setattr__(self, "shape", _shape(self.shape))
         offset = self.offset
         if isinstance(offset, bool) or not isinstance(offset, Integral) or offset < 0:
@@ -83,7 +85,7 @@ def descriptor_of(array: np.ndarray) -> FieldDescriptor:
 
     ``array`` must be an ``np.memmap`` that owns its mapping (not a view of one) and is
     C-contiguous; anything else raises ``ValueError``, since a descriptor cannot express
-    strides.
+    strides. A non-native byte order raises ``ValueError`` too.
     """
     if (
         not isinstance(array, np.memmap)
@@ -94,7 +96,8 @@ def descriptor_of(array: np.ndarray) -> FieldDescriptor:
         raise ValueError(
             "descriptor_of needs a whole, C-contiguous np.memmap (not a view or RAM array)"
         )
-    return FieldDescriptor(Path(array.filename), array.dtype.name, array.shape, array.offset)
+    dtype = _native(array.dtype).name
+    return FieldDescriptor(Path(array.filename), dtype, array.shape, array.offset)
 
 
 @dataclass
@@ -131,8 +134,8 @@ class FieldStore:
 
         It is an ``np.memmap(mode="w+")`` file under ``root`` when its size is above the
         threshold and ``root`` is set, otherwise an in-memory array. ``ValueError`` if
-        ``name`` was allocated before in this store (released or not) or the shape is
-        invalid.
+        ``name`` was allocated before in this store (released or not), the shape is
+        invalid or ``dtype`` has a non-native byte order (a descriptor could not express it).
         """
         self._check_open()
         if not isinstance(name, str) or not name:
@@ -143,7 +146,7 @@ class FieldStore:
                 "per run (spec §4.3)"
             )
         shape = _shape(shape)
-        dt = np.dtype(dtype)
+        dt = _native(np.dtype(dtype))
         nbytes = math.prod(shape) * dt.itemsize
         if self.root is not None and nbytes > self.ram_threshold_bytes:
             self.root.mkdir(parents=True, exist_ok=True)
@@ -183,6 +186,28 @@ class FieldStore:
                 f"field {name!r} is in RAM, not memory-mapped; only mapped fields have a descriptor"
             )
         return FieldDescriptor(entry.path, entry.array.dtype.name, entry.array.shape, 0)
+
+    def name_of(self, array: np.ndarray) -> str:
+        """Store name of the field ``array`` belongs to, for :meth:`release`.
+
+        ``array`` is a field this store handed out (writable or frozen), a view of one, or a
+        map of its backing file opened elsewhere (:func:`open_field`). A later step that
+        drops a state field releases it with ``store.release(store.name_of(field))``.
+        ``KeyError`` if the array is not a field of this store (or was released).
+        """
+        if not isinstance(array, np.ndarray):
+            raise TypeError(f"array must be a NumPy array, got {type(array).__name__}")
+        filename = getattr(array, "filename", None)  # np.memmap and its views
+        path = None if filename is None else Path(filename).resolve()
+        for name, entry in self._entries.items():
+            current: object = array
+            while isinstance(current, np.ndarray):
+                if current is entry.array:
+                    return name
+                current = current.base
+            if path is not None and entry.path is not None and entry.path.resolve() == path:
+                return name
+        raise KeyError("array is not a field of this store (or it was released)")
 
     def release(self, name: str) -> None:
         """Forget field ``name`` and delete its backing file, if any.
@@ -236,6 +261,15 @@ class FieldStore:
     def _check_open(self) -> None:
         if self._closed:
             raise RuntimeError("this FieldStore is closed")
+
+
+def _native(dtype: np.dtype) -> np.dtype:
+    if not dtype.isnative:
+        raise ValueError(
+            f"dtype {dtype.str!r} has a non-native byte order; a FieldDescriptor names the "
+            "dtype without one, so fields must use the native byte order"
+        )
+    return dtype
 
 
 def _shape(shape: object) -> tuple[int, ...]:

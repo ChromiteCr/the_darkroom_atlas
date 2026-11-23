@@ -191,6 +191,19 @@ def test_expose_uses_run_store(lib, film, tmp_path, reference_fields, workers):
         assert not any(tmp_path.glob("expose-*"))  # no store of its own
 
 
+def test_expose_fields_released_through_run_store(lib, film, tmp_path):
+    # Spec §4.5: develop deletes the exposure files; through the run store it finds the
+    # store name of each state field and releases it.
+    root = tmp_path / "run"
+    with FieldStore(root, ram_threshold_bytes=0) as store:
+        ctx = RunContext(lib, long_edge_mm=55.0, workers=2, store=store)
+        state = expose(film, _tiling_light(), TIME_S, ctx)
+        assert len(list(root.iterdir())) == 2
+        for key in ("emulsion/exposure_volume", "emulsion/exposure_surface"):
+            store.release(store.name_of(state.fields[key]))
+        assert list(root.iterdir()) == []
+
+
 def test_expose_bw_reports_missing_fields(lib):
     data = yaml.safe_load((FIXTURES / "films" / "test" / "bw-mechanistic.yaml").read_text())
     data = copy.deepcopy(data)

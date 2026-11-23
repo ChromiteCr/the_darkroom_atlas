@@ -194,3 +194,53 @@ def test_fieldstore_descriptor_roundtrip(tmp_path):
         # The store itself never crosses a process boundary.
         with pytest.raises(TypeError, match="pickled"):
             pickle.dumps(store)
+
+
+def test_fieldstore_rejects_non_native_byte_order(tmp_path):
+    # A descriptor carries the dtype name, which has no byte order: a non-native field
+    # would be described (and reopened by a worker) as native, so it is refused.
+    swapped = np.dtype("float64").newbyteorder()
+    with pytest.raises(ValueError, match="byte order"):
+        FieldDescriptor(Path("x"), swapped.str, (2,))
+    with FieldStore(tmp_path, ram_threshold_bytes=0) as store:
+        with pytest.raises(ValueError, match="byte order"):
+            store.allocate("s1:x/swapped", (2, 2), swapped.str)
+        assert "s1:x/swapped" not in store
+        foreign = np.memmap(tmp_path / "foreign.bin", dtype=swapped, mode="w+", shape=(3,))
+        with pytest.raises(ValueError, match="byte order"):
+            descriptor_of(foreign)
+        del foreign
+    # The native byte order spelled out explicitly is the same dtype.
+    native = np.dtype("float64").newbyteorder("=")
+    assert FieldDescriptor(Path("x"), native.str, (2,)).dtype == "float64"
+
+
+def test_fieldstore_name_of(tmp_path):
+    # Spec §4.3: release goes by store name; name_of finds the name of a field handed on
+    # (for example a state field a later step deletes).
+    with FieldStore(tmp_path, ram_threshold_bytes=64) as store:
+        mapped = store.allocate("s1:x/big", (4, 4))
+        assert store.name_of(mapped) == "s1:x/big"
+        frozen = store.freeze("s1:x/big")
+        store.allocate("s1:x/small", (2, 2))  # 32 bytes: in RAM
+        ram = store.freeze("s1:x/small")
+        assert not store.is_mapped("s1:x/small")
+        assert store.name_of(frozen) == "s1:x/big"
+        assert store.name_of(frozen[1:3]) == "s1:x/big"  # views of a field
+        assert store.name_of(ram) == "s1:x/small"
+        assert store.name_of(ram[:1]) == "s1:x/small"
+        # A map of the same file opened elsewhere (a worker's, say) names the field too.
+        reopened = open_field(store.descriptor("s1:x/big"), "r")
+        assert store.name_of(reopened) == "s1:x/big"
+        del reopened
+        store.release(store.name_of(frozen))
+        assert "s1:x/big" not in store
+        assert list(tmp_path.iterdir()) == []
+        with pytest.raises(KeyError, match="not a field of this store"):
+            store.name_of(frozen)  # released
+        with pytest.raises(KeyError, match="not a field of this store"):
+            store.name_of(np.zeros((2, 2)))
+        with pytest.raises(KeyError, match="not a field of this store"):
+            store.name_of(ram.copy())
+        with pytest.raises(TypeError):
+            store.name_of([1.0, 2.0])  # type: ignore[arg-type]
