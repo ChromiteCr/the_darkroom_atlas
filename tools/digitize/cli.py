@@ -8,9 +8,9 @@ Commands:
 * ``text PDF PAGE [--region ...]``: list words with their boxes, marking bar-notation labels.
 * ``images PDF PAGE``: list embedded images (a figure that is an image needs raster mode).
 * ``render PDF PAGE OUT.png [--scale 4] [--region ...]``: render a page or region.
-* ``run [RECIPE ...]``: run recipes (all when none given), write the staged CSVs and the
+* ``run [RECIPE ...]``: run recipes (all when none given), write the reference CSVs and the
   overlays, print a summary.
-* ``check [RECIPE ...]``: run recipes in memory and compare with the staged CSVs byte for
+* ``check [RECIPE ...]``: run recipes in memory and compare with the reference CSVs byte for
   byte; exit status 1 on any difference.
 * ``fetch [RECIPE ...]``: download the PDFs recipes name (Kodak hosts only, sha256 checked).
 """
@@ -171,7 +171,7 @@ def cmd_check(args) -> int:
                     f"dy {comparison.dy:.4g}"
                 )
     if failures:
-        print(f"{failures} staged file(s) do not match their recipes")
+        print(f"{failures} reference file(s) do not match their recipes")
         return 1
     return 0
 
@@ -224,13 +224,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--region", type=_region)
     p.set_defaults(func=cmd_render)
 
-    p = sub.add_parser("run", help="run recipes, write staged CSVs and overlays")
+    p = sub.add_parser("run", help="run recipes, write reference CSVs and overlays")
     p.add_argument("recipes", nargs="*")
     p.add_argument("--no-overlay", action="store_true")
     p.add_argument("--scale", type=float, default=4.0)
     p.set_defaults(func=cmd_run)
 
-    p = sub.add_parser("check", help="verify staged CSVs reproduce exactly")
+    p = sub.add_parser("check", help="verify reference CSVs reproduce exactly")
     p.add_argument("recipes", nargs="*")
     p.set_defaults(func=cmd_check)
 

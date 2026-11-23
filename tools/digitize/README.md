@@ -25,7 +25,7 @@ uv sync --group digitize
 ```bash
 uv run --group digitize python -I -m tools.digitize fetch   # 按配方下载 PDF，校验 sha256
 uv run --group digitize python -I -m tools.digitize run     # 跑全部配方，写 CSV 和核对图
-uv run --group digitize python -I -m tools.digitize check   # 重跑并逐字节比对已暂存的 CSV
+uv run --group digitize python -I -m tools.digitize check   # 重跑并逐字节比对 data/reference/ 下的 CSV
 ```
 
 `check` 不写文件。只要有一个 CSV 和配方的结果不一致，或者某个版本交叉校验超差，它就以状态 1 退出。
@@ -40,8 +40,8 @@ uv run --group digitize python -I -m tools.digitize check   # 重跑并逐字节
 | `text PDF 页 [--region ...]` | 列出单词和外框；带横杠记号的刻度标注会标 `[bar]` |
 | `images PDF 页` | 列出嵌入的位图。图是位图时要改用光栅模式 |
 | `render PDF 页 输出.png [--scale 4] [--region ...]` | 把整页或一个区域渲染成 PNG |
-| `run [配方 ...]` | 跑配方（不给就跑全部），写暂存 CSV 和核对图，打印摘要 |
-| `check [配方 ...]` | 在内存里重跑，和暂存的 CSV 逐字节比对 |
+| `run [配方 ...]` | 跑配方（不给就跑全部），写 data/reference/ 下的 CSV 和核对图，打印摘要 |
+| `check [配方 ...]` | 在内存里重跑，和 data/reference/ 下的 CSV 逐字节比对 |
 | `fetch [配方 ...]` | 下载配方用到的 PDF |
 
 坐标一律是 PDF 页面坐标，单位为点（1/72 英寸），原点在页面左下角，y 向上。`paths` 和 `text` 打印的就是这种坐标，配方里也直接用它。
@@ -162,7 +162,7 @@ CSV 是数据库的参考曲线格式：先是若干行 `# 键: 值`，然后是
 
 ### 版本交叉校验
 
-`recipes/f4017-2016-02/` 和 `recipes/f4017-2007-05/` 是交叉校验配方。它们用同样的方法读旧版里的同一张图，不写文件，只把结果和 2021 年版暂存的曲线比较，差值必须在 `max_difference` 以内。
+`recipes/f4017-2016-02/` 和 `recipes/f4017-2007-05/` 是交叉校验配方。它们用同样的方法读旧版里的同一张图，不写文件，只把结果和 2021 年版的参考曲线比较，差值必须在 `max_difference` 以内。
 
 - 2016 年 2 月版（第 7、8 页）：7 张图全部一致，差值不超过 0.0001，只是舍入。路径就是 2021 年版的路径挪了位置。
 - 2007 年 5 月版（第 10–12 页，柯达官网的 Wayback 存档）：4 张特性曲线图和 MTF、光谱图都在 0.005 以内。这一版的曲线是另画的折线，6 分钟实线差得最多（0.0023 D）。2007 年版的对比度指数图线型不同，没有做交叉校验。
@@ -238,7 +238,7 @@ CSV 是数据库的参考曲线格式：先是若干行 `# 键: 值`，然后是
 
 ## 对比度指数核对
 
-`tools/digitize/contrast.py` 从暂存的特性曲线 CSV 读出对比度指数，和 CI–时间曲线在同一显影时间的值比较。它只读 CSV，不读 PDF，只用 numpy：
+`tools/digitize/contrast.py` 从 data/reference/ 下的特性曲线 CSV 读出对比度指数，和 CI–时间曲线在同一显影时间的值比较。它只读 CSV，不读 PDF，只用 numpy：
 
 ```bash
 S=data/reference/kodak/t-max-100

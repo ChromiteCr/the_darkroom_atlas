@@ -1,4 +1,4 @@
-# 显影液手册数据（暂存）
+# 显影液手册数据
 
 这个目录放的是从柯达显影液技术手册里整理出来的表格和数值，每种显影液一个文件。内容只收与两种胶片有关的部分：KODAK PROFESSIONAL TRI-X 400（400TX，材料 `kodak/tri-x-400`）和 KODAK PROFESSIONAL T-MAX 100（100TMX，材料 `kodak/t-max-100`）。
 

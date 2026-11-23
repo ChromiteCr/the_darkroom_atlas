@@ -1,4 +1,4 @@
-"""File handling: where PDFs, recipes, staged CSVs and overlays live, and running recipes.
+"""File handling: where PDFs, recipes, reference CSVs and overlays live, and running recipes.
 
 Layout (relative to the repository root)::
 
@@ -162,7 +162,7 @@ def recipe_relpath(path: Path) -> str:
 
 
 def staged_csv(material: str, output: str) -> Path:
-    """Where the CSV for ``output`` of ``material`` is staged."""
+    """Where the CSV for ``output`` of ``material`` lives under data/reference/."""
     return STAGED_DIR / material / f"{output}.csv"
 
 
