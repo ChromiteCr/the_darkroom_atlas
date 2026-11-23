@@ -320,3 +320,20 @@ def test_value_outside_the_bounds_is_rejected():
     data["layers"][1]["grain"]["thickness"]["value"] = 0.2  # bounds [0.08, 0.15]
     with pytest.raises(ValidationError, match="outside bounds"):
         Material.model_validate(data)
+
+
+def test_spectral_sensitivity_curve_files_resolve_and_load(lib, film):
+    # Spec D1 5.4: the emulsion's spectral_sensitivity points at the film's training curve.
+    emulsion = next(layer for layer in film.layers if isinstance(layer, EmulsionLayer))
+    curve = emulsion.spectral_sensitivity
+    assert curve is not None
+    assert curve.source is Source.DATASHEET and curve.ref
+    assert curve.file == f"reference/{film.id}/spectral-sensitivity-d0.3.csv"
+    assert lib.curve_files(film) == [curve.file]
+    reference = lib.reference_curve(curve.file.removeprefix("reference/"))
+    assert reference.material == film.id
+    assert reference.ref == curve.ref
+    values = lib.resolve_curve(curve, DEFAULT_GRID)
+    assert values.shape == (DEFAULT_GRID.n_bands,)
+    assert np.all(np.isfinite(values))
+    assert values.max() > 0.0

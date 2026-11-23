@@ -17,9 +17,9 @@
 # 7.1): t_g linear in [0.08, 0.15], log10 AR in [log10 8, log10 19]. mean_diameter is written
 # back as AR * t_g; its bounds [0.6, 1.5] um are the one-sided penalty of spec D1 7.1.
 #
-# spectral_sensitivity (spec D1 5.4, calibration only) is not given yet: the training curves
-# reference/kodak/t-max-100/spectral-sensitivity-d{0.3,1.0}.csv are still staged under
-# tools/digitize/staged/ and the data root has no reference/ directory (spec D1 5.9).
+# spectral_sensitivity (spec D1 5.4, calibration only) points at the training curve
+# reference/kodak/t-max-100/spectral-sensitivity-d0.3.csv (density 0.3 above fog). The field
+# holds one curve, so the d1.0 curve of the same directory is not referenced here.
 schema_version: 1
 id: kodak/t-max-100
 maker: Kodak
@@ -42,6 +42,7 @@ layers:
   - type: emulsion
     id: emulsion
     sensitized_to: panchromatic
+    spectral_sensitivity: {quantity: spectral_sensitivity, source: datasheet, ref: "Kodak Alaris, KODAK PROFESSIONAL T-MAX 100 Film (Technical Data / Black-and-White Film), Publication F-4016, June 2018 (p. 1 \"June 2018\"; back page \"Revised 6-18\"), p. 8, figure \"Spectral Sensitivity Curves, KODAK PROFESSIONAL T-MAX 100 Film\" (curve: 0.3 greater than D-min); https://kodakprofessional.com/sites/default/files/wysiwyg/pro/resources/f4016_TMax_100.pdf (sha256 00518d7d1e296d6065f6e41ea3db999e5d8714679fb3d2b76d9a49eb207113be); digitised from the PDF's vector paths by tools/digitize/recipes/f4016-2018-06/p8-spectral-sensitivity.yaml; estimated error x +/-1.8174 nm, y +/-0.0193 log10(cm2/erg)", file: reference/kodak/t-max-100/spectral-sensitivity-d0.3.csv}
     gelatin_coverage: {value: 5.0, unit: g/m2, source: assumed, bounds: [3.0, 8.0], note: "LAT 2.3 (Kofron US 4,439,520 coats 4.84 g/m2); spec D1 2.0.2"}
     swelling_ratio: {value: 3.0, unit: "1", source: assumed, bounds: [2.0, 5.0], note: "Iwano 'normal hardening', KIN 3.3; spec D1 2.4.11"}
     grain:

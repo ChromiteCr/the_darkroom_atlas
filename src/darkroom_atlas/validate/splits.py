@@ -1,7 +1,7 @@
 """Train / within-check / held-out / unused registry of the reference data (spec D1 7.6, 7.7).
 
 Every reference file, table row and sub-item has an id: its path relative to the reference
-root (``data/reference/``, or ``tools/digitize/staged/`` before the move, spec 5.9), plus for
+root (``data/reference/``, spec 5.9), plus for
 YAML rows ``#<block>/<id>/<developer>[/<dilution>][@<temperature F>]`` (spec 7.6). Examples::
 
     kodak/tri-x-400/char-35mm-d76-08min.csv
@@ -66,17 +66,14 @@ __all__ = [
 Split = Literal["training", "within_checks", "held_out", "unused"]
 _SPLITS: tuple[Split, ...] = ("training", "within_checks", "held_out", "unused")
 
-_STAGED = Path(__file__).resolve().parents[3] / "tools" / "digitize" / "staged"
-
 
 class LeakageError(RuntimeError):
     """A held-out (or otherwise non-training) reference item reached a training path (7.7)."""
 
 
 def default_reference_root() -> Path:
-    """``<data root>/reference`` if it exists, else ``tools/digitize/staged`` (spec 5.9)."""
-    merged = default_data_root() / "reference"
-    return merged if merged.is_dir() else _STAGED
+    """``<data root>/reference`` (spec 5.9)."""
+    return default_data_root() / "reference"
 
 
 # --------------------------------------------------------------------------------------
@@ -129,13 +126,13 @@ _R_PROSE_HELD = (
     "with them (7.6 design-time exposure, 7.7)"
 )
 _R_DEV_DUP = (
-    "developer-publication copy of 400TX rows: cells shared with F-4017 are identical (staged "
+    "developer-publication copy of 400TX rows: cells shared with F-4017 are identical (reference "
     "developers/README.md cross-check) and the rest are not selected (7.6)"
 )
 
 _RULES: tuple[_Rule, ...] = (
     # ---- documentation -----------------------------------------------------------------
-    _rule(r"developers/README\.md", "unused", "documentation of the staged files, not data"),
+    _rule(r"developers/README\.md", "unused", "documentation of the reference files, not data"),
     # ---- curve files: Tri-X ------------------------------------------------------------
     _rule(_X + r"char-(35mm|120)-d76-(06|08|10|12)min\.csv", "training"),
     _rule(_X + r"char-(35mm|120)-tmax-dev-(06|07|09|11)min\.csv", "training"),
@@ -218,7 +215,7 @@ _RULES: tuple[_Rule, ...] = (
     _rule(
         _XT + r"xtol_contrast_index_times/ci-0\.56/xtol(/1\+1)?" + _ANY_T,
         "unused",
-        "same cells as the F-4017 small-tank XTOL rows (staged README cross-check); "
+        "same cells as the F-4017 small-tank XTOL rows (reference README cross-check); "
         "counted once (7.6)",
     ),
     _rule(_XT + r"xtol_contrast_index_times/ci-0\.(72|82)/xtol@(65|70|75)", "training"),

@@ -11,9 +11,9 @@
 # centre is the geometric midpoint of the bounds for a log prior ("lognormal") and the
 # arithmetic midpoint otherwise ("uniform"); each note says which.
 #
-# spectral_sensitivity (spec D1 5.4, calibration only) is not given yet: the training curves
-# reference/kodak/tri-x-400/spectral-sensitivity-d{0.3,1.0}.csv are still staged under
-# tools/digitize/staged/ and the data root has no reference/ directory (spec D1 5.9).
+# spectral_sensitivity (spec D1 5.4, calibration only) points at the training curve
+# reference/kodak/tri-x-400/spectral-sensitivity-d0.3.csv (density 0.3 above fog). The field
+# holds one curve, so the d1.0 curve of the same directory is not referenced here.
 schema_version: 1
 id: kodak/tri-x-400
 maker: Kodak
@@ -37,6 +37,7 @@ layers:
   - type: emulsion
     id: emulsion
     sensitized_to: panchromatic
+    spectral_sensitivity: {quantity: spectral_sensitivity, source: datasheet, ref: "Kodak Alaris, KODAK PROFESSIONAL TRI-X 320 and 400 Films (Technical Data / Black-and-White Film), Publication F-4017, October 2021 (back cover \"Revised 10-21\"), p. 8, figure \"Spectral Sensitivity Curves\" (curve: the line the printed legend labels \"D=1.0>Gross Fog\", assigned to density 0.3 above gross fog, not 1.0 as printed, because the printed legend is swapped (see the legend_check condition)); https://kodakprofessional.com/sites/default/files/wysiwyg/film/f4017_trix_320400.pdf (sha256 1d86b030cf7a8502e6f1414c630fa2cda30b68df53f49bccccce73c9c6562078); digitised from the PDF's vector paths by tools/digitize/recipes/f4017-2021-10/p8-spectral-sensitivity.yaml; estimated error x +/-1.8162 nm, y +/-0.0193 log10(cm2/erg)", file: reference/kodak/tri-x-400/spectral-sensitivity-d0.3.csv}
     gelatin_coverage: {value: 5.0, unit: g/m2, source: assumed, bounds: [3.0, 8.0], note: "LAT 2.3 (Kofron US 4,439,520 coats 4.84 g/m2); spec D1 2.0.2"}
     swelling_ratio: {value: 3.0, unit: "1", source: assumed, bounds: [2.0, 5.0], note: "Iwano 'normal hardening', KIN 3.3; spec D1 2.4.11"}
     grain:

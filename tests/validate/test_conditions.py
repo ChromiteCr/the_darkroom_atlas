@@ -1,10 +1,13 @@
 """Conditions and the ``# conditions:`` header of the reference CSVs (spec D1 6.1, D1e)."""
 
+import re
+
 import pytest
 
 from darkroom_atlas.data.models import Agitation, Tank
 from darkroom_atlas.validate.conditions import (
     Condition,
+    conditions_for,
     fahrenheit_to_c,
     parse_conditions_header,
     parse_temperature_c,
@@ -115,33 +118,43 @@ def test_condition_defaults_and_validation():
         Condition(**_kwargs(temperature_c=float("nan")))
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="spec 10 D1e: header -> Condition mapping (agitation, tank) is conditions_for, "
-    "a later task",
-)
 def test_conditions_header_parsing_to_condition(reference_kodak_dir):
-    # Spec 10 D1e: every staged char-/ci- CSV header becomes a Condition, with Kodak's
-    # Fahrenheit temperatures converted exactly (spec 6.1).
+    # Spec 10 D1e: every char-/ci- CSV header of the training and within-check splits maps to
+    # a Condition, and Kodak's Fahrenheit table temperatures are converted exactly (spec 6.1).
+    # Only the train and within splits are read: held-out tables stay closed (spec 7.7, 8.3).
     from darkroom_atlas.data.library import Library
-    from darkroom_atlas.validate.conditions import conditions_for
+    from darkroom_atlas.validate.splits import classify
 
     library = Library()
+    table_cells = 0
     for film_dir in sorted(p for p in reference_kodak_dir.iterdir() if p.is_dir()):
         material = f"kodak/{film_dir.name}"
         conditions = [
             c
-            for split in ("train", "within", "held_out")
+            for split in ("train", "within")
             for c in conditions_for(material, library, split=split)
         ]
-        sources = " ".join(c.source for c in conditions)
+        by_source = {c.source: c for c in conditions}
+        assert len(by_source) == len(conditions), material
         for path in sorted(film_dir.glob("*.csv")):
-            if path.name.startswith(("char-", "ci-")):
-                assert path.name in sources, path.name
+            if not path.name.startswith(("char-", "ci-")):
+                continue
+            item = f"{material}/{path.name}"
+            if classify(item).split not in ("training", "within_checks"):
+                continue
+            matches = [c for source, c in by_source.items() if source.startswith(item)]
+            assert matches, item
+            header = parse_conditions_header(path.read_text(encoding="utf-8"))
+            stated = parse_temperature_c(header["temperature"])
+            for c in matches:
+                assert isinstance(c, Condition)
+                if stated is not None:
+                    assert c.temperature_c == pytest.approx(stated, abs=1e-12), item
         for c in conditions:
-            assert isinstance(c, Condition)
-            assert (
-                c.temperature_c
-                == pytest.approx(round(c.temperature_c * 1.8 + 32.0) / 1.8 - 32.0 / 1.8, abs=1e-9)
-                or float(c.temperature_c).is_integer()
-            )
+            m = re.search(r"@(\d+(?:\.\d+)?)$", c.source)
+            if m:
+                table_cells += 1
+                assert c.temperature_c == pytest.approx(
+                    fahrenheit_to_c(float(m.group(1))), abs=1e-12
+                )
+    assert table_cells > 0

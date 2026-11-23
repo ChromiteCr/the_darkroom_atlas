@@ -2,8 +2,7 @@
 
 One process file per distinct development condition of the Kodak reference curves and time
 tables of `kodak/tri-x-400` and `kodak/t-max-100` (spec D1 5.6, 5.8, 6.1, 7.6). The files are
-generated from the staged reference data (`tools/digitize/staged/kodak/<film>/`, merged into
-`data/reference/kodak/<film>/` later, spec D1 5.9); every file lists the reference items that
+generated from the reference data (`data/reference/kodak/<film>/`, spec D1 5.9); every file lists the reference items that
 use it under `refs`, in the item-id format of the split registry (spec D1 7.6,
 `validate/splits.py`).
 

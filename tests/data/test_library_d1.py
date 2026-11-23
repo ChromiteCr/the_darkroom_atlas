@@ -79,9 +79,12 @@ def test_kinetics_accessor(root):
     assert sorted(kinetics.agents) == ["hydroquinone", "metol"]
 
 
-def test_kinetics_missing():
+def test_kinetics_missing(tmp_path):
+    lib = tmp_path / "library"
+    shutil.copytree(FIXTURES, lib)
+    (lib / "chemistry" / "kinetics.yaml").unlink(missing_ok=True)
     with pytest.raises(DataNotFound, match="kinetics file does not exist"):
-        Library(FIXTURES).kinetics()
+        Library(lib).kinetics()
 
 
 def test_kinetics_invalid_reported(root):
