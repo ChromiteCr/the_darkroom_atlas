@@ -607,7 +607,7 @@ XTOL 的理想溶液与 `D(I)` 数值是在 Dimezone S 不电离的读法下算�
 Phi_b(x) = sum_r C_r(x) * Q_r,b ,     r = 1 … R    （RGB 场景 R = 3）
 ```
 
-`LowRankLight` 只存系数 `coefficients`（`(H, W, R)`，可与输入 RGB 数组共享）和基 `basis`（`(R, B)`，每单位系数每波段的光子通量），从不生成 `(H, W, B)`。`project(weights)` 返回 `(H, W, M)`，计算为 `coefficients @ (basis @ weights)`；`window(rows, cols)` 只在需要时生成一个块的全谱 `Light`；`filtered(transmittance)` 只改基。`Light` 与 `LowRankLight` 都满足协议 `LightField`，`pipeline.expose` 接受任一种；`scene_light(..., low_rank=True)` 返回前者。检验：`test_low_rank_light_window_and_project`、`test_low_rank_light_memory`、`test_low_rank_light_filtered`、`test_expose_accepts_low_rank_light`。
+`LowRankLight` 只存系数 `coefficients`（`(H, W, R)`，可与输入 RGB 数组共享）和基 `basis`（`(R, B)`，每单位系数每波段的光子通量），从不生成 `(H, W, B)`。`project(weights)` 返回 `(H, W, M)`，计算为 `coefficients @ (basis @ weights)`；`window(rows, cols)` 只在需要时生成一个块的全谱 `Light`；`filtered(transmittance)` 只改基。`Light` 与 `LowRankLight` 都满足协议 `LightField`，`pipeline.expose` 接受任一种；`scene_light(..., low_rank=True)` 返回 `LowRankLight`。检验：`test_low_rank_light_window_and_project`、`test_low_rank_light_memory`、`test_low_rank_light_filtered`、`test_expose_accepts_low_rank_light`。
 
 **字段存储。** `FieldStore(root, ram_threshold_bytes=256 MiB)`：大小超过阈值（严格大于）且 `root` 不为 None 的字段分配为 `np.memmap(mode="w+")`；`freeze` 把它刷盘并以 `mode="r"` 重新打开，交给 `EmulsionState`；其余字段留在内存。映射文件名是 `<序号>-<字段名>.dat`，存储内的名字必须唯一，`release` 删除文件。只读的 `np.memmap` 在 `_frozen.readonly_array` 里被直接共享而不复制（可写映射仍被复制，因为别处可能改写它）。均匀字段（`residual_dye`）用 1×1 数组的 `np.broadcast_to` 视图，零字节。检验：`test_fieldstore_memmap_readonly_shared`、`test_readonly_array_copies_writable_maps`、`test_fieldstore_threshold_is_strict`、`test_fieldstore_release_and_close`。
 
@@ -621,7 +621,7 @@ Phi_b(x) = sum_r C_r(x) * Q_r,b ,     r = 1 … R    （RGB 场景 R = 3）
 
 设计估算（尚未实测）：整个黑白链路在 24 MP 下常驻内存约 5 至 6 GB，其中显影输出约 4.0 GB（每像素 21 个 float64）以内存映射存放；显影还没有实现，这一估算不能当作已经达到的指标。
 
-状态：`EmulsionState` 的 `fields` 是只读数组（可为内存映射或广播视图），不改变语义。`RunContext` 新增的字段 `film_format`、`profile`、`workers`、`memory_budget_gb`、`scratch_dir` 不进入配方哈希。运行器对临时目录的创建与清理、命令行选项的接线还没有完成，这里不写。
+状态：`EmulsionState` 的 `fields` 是只读数组（可为内存映射或广播视图），不改变语义。`RunContext` 已有新字段 `film_format`、`profile`、`workers`、`memory_budget_gb`、`scratch_dir`，但运行记录（`manifest.py`）与运行器还没有接上它们：`recipe_hash` 现在只排除 `created_utc`、`environment`、`git_commit`、`tile_px`，没有记录 `film_format` 与 `profile`（二者会改变结果），也没有处理 `workers`（它不应改变结果）。临时目录的创建与清理、命令行选项也还没有接线。这些完成后再补这一节。
 
 ### 4.6 各阶段读写的状态字段
 
