@@ -1,0 +1,102 @@
+# KODAK PROFESSIONAL T-MAX 100 Film (100TMX) for the bw-mechanistic model (spec D1 2.0, 5.4).
+#
+# Layer structure of spec D1 2.0.1: overcoat, emulsion (tabular T-GRAIN AgBrI grains), base
+# with the 135 and 120 formats. Kodak publishes none of the emulsion parameters (LAT 2.2), so
+# everything except the ISO speed, the base thicknesses and the base refractive index is
+# `assumed`. Sheet-film rows of the reference data are simulated with the 135 base (spec D1
+# 7.6; T-Max sheets are really on 7-mil ESTAR, OPT 1.2).
+#
+# Parameters the calibration fits (spec D1 7.1, blocks B and F) carry the bounds and prior of
+# the spec's parameter tables and are `assumed` at their prior centre until the D1e calibration
+# writes them back as `fitted` (spec D1 7.8). Their values are PLACEHOLDERS (spec D1 5.8) and
+# must not be quoted as results. Where the spec names a prior centre it is used; otherwise the
+# centre is the geometric midpoint of the bounds for a log prior ("lognormal") and the
+# arithmetic midpoint otherwise ("uniform"); each note says which.
+#
+# Grain size: T-Max is parameterised by (t_g, AR = d_50/t_g) in the calibration (spec D1 2.0.2,
+# 7.1): t_g linear in [0.08, 0.15], log10 AR in [log10 8, log10 19]. mean_diameter is written
+# back as AR * t_g; its bounds [0.6, 1.5] um are the one-sided penalty of spec D1 7.1.
+#
+# spectral_sensitivity (spec D1 5.4, calibration only) is not given yet: the training curves
+# reference/kodak/t-max-100/spectral-sensitivity-d{0.3,1.0}.csv are still staged under
+# tools/digitize/staged/ and the data root has no reference/ directory (spec D1 5.9).
+schema_version: 1
+id: kodak/t-max-100
+maker: Kodak
+name: KODAK PROFESSIONAL T-MAX 100 Film (100TMX)
+kind: bw_negative
+model: bw-mechanistic
+iso_speed: {value: 100, unit: "1", source: datasheet, ref: "F-4016 June 2018 p. 1 ('ISO 100/21 deg in most developers'; nominal speed EI 100); DS 3"}
+default_readout: scan_standard
+default_format: "135"
+refs:
+  - "KODAK PROFESSIONAL T-MAX 100 Film, F-4016, June 2018"
+  - "KODAK PROFESSIONAL T-MAX Films, F-4016, October 2007 (120 base thickness)"
+  - "KODAK T-MAX Professional Films, F-32, 2002 (base thicknesses; OPT 1.2)"
+note: >-
+  Prior centres are PLACEHOLDERS until the D1e calibration (spec D1 5.8, 7.8).
+layers:
+  - type: overcoat
+    id: overcoat
+    thickness: {value: 1.0, unit: um, source: assumed, bounds: [0.5, 2.0], note: "recalled typical value, OPT 1.4; spec D1 2.4.11"}
+  - type: emulsion
+    id: emulsion
+    sensitized_to: panchromatic
+    gelatin_coverage: {value: 5.0, unit: g/m2, source: assumed, bounds: [3.0, 8.0], note: "LAT 2.3 (Kofron US 4,439,520 coats 4.84 g/m2); spec D1 2.0.2"}
+    swelling_ratio: {value: 3.0, unit: "1", source: assumed, bounds: [2.0, 5.0], note: "Iwano 'normal hardening', KIN 3.3; spec D1 2.4.11"}
+    grain:
+      morphology: tabular
+      mean_diameter: {value: 1.4794593607125541, unit: um, source: assumed, bounds: [0.6, 1.5], prior: lognormal, note: "PLACEHOLDER; AR * t_g with AR at the geometric midpoint sqrt(8 * 19) of its spec D1 7.1 log prior and t_g at 0.12; bounds are the one-sided penalty of spec D1 7.1; no Kodak value, LAT 2.2"}
+      sigma_log: {value: 0.45, unit: "1", source: assumed, bounds: [0.2, 0.7], prior: uniform, note: "PLACEHOLDER; arithmetic midpoint of the spec D1 2.0.2 bounds; LAT 2.1"}
+      silver_coverage: {value: 4.0, unit: g/m2, source: assumed, bounds: [2.0, 6.0], prior: lognormal, note: "PLACEHOLDER; prior centre of spec D1 2.0.2, fitted in block F (D1 2.5.3); no primary value, LAT 2.3"}
+      halide: AgBrI
+      thickness: {value: 0.12, unit: um, source: assumed, bounds: [0.08, 0.15], prior: uniform, note: "PLACEHOLDER; prior centre of spec D1 2.0.2; Kodak T-GRAIN patent emulsions 0.07-0.15 um, LAT 2.2"}
+      iodide_fraction: {value: 0.03, unit: "1", source: assumed, bounds: [0.01, 0.06], note: "default of spec D1 2.0.2; LAT 2.2"}
+      n_classes: 6
+    optics:
+      gelatin_index: {value: 1.54, unit: "1", source: assumed, bounds: [1.53, 1.54], note: "unverified, OPT 1.1; spec D1 2.1.8"}
+      intrinsic_absorption:
+        alpha0: {value: 1.0, unit: um-1, source: assumed, bounds: [0.1, 10.0], prior: lognormal, note: "PLACEHOLDER; geometric midpoint of the spec D1 2.1.8 log prior; LAT 3.1"}
+        edge_energy: {value: 2.7, unit: eV, source: assumed, bounds: [2.5, 2.9], prior: uniform, note: "PLACEHOLDER; arithmetic midpoint of the spec D1 2.1.8 bounds; edge about 2.7 eV, LAT 3.1, OPT 1.1"}
+        urbach_energy: {value: 0.085, unit: eV, source: assumed, bounds: [0.02, 0.15], prior: uniform, note: "PLACEHOLDER; arithmetic midpoint of the spec D1 2.1.8 bounds; LAT 3.1"}
+      dye_bands:
+        - amplitude: {value: 0.01, unit: "1", source: assumed, bounds: [0.0, 0.1], prior: uniform, note: "PLACEHOLDER; the box midpoint 0.05 would put the layer absorptance A_550 at 0.86 (two-stream, 135, prior centres), outside the [0.2, 0.6] constraint of spec D1 2.1.8 and 7.1 (tabular grains have a large surface per volume); 0.01 gives A_550 = 0.46 (two-stream) and 0.22 (single pass); LAT 3.2"}
+          peak_wavenumber: {value: 1.73, unit: um-1, source: assumed, bounds: [1.4, 2.0], prior: uniform, note: "PLACEHOLDER; local maximum of the training curve spectral-sensitivity-d0.3.csv at 577 nm; LAT 3.2-3.3"}
+          width: {value: 0.165, unit: um-1, source: assumed, bounds: [0.03, 0.3], prior: uniform, note: "PLACEHOLDER; arithmetic midpoint of the spec D1 2.1.8 bounds; LAT 3.2-3.3"}
+        - amplitude: {value: 0.01, unit: "1", source: assumed, bounds: [0.0, 0.1], prior: uniform, note: "PLACEHOLDER; the box midpoint 0.05 would put the layer absorptance A_550 at 0.86 (two-stream, 135, prior centres), outside the [0.2, 0.6] constraint of spec D1 2.1.8 and 7.1 (tabular grains have a large surface per volume); 0.01 gives A_550 = 0.46 (two-stream) and 0.22 (single pass); LAT 3.2"}
+          peak_wavenumber: {value: 1.58, unit: um-1, source: assumed, bounds: [1.4, 2.0], prior: uniform, note: "PLACEHOLDER; local maximum of the training curve spectral-sensitivity-d0.3.csv at 632 nm; LAT 3.2-3.3"}
+          width: {value: 0.165, unit: um-1, source: assumed, bounds: [0.03, 0.3], prior: uniform, note: "PLACEHOLDER; arithmetic midpoint of the spec D1 2.1.8 bounds; LAT 3.2-3.3"}
+      scattering_550: {value: 0.225, unit: um-1, source: assumed, bounds: [0.05, 0.4], prior: uniform, note: "PLACEHOLDER; arithmetic midpoint of the spec D1 2.1.8 bounds; S about 0.75/l*, OPT 2.3"}
+      scattering_exponent: {value: 1.0, unit: "1", source: assumed, bounds: [0.5, 2.0], note: "OPT 2.3 Mie table; spec D1 2.1.8"}
+      psf_weight: {value: 0.5, unit: "1", source: assumed, bounds: [0.0, 1.0], prior: uniform, note: "PLACEHOLDER; arithmetic midpoint of the spec D1 2.1.8 bounds; OPT 2.3"}
+      psf_length: {value: 0.95, unit: um, source: assumed, bounds: [0.3, 1.6], prior: uniform, note: "PLACEHOLDER; arithmetic midpoint of the spec D1 2.1.8 bounds; upper bound from the OPT 2.4 tail fit"}
+    latent:
+      efficiency: {value: 0.525, unit: "1", source: assumed, bounds: [0.05, 1.0], prior: uniform, note: "PLACEHOLDER; arithmetic midpoint of the spec D1 2.2.7 bounds; LAT 1.2, 1.4"}
+      efficiency_size_exponent: {value: 0.0, unit: "1", source: assumed, bounds: [-1.0, 1.0], note: "spec D1 2.2.7: 0 unless identifiable; LAT 1.3(d)"}
+      tau0_median: {value: 0.89, unit: s, source: assumed, bounds: [0.05, 10.0], prior: lognormal, note: "PLACEHOLDER; geometric midpoint of LAT 1.4 range 0.2-4 s (spec D1 2.2.7)"}
+      tau0_sigma_ln: {value: 2.0, unit: "1", source: assumed, bounds: [0.0, 4.0], prior: uniform, note: "PLACEHOLDER; arithmetic midpoint of the spec D1 2.2.7 bounds; Katz 1949 needs a trap-depth distribution, LAT 1.2"}
+      ionic_time: {value: 3.162277660168379e-6, unit: s, source: assumed, bounds: [1.0e-7, 1.0e-4], prior: lognormal, note: "PLACEHOLDER; geometric midpoint of the spec D1 2.2.7 log prior; microsecond order recalled, LAT 1.4"}
+      competing_sites: {value: 3.0, unit: "1", source: assumed, bounds: [2.0, 10.0], note: "spec D1 2.2.7, 12.3; LAT 1.2 E10"}
+      hole_attack: {value: 0.0, unit: "1", source: assumed, bounds: [0.0, 1.0], note: "spec D1 2.2.7; LAT 1.3(b)"}
+      cluster_cap: 5
+    development:
+      fog_hazard_ratio: {value: 3.1622776601683794e-4, unit: "1", source: assumed, bounds: [1.0e-6, 0.1], prior: lognormal, note: "PLACEHOLDER; geometric midpoint of the spec D1 2.4.11 log prior; KIN 1.8"}
+      covering_power: {value: 0.6, unit: 1/(g/m2), source: assumed, bounds: [0.3, 1.0], prior: uniform, note: "PLACEHOLDER; prior centre named in spec D1 6.6 (stated there for Tri-X, used for both films); OPT 4.2"}
+      covering_power_size_exponent: {value: 0.5, unit: "1", source: assumed, bounds: [0.0, 1.0], note: "CP falls with grain size, OPT 4.2; spec D1 2.5.3"}
+      physical_covering_ratio: {value: 0.5, unit: "1", source: assumed, bounds: [0.2, 1.0], note: "OPT 4.2 point 3; spec D1 2.5.3"}
+      halide_density: {value: 0.3, unit: 1/(g/m2), source: assumed, bounds: [0.1, 0.6], note: "no data; acts only when fixing is incomplete; spec D1 2.5.3"}
+      dye_density: {value: 0.0, unit: "1", source: assumed, bounds: [0.0, 0.1], note: "spec D1 2.5.3 default; T-Max pink stain after short fixing is qualitative only, OPT 1.3"}
+      fixing_factor: {value: 2.0, unit: "1", source: assumed, note: "spec D1 2.6: T-Max 2; no reference data"}
+  - type: base
+    id: base
+    material: cellulose triacetate
+    refractive_index: {value: 1.48, unit: "1", source: literature, ref: "US 6,398,371 B1; OPT 1.1", bounds: [1.47, 1.48]}
+    formats:
+      "135":
+        thickness: {value: 127.0, unit: um, source: datasheet, ref: "F-32 (2002) p. 26: 5-mil (0.13 mm) acetate for T-Max 100 135; OPT 1.2"}
+        grey_density: {value: 0.10, unit: "1", source: assumed, bounds: [0.0, 0.2], note: "spec D1 2.1.8 value for 135; estimated from the Tri-X 35 mm - 120 offset, interpretation unverified, OPT 1.3; not fitted (spec D1 7.1)"}
+        backing_density: {value: 0.0, unit: "1", source: assumed, note: "spec D1 2.1.8"}
+      "120":
+        thickness: {value: 119.0, unit: um, source: datasheet, ref: "F-32 (2002) p. 26 and F-4016 Oct 2007 p. 2: 4.7-mil base (4.7 mil = 119 um); OPT 1.2"}
+        grey_density: {value: 0.0, unit: "1", source: assumed, note: "spec D1 2.1.8"}
+        backing_density: {value: 0.5, unit: "1", source: assumed, bounds: [0.2, 1.5], note: "OPT 1.3 recommendation; removed in processing (spec D1 2.5.2); not fitted (spec D1 7.1)"}

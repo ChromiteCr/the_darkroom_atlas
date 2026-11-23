@@ -1,0 +1,25 @@
+# Generated from the staged Kodak reference data; naming rule and sources in
+# data/processes/kodak/README.md.
+schema_version: 1
+id: kodak/t-max-100/d-76-stock-21.1c-rotary-tube-5.75min
+name: "T-Max 100 in D-76 stock, rotary tube, 21.1 C, 5.75 min"
+family: bw
+steps:
+  - kind: develop
+    bath: d-76
+    dilution: "stock"
+    time: "5.75min"
+    temperature: {value: 21.11111111111111, unit: C, source: datasheet, ref: "F-4016 June 2018 p. 4 (Rotary-Tube Processing—Rolls, 70 F column); F-4016 June 2018 p. 4 (Rotary-Tube Processing—Sheets, 70 F column)", note: "70 F printed, converted exactly (spec D1 6.1)"}
+    agitation: {method: rotary}
+    tank:
+      volume_ml: 250.0
+      film_area_cm2: 35.0
+      image_area_fraction: {value: 1.0, unit: "1", source: assumed, note: "sensitometric strip, all image (spec D1 5.8); the virtual sensitometer uses 1 cm2 per step (spec D1 6.1)"}
+    note: "rotary tube, agitated throughout (spec D1 2.4.8; the rotation is not stated in F-4016); 250 mL (spec D1 6.1); strip area 35 cm2 assumed (spec D1 5.8)"
+  - {kind: stop, bath: stop-acetic, time: "30s"}
+  - {kind: fix, bath: fixer-thiosulfate, time: "5min"}
+  - {kind: wash, bath: water, time: "10min"}
+refs:
+  - "kodak/t-max-100/tables.yaml#development_times/normal-rotary-tube-rolls/d-76@70"
+  - "kodak/t-max-100/tables.yaml#development_times/normal-rotary-tube-sheets/d-76@70"
+note: "reference items (refs) that use this condition; stop, fix and wash times assumed (spec D1 5.8 example), they are not part of the Kodak conditions"

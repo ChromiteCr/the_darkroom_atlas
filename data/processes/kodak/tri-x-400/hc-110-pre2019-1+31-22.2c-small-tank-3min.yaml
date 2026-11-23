@@ -1,0 +1,24 @@
+# Generated from the staged Kodak reference data; naming rule and sources in
+# data/processes/kodak/README.md.
+schema_version: 1
+id: kodak/tri-x-400/hc-110-pre2019-1+31-22.2c-small-tank-3min
+name: "Tri-X 400 in HC-110 (pre-2019) 1+31, small tank, 22.2 C, 3 min"
+family: bw
+steps:
+  - kind: develop
+    bath: hc-110-pre2019
+    dilution: "1+31"
+    time: "3min"
+    temperature: {value: 22.22222222222222, unit: C, source: datasheet, ref: "F-4017 Oct 2021 p. 3 (TRI-X 400 Film / 400TX, Development Time (Minutes), Small Tank, 72 F column)", note: "72 F printed, converted exactly (spec D1 6.1)"}
+    agitation: {method: inversion, initial_s: 5.0, interval_s: 30.0, duration_s: 5.0}
+    tank:
+      volume_ml: 473.0
+      film_area_cm2: 35.0
+      image_area_fraction: {value: 1.0, unit: "1", source: assumed, note: "sensitometric strip, all image (spec D1 5.8); the virtual sensitometer uses 1 cm2 per step (spec D1 6.1)"}
+    note: "Kodak small-tank procedure: 5 to 7 inversion cycles in 5 s at the start and every 30 s (F-4017 p. 3, F-4016 p. 2; spec D1 2.4.8); 16-ounce tank 473 mL (spec D1 6.1); strip area 35 cm2 assumed (spec D1 5.8); dilution B = concentrate 1+31 (J-24 Dec 2017 p. 2)"
+  - {kind: stop, bath: stop-acetic, time: "30s"}
+  - {kind: fix, bath: fixer-thiosulfate, time: "5min"}
+  - {kind: wash, bath: water, time: "10min"}
+refs:
+  - "kodak/tri-x-400/tables.yaml#development_times/normal-small-tank/hc-110@72"
+note: "reference items (refs) that use this condition; stop, fix and wash times assumed (spec D1 5.8 example), they are not part of the Kodak conditions"

@@ -1,0 +1,24 @@
+# Generated from the staged Kodak reference data; naming rule and sources in
+# data/processes/kodak/README.md.
+schema_version: 1
+id: kodak/tri-x-400/xtol-stock-22.2c-large-tank-6.5min
+name: "Tri-X 400 in XTOL stock, large tank, 22.2 C, 6.5 min"
+family: bw
+steps:
+  - kind: develop
+    bath: xtol
+    dilution: "stock"
+    time: "6.5min"
+    temperature: {value: 22.22222222222222, unit: C, source: datasheet, ref: "F-4017 Oct 2021 p. 3 (TRI-X 400 Film / 400TX, Development Time (Minutes), Large Tank, 72 F column)", note: "72 F printed, converted exactly (spec D1 6.1)"}
+    agitation: {method: lift, initial_s: 22.5, interval_s: 60.0, duration_s: 7.5}
+    tank:
+      volume_ml: 3785.0
+      film_area_cm2: 35.0
+      image_area_fraction: {value: 1.0, unit: "1", source: assumed, note: "sensitometric strip, all image (spec D1 5.8); the virtual sensitometer uses 1 cm2 per step (spec D1 6.1)"}
+    note: "Kodak large-tank procedure: continuous for the first 15 to 30 s (22.5 s), then once a minute lift, tilt and drain 5 to 10 s (7.5 s) (F-4017 p. 3, F-4016 p. 3; spec D1 2.4.8); 1-gallon tank 3785 mL (spec D1 6.1); strip area 35 cm2 assumed (spec D1 5.8)"
+  - {kind: stop, bath: stop-acetic, time: "30s"}
+  - {kind: fix, bath: fixer-thiosulfate, time: "5min"}
+  - {kind: wash, bath: water, time: "10min"}
+refs:
+  - "kodak/tri-x-400/tables.yaml#development_times/normal-large-tank/xtol@72"
+note: "reference items (refs) that use this condition; stop, fix and wash times assumed (spec D1 5.8 example), they are not part of the Kodak conditions"
