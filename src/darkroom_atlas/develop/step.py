@@ -50,6 +50,7 @@ from darkroom_atlas.blocks import (
     owned_pixels,
     padded_window,
     run_blocks,
+    workers_for_budget,
 )
 from darkroom_atlas.chemistry.kinetics import Kinetics, resolve_kinetics
 from darkroom_atlas.chemistry.solution import WorkingSolution, working_solution
@@ -578,7 +579,8 @@ def develop_frame(
         frame_hw=(h_px, w_px),
         halo_cells=h_c,
     )
-    runner = _Runner(ev, es, blocks, setup, ctx.run.workers, assembler, geometry, specs, store)
+    workers = workers_for_budget(ctx.run.memory_budget_gb, ctx.run.workers)  # spec D1 4.6
+    runner = _Runner(ev, es, blocks, setup, workers, assembler, geometry, specs, store)
     deltas: list[float] = []
     try:
         for n_pass in range(1 + tk.MAX_EXTRA_PASSES):

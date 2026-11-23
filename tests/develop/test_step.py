@@ -20,6 +20,7 @@ from darkroom_atlas.data.library import Library
 from darkroom_atlas.data.models import Agitation, Process, ProcessStep, StepKind
 from darkroom_atlas.data.provenance import Quantity
 from darkroom_atlas.develop import step as dstep
+from darkroom_atlas.fieldstore import FieldStore
 from darkroom_atlas.pipeline import RunContext, StepContext, process
 from darkroom_atlas.registry import get_step
 from darkroom_atlas.spectral import DEFAULT_GRID
@@ -200,17 +201,39 @@ def test_develop_fields_and_meta(tiling_reference):
     assert out.history[-1].kind == "develop"
 
 
-@pytest.mark.parametrize(("tile_px", "workers"), [(None, 1), (7, 1), (16, 2)])
+@pytest.mark.parametrize(
+    ("tile_px", "workers", "mapped"),
+    [(None, 1, False), (7, 1, False), (16, 2, False), (None, 2, True)],
+)
 def test_develop_independent_of_tiling_and_workers(
-    lib, film, tiling_reference, monkeypatch, tile_px, workers, tmp_path
+    lib, film, tiling_reference, monkeypatch, tile_px, workers, mapped, tmp_path
 ):
     # Spec D1 3.6: bit-identical whatever tile_px and the number of workers; (None, 1) is a
     # rerun of the reference (determinism).
     monkeypatch.setattr(dstep, "BLOCK_CELLS", 8)
     monkeypatch.setattr(dstep, "halo_um", lambda *a: SMALL_HALO_UM)
     state = make_state(film, *scene(), 12.0)
-    ctx = _ctx(lib, tile_px=tile_px, workers=workers, scratch_dir=tmp_path)
+    if mapped:
+        # The run's store maps every field: workers write straight into the outputs and the
+        # exposure files are released after development (spec D1 4.4, 4.5).
+        store = FieldStore(tmp_path / "store", ram_threshold_bytes=0)
+        ev = store.allocate("expose-x:emulsion/exposure_volume", (40, 44, N_Z))
+        es = store.allocate("expose-x:emulsion/exposure_surface", (40, 44, N_Z))
+        ev[...], es[...] = scene()
+        state = make_state(
+            film,
+            store.freeze(ev_name := "expose-x:emulsion/exposure_volume"),
+            store.freeze("expose-x:emulsion/exposure_surface"),
+            12.0,
+        )
+        del ev, es
+        ctx = _ctx(lib, tile_px=tile_px, workers=workers, store=store)
+    else:
+        ctx = _ctx(lib, tile_px=tile_px, workers=workers, scratch_dir=tmp_path)
     out = _process(state, ctx, develop_step())
+    if mapped:
+        assert ev_name not in store
+        assert store.is_mapped(store.name_of(out.fields["emulsion/silver"]))
     for key, value in tiling_reference.fields.items():
         assert np.array_equal(out.fields[key], value), key
     assert out.meta["develop"] == tiling_reference.meta["develop"]
