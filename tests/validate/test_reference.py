@@ -36,6 +36,7 @@ _TX, _TM = "kodak/tri-x-400", "kodak/t-max-100"
 # Training items for which spec 7.2 defines no observable of their own (reasons for the
 # coverage test); every other training item must give at least one observation.
 _NO_OBSERVABLE = {
+    "developer_definitions/t-max-developers-contrast-aim": "J-86 CI aim of T-MAX cells (0.56)",
     "facts/base-plus-fog/": "left end of a curve: compared in the 8.3 report, no 7.2 residual",
     "facts/processing-aim": "CI aim of the table cells (the y of table_ci), not a residual",
     "developer_definitions/": "dilution definitions: they fix conditions, not observations",
