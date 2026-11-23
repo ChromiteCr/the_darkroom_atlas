@@ -652,7 +652,12 @@ def _speciate(st: _Setup, cpos: np.ndarray, toth: np.ndarray, gel: np.ndarray, p
     for f in range(st.nf):
         totals[f] = cpos[:, :, st.fam_comp[f]]
     totals[st.nf] = gel[None, :]
-    ph = solve_ph(st.spec, totals, toth, ph0=ph0)
+    try:
+        ph = solve_ph(st.spec, totals, toth, ph0=ph0)
+    except RuntimeError:
+        # Safeguarded Newton fell back to bisection from a poor start; bisection over the
+        # whole bracket needs about 44 halvings to reach 1e-12 (spec D1 2.3.4 allows 30).
+        ph = solve_ph(st.spec, totals, toth, ph0=ph0, max_iter=100)
     alpha_all = fractions(st.spec, ph)  # (F+1, J+1, N, La)
     alpha, nbar, var = [], np.empty((st.nf + 1, n, la)), np.empty((st.nf + 1, n, la))
     for f in range(st.nf + 1):
