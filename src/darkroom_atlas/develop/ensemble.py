@@ -591,6 +591,15 @@ class _Setup:
             return 1.0
         return -math.expm1(-max(t, 0.0) * math.log(2.0) / self.half_time)
 
+    def swelling_mean(self, t0: float, t1: float) -> float:
+        """Mean of ``s(t)`` over ``[t0, t1]``: the swelling factor of one column step. It is a
+        second-order discretisation of the time-dependent D and tends to 1 as ``T_half -> 0``
+        on every step (the presoak limit, spec D1 2.4.13)."""
+        if self.presoaked or self.half_time <= 0.0:
+            return 1.0
+        k = math.log(2.0) / self.half_time
+        return 1.0 - (math.exp(-k * max(t0, 0.0)) - math.exp(-k * max(t1, 0.0))) / (k * (t1 - t0))
+
     def level_diffusion(self, s: float) -> np.ndarray:
         """``(L, K_c)``: ``r_k D_k s`` in gel levels, ``D_k`` in the liquid (spec D1 2.4.7)."""
         gel_d = self.r_gel * self.d_liq * s
@@ -820,7 +829,7 @@ class _Jac:
 
 def _evaluate(
     st: _Setup,
-    t: float,
+    s: float,
     conc: np.ndarray,
     loc: np.ndarray,
     g: np.ndarray,
@@ -832,7 +841,7 @@ def _evaluate(
     ph0: np.ndarray,
     want_jac: bool,
 ) -> _Eval:
-    """``f`` (and, with ``want_jac``, ``J``) of the column step at time ``t``.
+    """``f`` (and, with ``want_jac``, ``J``) of the column step with swelling factor ``s``.
 
     ``conc`` (N, L, nc) totals incl. TOTH; levels ``>= n_act`` are held at the bulk value
     (``f = 0`` there). ``ph0`` (N, n_act) is the previous pH.
@@ -841,7 +850,6 @@ def _evaluate(
     nz, kc, nc, it = st.n_z, st.kc, st.nc, st.it
     la = n_act
     delta = st.delta[:la]
-    s = st.swelling(t)
     d_lev = st.level_diffusion(s)[:la]  # (La, kc)
     d_car = st.carrier_diffusion(s)[:, :la]  # (C, La)
 
@@ -1199,9 +1207,10 @@ def _c_step(
     """One ROS2 column step (spec D1 3.3) with the kernels eliminated by a Schur complement."""
     gh = ros.GAMMA * h
     car0 = _bath_carriers(st, bulk0)
+    swell = st.swelling_mean(t, t + h)
     ev0 = _evaluate(
         st,
-        t,
+        swell,
         state.conc,
         state.loc,
         state.g,
@@ -1230,7 +1239,7 @@ def _c_step(
         state.q + h * k1[4],
         state.ph,
     )
-    ev1 = _evaluate(st, t + h, s1.conc, s1.loc, s1.g, s1.h, kern, bulk1, car1, n_act, ev0.ph, False)
+    ev1 = _evaluate(st, swell, s1.conc, s1.loc, s1.g, s1.h, kern, bulk1, car1, n_act, ev0.ph, False)
     k2 = solve(
         ev1.f_conc - 2.0 * k1[0],
         ev1.f_loc - 2.0 * k1[1],
@@ -1856,7 +1865,7 @@ def _result(
     car = _bath_carriers(st, bulk_n)
     ev_end = _evaluate(
         st,
-        t,
+        st.swelling(t),
         state.conc,
         state.loc,
         state.g,

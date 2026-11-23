@@ -2,40 +2,68 @@
 2.4.13, 3.9). Developed silver is asserted in g/m2 (spec D1 3.8, change num11)."""
 
 import dataclasses
+import importlib.util
 import math
+import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
-from conftest import (
-    EXPOSURE_TIME_S,
-    INFINITE_TANK,
-    LARGE_TANK,
-    ROLL_TANK,
-    SMALL_TANK,
-    columns,
-    developed_silver,
-    make_schedule,
-    run_strip,
-    strip_exposures,
-    with_solvent,
-)
+from scipy.special import erf
 
 from darkroom_atlas.chemistry.kinetics import (
+    arrhenius_factor,
     cluster_hazards,
     positive_part,
+    resolve_kinetics,
     surface_state,
 )
-from darkroom_atlas.data.models import Agitation
+from darkroom_atlas.chemistry.solution import working_solution
+from darkroom_atlas.chemistry.speciation import mean_protons, water_ions
+from darkroom_atlas.data.models import Agitation, BathComponent
+from darkroom_atlas.data.provenance import Quantity
 from darkroom_atlas.develop import ensemble as ens
 from darkroom_atlas.develop import rosenbrock as ros
 from darkroom_atlas.develop import tank as tk
 from darkroom_atlas.develop.ensemble import (
     BulkTrajectory,
+    Lateral,
+    Members,
     TankSpec,
     film_column_model,
+    run_ensemble,
 )
 from darkroom_atlas.develop.grid import column_grid
+from darkroom_atlas.develop.schedule import Schedule, agitation_periods, step_schedule
 from darkroom_atlas.emulsion.classes import M_AG
+
+
+def _load_helpers():
+    # The helpers live in this directory's conftest.py; load it by path under its own name
+    # (another tests/*/conftest.py would shadow a plain "import conftest").
+    name = "d1c_develop_conftest"
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(name, Path(__file__).with_name("conftest.py"))
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules[name]
+
+
+_h = _load_helpers()
+EXPOSURE_TIME_S = _h.EXPOSURE_TIME_S
+INFINITE_TANK = _h.INFINITE_TANK
+LARGE_TANK = _h.LARGE_TANK
+ROLL_TANK = _h.ROLL_TANK
+SMALL_TANK = _h.SMALL_TANK
+columns = _h.columns
+developed_silver = _h.developed_silver
+make_schedule = _h.make_schedule
+run_strip = _h.run_strip
+strip_exposures = _h.strip_exposures
+with_solvent = _h.with_solvent
+with_test_rates = _h.with_test_rates
+with_transport = _h.with_transport
 
 CONTINUOUS = Agitation(method="continuous")
 G_PER_MOL_UM = M_AG * 1e-3  # 1 mol L^-1 um of Ag = 0.10787 g/m2
@@ -206,7 +234,18 @@ def test_rate_gradients_match_finite_difference(strip_run, d76):
 
     def ev(conc, loc):
         return ens._evaluate(
-            st, 450.0, conc, loc, state.g, state.h, kern, bulk, car, st.L, state.ph, True
+            st,
+            st.swelling(450.0),
+            conc,
+            loc,
+            state.g,
+            state.h,
+            kern,
+            bulk,
+            car,
+            st.L,
+            state.ph,
+            True,
         )
 
     ev0 = ev(state.conc, state.loc)
@@ -285,7 +324,7 @@ def test_member_schur_elimination_exact(strip_run, d76):
     sub = ens._Kernels(omega=kern.omega[sl])
     ev = ens._evaluate(
         st,
-        450.0,
+        st.swelling(450.0),
         state.conc[sl],
         state.loc[sl],
         state.g[sl],
@@ -527,7 +566,6 @@ def test_zero_exposure_fog_only(film_cal, d76, kin_test, film_material, species)
 
 
 def _with_development(material, **values):
-    from darkroom_atlas.data.provenance import Quantity
 
     layers = []
     for layer in material.layers:
@@ -597,3 +635,301 @@ def test_gel_equilibrium_no_toth_flux(film_cal, d76, kin_test):
         flux = flux - face * (car[0, 1:] - car[0, :-1]) / st.hf
     assert np.max(np.abs(flux)) <= 1e-14
     assert np.all(run.result.silver == 0.0)
+
+
+def _material_with(material, *, gelatin=None, overcoat=None):
+
+    layers = []
+    for layer in material.layers:
+        if layer.type == "emulsion" and gelatin is not None:
+            q = Quantity(value=gelatin, unit="g/m2", source="assumed")
+            layer = layer.model_copy(update={"gelatin_coverage": q})
+        if layer.type == "overcoat" and overcoat is not None:
+            layer = layer.model_copy(
+                update={"thickness": Quantity(value=overcoat, unit="um", source="assumed")}
+            )
+        layers.append(layer)
+    return material.model_copy(update={"layers": layers})
+
+
+def _borate_bath(library):
+
+    comp = BathComponent(
+        species="borax-decahydrate", amount=Quantity(value=20.0, unit="g/L", source="assumed")
+    )
+    return library.bath("d-76").model_copy(
+        update={"id": "test/borate", "components": [comp], "nuisance": []}
+    )
+
+
+def test_immobile_buffer_retards_ph_front(library, species, kfile, film_material):
+    # Spec D1 2.4.13: one mobile buffer (borate) plus gelatin, no reaction, s = 1, a thick gel;
+    # a small pH step at the surface spreads as erf(x / 2 sqrt(D_app t)) with
+    # D_app = sum_c D_c beta_c / beta (= D / (1 + beta_gel / beta_mob) up to the water ions),
+    # within 1e-2 of the step.
+
+    sol = working_solution(
+        _borate_bath(library), species, kfile, dilution="stock", temperature_c=20.0
+    )
+    kin = resolve_kinetics(kfile, sol, species)
+    assert kin.agent_ids == ()
+    kin = with_solvent(kin, k_diss=(0.0, "um/s"), k_pd=(0.0, "um/s"))
+    kin = with_transport(kin, delta_agit=(1e-3, "um"), delta_max=(2e-3, "um"))
+    material = _material_with(film_material, gelatin=100.0, overcoat=1e-3)
+    film = film_column_model(
+        material, "135", 0.01, kin, sol, "image", species=species, levels=(100, 4, 2.0)
+    )
+    film = dataclasses.replace(film, hazards=np.zeros_like(film.hazards))
+    st = _setup(film, sol, kin, presoaked=True)
+    # Gel equilibrated with the bath at pH_bath + a: TOTH lower by beta_gel-cell * a.
+    amp = 1e-3
+    ph_gel = sol.ph + amp
+    totals = np.zeros((st.nf + 1, 1, st.L))
+    for f in range(st.nf):
+        totals[f] = sol.totals[st.fam_comp[f]]
+    totals[st.nf] = st.gelatin[None]
+
+    nbar = mean_protons(st.spec, np.full((1, st.L), ph_gel))
+    hh, oh = water_ions(st.spec, np.full((1, st.L), ph_gel))
+    toth = (totals * nbar).sum(axis=0) + hh - oh
+    conc = np.broadcast_to(np.asarray(sol.totals), (1, st.L, st.kc)).copy()
+    conc[:, ~st.gel] = sol.totals
+    toth[:, ~st.gel] = sol.toth
+    t_end = 4.0
+    schedule = step_schedule(
+        agitation_periods(CONTINUOUS, t_end), t_end, h0_s=0.002, ratio=1.1, h_max_s=0.02
+    )
+    zero = np.zeros((1, st.n_z))
+    run = ens._integrate(
+        film,
+        sol,
+        kin,
+        schedule,
+        columns(zero, zero),
+        n_cells=1,
+        cell_weights=np.ones(1),
+        tank=INFINITE_TANK,
+        presoaked=True,
+        initial=(conc, toth),
+    )
+    state = run.state
+    sp = ens._speciate(
+        st,
+        positive_part(state.conc[:, :, : st.kc]),
+        state.conc[:, :, st.it],
+        st.gelatin,
+        state.ph,
+    )
+    # D_app from the carriers at the gel's pH (emulsion levels).
+    ph0 = np.full((1, st.L), ph_gel)
+    sp0 = ens._speciate(st, positive_part(conc), toth, st.gelatin, ph0)
+    d_car = st.carrier_diffusion(1.0)[:, 0]
+    beta_c = [ens._LN10 * sol.totals[st.fam_comp[f]] * sp0.var[f, 0, 0] for f in st.mobile]
+    beta_c += [ens._LN10 * sp0.h[0, 0], ens._LN10 * sp0.oh[0, 0]]
+    d_app = sum(d * b for d, b in zip(d_car, beta_c, strict=True)) / sp0.beta[0, 0]
+    beta_gel = sp0.beta[0, 0] - sum(beta_c)
+    assert 0.1 < beta_gel / sum(beta_c) < 10.0  # the gelatin matters
+    top = st.grid.thickness_um[: st.n_z + 1].sum()
+    x = top - st.grid.height_um[: st.n_z]
+    expected = sol.ph + amp * erf(x / (2.0 * math.sqrt(d_app * t_end)))
+    err = np.abs(sp.ph[0, : st.n_z] - expected)
+    assert err.max() <= 1e-2 * amp, err.max() / amp
+    # And it is slower than the front without gelatin.
+    d_mob = sum(d * b for d, b in zip(d_car, beta_c, strict=True)) / sum(beta_c)
+    fast = sol.ph + amp * erf(x / (2.0 * math.sqrt(d_mob * t_end)))
+    assert np.abs(sp.ph[0, : st.n_z] - fast).max() > 3.0 * err.max()
+
+
+def test_presoak_removes_delay(film_cal, d76, kin_test):
+    # Spec D1 2.4.13: the dry film starts slower; as T_half -> 0 dry equals presoaked (<= 1e-6).
+    schedule = make_schedule("calibration", 120.0, SMALL_TANK, record_s=(20.0,))
+    ev, es = strip_exposures(3, film_cal.grid.n_z, lo=1.0, hi=3.0)
+    dry = run_strip(film_cal, d76, kin_test, schedule, ev, es)
+    wet = run_strip(film_cal, d76, kin_test, schedule, ev, es, presoaked=True)
+    assert np.all(developed_silver(dry.snapshots[20.0]) < developed_silver(wet.snapshots[20.0]))
+    fast = with_transport(kin_test, swelling_half_time=(1e-9, "s"))
+    dry0 = run_strip(film_cal, d76, fast, schedule, ev, es)
+    np.testing.assert_allclose(dry0.silver, wet.silver, rtol=0, atol=1e-6)
+    np.testing.assert_allclose(dry0.initiated, wet.initiated, rtol=0, atol=1e-6)
+
+
+def _with_bromide(library, grams):
+
+    bath = library.bath("d-76")
+    comp = BathComponent(
+        species="potassium-bromide", amount=Quantity(value=grams, unit="g/L", source="assumed")
+    )
+    return bath.model_copy(update={"components": [*bath.components, comp]})
+
+
+def test_bromide_restrains(library, species, kfile, film_cal, kin_test):
+    # Spec D1 2.4.13: with initial bromide, X at a fixed time falls monotonically and the
+    # initiation clock Lambda grows more slowly.
+
+    schedule = make_schedule("calibration", 240.0)
+    ev, es = strip_exposures(2, film_cal.grid.n_z, lo=1.5, hi=2.5)
+    silver, clocks = [], []
+    for grams in (1e-6, 0.5, 2.0):
+        sol = working_solution(
+            _with_bromide(library, grams), species, kfile, dilution="stock", temperature_c=20.0
+        )
+        kin = with_test_rates(resolve_kinetics(kfile, sol, species))
+        film = dataclasses.replace(film_cal, component_ids=sol.component_ids)
+        run = _integrate(film, sol, kin, schedule, ev, es, record_cells=4)
+        silver.append(developed_silver(run.result))
+        clocks.append(run.result.cell_history.lambda_clock[-1])
+    assert np.all(np.diff(np.array(silver), axis=0) < 0.0)
+    assert np.all(np.diff(np.array(clocks), axis=0) < 0.0)
+
+
+@pytest.mark.parametrize("profile", ["image", "calibration"])
+def test_dry_film_bromide_free_start(profile, film_material, kin_test, d76, species):
+    # Spec D1 2.4.13: dry film, bromide-free D-76, image (h0 = 0.1 s) and calibration
+    # schedules: no NaN, min C/s_k >= -1e-3 over the run, silver balance holds.
+    film = film_column_model(film_material, "135", 0.01, kin_test, d76, profile, species=species)
+    schedule = make_schedule(profile, 450.0)
+    ev, es = strip_exposures(4, film.grid.n_z)
+    run = _integrate(film, d76, kin_test, schedule, ev, es)
+    res = run.result
+    for name in ("silver", "initiated", "silver_m2", "silver_physical", "halide", "growth_rate"):
+        assert np.all(np.isfinite(getattr(res, name)))
+    assert np.all(np.isfinite(run.state.conc))
+    assert -1e-3 <= res.min_scaled_concentration < 0.0  # the dry start dips below zero
+    coef = tk.tank_coefficient(film_area_um2=ROLL_TANK.film_area_um2, volume_l=ROLL_TANK.volume_l)
+    change, _, _, _ = _balance(run, res, coef)
+    total = res.silver.sum(axis=1).mean() + res.silver_physical.mean() + res.halide.mean()
+    total += change[run.setup.i_ag] * G_PER_MOL_UM
+    assert total == pytest.approx(film.classes.silver_coverage_g_m2, rel=1e-12)
+
+
+def test_arrhenius_scaling(film_cal, d76, kfile, species, library):
+    # Spec D1 2.4.13 at the engine level: one developing agent, temperature-independent
+    # speciation (the 20 C solution), Delta H_Br = 0, no bromide, no dissolution or physical
+    # development, very fast transport: the time to reach a given X scales by
+    # exp(Ea/R (1/T2 - 1/T1)), to <= 1e-3. Running the warm bath on the cold schedule scaled
+    # by that factor must reproduce the cold run.
+
+    sol = working_solution(
+        library.bath("d-76"),
+        species,
+        kfile,
+        dilution="stock",
+        temperature_c=20.0,
+        overrides={"hydroquinone": 0.0},
+    )
+    zero_dh = Quantity(value=0.0, unit="kJ/mol", source="assumed")
+    halides = kfile.halides.model_copy(update={"adsorption_enthalpy": zero_dh})
+    kf = kfile.model_copy(update={"halides": halides})
+    cold = with_test_rates(resolve_kinetics(kf, sol, species))
+    assert cold.agent_ids == ("metol",)
+    warm_sol = dataclasses.replace(sol, temperature_c=24.0)
+    warm = with_test_rates(resolve_kinetics(kf, warm_sol, species))
+    a = arrhenius_factor(61.8, 297.15)
+    warm = dataclasses.replace(
+        warm, k_et=cold.k_et * a, lambda0=cold.lambda0 * a, k_des=cold.k_des * a
+    )
+    assert warm.K_br == cold.K_br
+    cold = with_solvent(cold, k_diss=(0.0, "um/s"), k_pd=(0.0, "um/s"))
+    warm = with_solvent(warm, k_diss=(0.0, "um/s"), k_pd=(0.0, "um/s"))
+    film = dataclasses.replace(
+        film_cal,
+        component_ids=sol.component_ids,
+        diffusion_um2_s=film_cal.diffusion_um2_s * 1e3,
+        water_ion_diffusion_um2_s=tuple(1e3 * d for d in film_cal.water_ion_diffusion_um2_s),
+    )
+    t_cold = 300.0
+    base = make_schedule("calibration", t_cold, CONTINUOUS)
+    scaled = Schedule(times_s=base.times_s / a, agitated=base.agitated, record_steps={})
+    ev, es = strip_exposures(3, film.grid.n_z, lo=1.0, hi=3.0)
+    r_cold = run_strip(film, sol, cold, base, ev, es, tank=INFINITE_TANK, presoaked=True)
+    r_warm = run_strip(film, sol, warm, scaled, ev, es, tank=INFINITE_TANK, presoaked=True)
+    m_cold, m_warm = developed_silver(r_cold), developed_silver(r_warm)
+    assert np.all(m_cold > 0.05)
+    # Equal X at the scaled time <=> the time to a given X scales by 1/a; dX/dlnt converts.
+    np.testing.assert_allclose(m_warm, m_cold, rtol=1e-3)
+
+
+def test_snapshots_equal_shorter_runs(strip_run, film_cal, d76, kin_test):
+    res = strip_run.result
+    assert sorted(res.snapshots) == [120.0, 300.0]
+    schedule = make_schedule("calibration", 300.0, SMALL_TANK)
+    ev, es = strip_exposures(12, film_cal.grid.n_z)
+    short = run_strip(film_cal, d76, kin_test, schedule, ev, es)
+    snap = res.snapshots[300.0]
+    for name in ("silver", "initiated", "silver_m2", "silver_physical", "halide", "growth_rate"):
+        np.testing.assert_array_equal(getattr(snap, name), getattr(short, name))
+    np.testing.assert_array_equal(snap.flux_mean, short.flux_mean)
+    np.testing.assert_array_equal(snap.bulk.totals, short.bulk.totals)
+    assert np.all(developed_silver(res.snapshots[120.0]) < developed_silver(snap))
+
+
+def test_cell_histories(strip_run):
+    res = strip_run.result
+    hist = res.cell_history
+    st = strip_run.setup
+    times = strip_run.result.bulk.times_s
+    assert hist.times_s[0] == 0.0 and hist.times_s[-1] == times[-1]
+    assert np.all(np.isin(hist.times_s, times))
+    assert 8 <= hist.times_s.size <= 16
+    assert hist.lambda_clock.shape == (hist.times_s.size, 12, st.n_z)
+    assert np.all(np.diff(hist.lambda_clock, axis=0) >= 0.0)
+    assert np.all(np.diff(hist.kappa_integral, axis=0) >= 0.0)
+    np.testing.assert_array_equal(hist.lambda_clock[-1], strip_run.state.loc[:, ::-1, 0])
+    assert hist.cell_spacing_um == ens.CHEM_CELL_UM
+    assert np.all(hist.kappa_integral[-1] > 0.0)
+
+
+def test_strip_outputs_are_read_only_and_shaped(strip_run):
+    res = strip_run.result
+    assert res.silver.shape == (12, 6) and res.halide.shape == (12,)
+    assert res.flux_mean.shape == (res.bulk.times_s.size - 1, len(strip_run.setup.ids) + 1)
+    for name in ("silver", "initiated", "silver_m2", "silver_physical", "halide", "flux_mean"):
+        assert not getattr(res, name).flags.writeable
+    m = developed_silver(res)
+    assert np.all(np.diff(m) >= 0.0)  # more exposure, more silver
+    assert np.all(res.initiated <= 1.0) and np.all(res.silver_m2 <= res.initiated + 1e-12)
+
+
+def test_run_ensemble_rejects_bad_input(film_cal, d76, kin_test):
+    schedule = make_schedule("calibration", 30.0)
+    ev, es = strip_exposures(2, film_cal.grid.n_z)
+    mem = columns(ev, es)
+    ok = {"n_cells": 2, "cell_weights": np.ones(2), "tank": ROLL_TANK}
+
+    def call(**kw):
+        args = {**ok, **kw}
+        members = args.pop("members", mem)
+        return run_ensemble(film_cal, d76, kin_test, schedule, members, **args)
+
+    with pytest.raises(ValueError, match="exactly one"):
+        call(tank=None)
+    with pytest.raises(ValueError, match="exactly one"):
+        call(bulk=_constant_bulk(d76, schedule))
+    with pytest.raises(ValueError, match="method"):
+        call(method="rk4")
+    with pytest.raises(ValueError, match="rtol"):
+        call(rtol=0.0)
+    with pytest.raises(ValueError, match="record_cells"):
+        call(record_cells=-1)
+    with pytest.raises(ValueError, match="cell_weights"):
+        call(cell_weights=np.ones(3))
+    with pytest.raises(ValueError, match="positive sum"):
+        call(cell_weights=np.zeros(2))
+    with pytest.raises(ValueError, match="columns layout"):
+        call(n_cells=3, cell_weights=np.ones(3))
+    with pytest.raises(ValueError, match=">= 0"):
+        call(members=columns(-ev, es))
+    with pytest.raises(ValueError, match="layout"):
+        call(members=Members(ev, es, layout="grid"))
+    with pytest.raises(ValueError, match="share a shape"):
+        call(members=columns(ev, es[:, :1]))
+    other = make_schedule("calibration", 40.0)
+    with pytest.raises(ValueError, match="times_s"):
+        call(tank=None, bulk=_constant_bulk(d76, other))
+    with pytest.raises(ValueError, match="shape_cells"):
+        call(lateral=Lateral((1, 3), 10.0, "periodic"))
+    with pytest.raises(ValueError, match="raster"):
+        call(members=Members(ev[None], es[None], layout="raster", pixel_um=6.0))
+    bad_film = dataclasses.replace(film_cal, component_ids=film_cal.component_ids[::-1])
+    with pytest.raises(ValueError, match="components"):
+        run_ensemble(bad_film, d76, kin_test, schedule, mem, **ok)
