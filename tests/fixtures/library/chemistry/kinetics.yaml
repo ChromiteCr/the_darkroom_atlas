@@ -1,0 +1,103 @@
+# Fixture copy of data/chemistry/kinetics.yaml (prior values, spec D1 10 D1d); keep equal.
+# Shared chemistry constants of the black-and-white chain (spec D1 5.3).
+#
+# Prior values only: no calibration has run. Parameters that spec D1 2.3.6 / 2.4.11 mark
+# "fitted" are written as `source: assumed` with `note: PLACEHOLDER`, their prior box in
+# `bounds` and the prior shape in `prior` ("(log)" in the spec tables -> lognormal, "linear,
+# uniform" -> uniform, N(0, 0.15^2) -> normal with `uncertainty` = sigma). Calibration
+# (spec D1 7.8) rewrites them as `fitted`. Literature values cite their source in `ref`.
+schema_version: 1
+model_version: D1c
+
+# Spec D1 2.3.3, 2.3.6.
+activity:
+  debye_huckel_A_20C: {value: 0.5050, unit: "1", source: assumed, note: "recalled standard value (spec D1 2.3.3, 2.3.6); to be checked"}
+  debye_huckel_A_25C: {value: 0.5091, unit: "1", source: assumed, note: "recalled standard value (spec D1 2.3.3, 2.3.6); to be checked"}
+  sit_b: {value: 1.5, unit: "1", source: assumed, note: "SIT convention (spec D1 2.3.3)"}
+  delta_eps:
+    sulfite: {value: 0.0, unit: kg/mol, source: assumed, uncertainty: 0.15, bounds: [-0.45, 0.45], prior: normal, note: "PLACEHOLDER until stage A; prior N(0, 0.15^2), DEV 5.1 (spec D1 2.3.6)"}
+    borate: {value: 0.0, unit: kg/mol, source: assumed, uncertainty: 0.15, bounds: [-0.45, 0.45], prior: normal, note: "PLACEHOLDER until stage A; prior N(0, 0.15^2), DEV 5.1 (spec D1 2.3.6)"}
+    organic: {value: 0.0, unit: kg/mol, source: assumed, uncertainty: 0.15, bounds: [-0.45, 0.45], prior: normal, note: "PLACEHOLDER until stage A; prior N(0, 0.15^2), DEV 5.1 (spec D1 2.3.6)"}
+    amine: {value: 0.0, unit: kg/mol, source: assumed, uncertainty: 0.15, bounds: [-0.45, 0.45], prior: normal, note: "PLACEHOLDER until stage A (assumed 0 if not identifiable); prior N(0, 0.15^2), DEV 5.1 (spec D1 2.3.6)"}
+
+# Developing-agent classes (spec D1 2.4.3, 2.4.5, 2.4.11). k_et, lambda0, k_des and k_reg are
+# the values at T_r = 20 C; each class scales them with its own Arrhenius factor.
+agents:
+  metol:
+    k_et: {value: 0.05, unit: 1/s, source: assumed, bounds: [1.0e-4, 10.0], prior: lognormal, note: "PLACEHOLDER; KIN 1.10"}
+    K_ads: {value: 100.0, unit: L/mol, source: assumed, bounds: [1.0, 1.0e4], prior: lognormal, note: "PLACEHOLDER; KIN 1.5, 1.10"}
+    lambda0: {value: 0.01, unit: 1/s, source: assumed, bounds: [1.0e-4, 10.0], prior: lognormal, note: "PLACEHOLDER; KIN 1.4, 1.10"}
+    activation_energy: {value: 61.8, unit: kJ/mol, source: literature, ref: "Sugai & Furuichi, J. Fac. Sci. Hokkaido Univ. Ser. II 4(4), 253 (1953), Table 1 (0.64 eV, metol); KIN 1.6", uncertainty: 10.0, prior: normal, note: "prior 61.8 +- 10 kJ/mol (spec D1 2.4.5, 2.4.11)"}
+    k_des: {value: 0.1, unit: 1/s, source: assumed, bounds: [1.0e-3, 10.0], prior: lognormal, note: "PLACEHOLDER (log centre of the bounds); KIN 2.1"}
+  hydroquinone:
+    k_et: {value: 0.05, unit: 1/s, source: assumed, bounds: [1.0e-4, 10.0], prior: lognormal, note: "PLACEHOLDER; KIN 1.10"}
+    K_ads: {value: 100.0, unit: L/mol, source: assumed, bounds: [1.0, 1.0e4], prior: lognormal, note: "PLACEHOLDER; KIN 1.5, 1.10"}
+    lambda0: {value: 0.01, unit: 1/s, source: assumed, bounds: [1.0e-4, 10.0], prior: lognormal, note: "PLACEHOLDER; KIN 1.4, 1.10"}
+    activation_energy: {value: 67.5, unit: kJ/mol, source: literature, ref: "Sugai & Furuichi, J. Fac. Sci. Hokkaido Univ. Ser. II 4(4), 253 (1953), Table 2 (0.70 eV, hydroquinone); KIN 1.6", uncertainty: 10.0, prior: normal, note: "prior 67.5 +- 10 kJ/mol (spec D1 2.4.5, 2.4.11)"}
+    k_reg: {value: 100.0, unit: L/(mol*s), source: assumed, bounds: [1.0e-2, 1.0e4], prior: lognormal, note: "PLACEHOLDER; KIN 2.1"}
+  pyrazolidone:
+    k_et: {value: 0.05, unit: 1/s, source: assumed, bounds: [1.0e-4, 10.0], prior: lognormal, note: "PLACEHOLDER; KIN 1.10"}
+    K_ads: {value: 100.0, unit: L/mol, source: assumed, bounds: [1.0, 1.0e4], prior: lognormal, note: "PLACEHOLDER; KIN 1.5, 1.10"}
+    lambda0: {value: 0.01, unit: 1/s, source: assumed, bounds: [1.0e-4, 10.0], prior: lognormal, note: "PLACEHOLDER; KIN 1.4, 1.10"}
+    activation_energy: {value: 65.0, unit: kJ/mol, source: assumed, note: "no literature value; fixed, not fitted (Kodak XTOL rows share the D-76 slope, KIN 1.6; spec D1 2.4.5)"}
+    k_des: {value: 0.1, unit: 1/s, source: assumed, bounds: [1.0e-3, 10.0], prior: lognormal, note: "PLACEHOLDER (log centre of the bounds); KIN 2.1"}
+    pka: {value: 8.5, unit: "1", source: assumed, bounds: [7.5, 9.5], prior: uniform, note: "PLACEHOLDER; Phenidone acid pKa conflict 9.48 vs 7.57 unresolved, DEV 6.1, 7 item 12; shared by dimezone-s, phenidone, methylphenidone"}
+  ascorbate:
+    k_et: {value: 0.05, unit: 1/s, source: assumed, bounds: [1.0e-4, 10.0], prior: lognormal, note: "PLACEHOLDER; KIN 1.10"}
+    K_ads: {value: 100.0, unit: L/mol, source: assumed, bounds: [1.0, 1.0e4], prior: lognormal, note: "PLACEHOLDER; KIN 1.5, 1.10"}
+    lambda0: {value: 0.01, unit: 1/s, source: assumed, bounds: [1.0e-4, 10.0], prior: lognormal, note: "PLACEHOLDER; KIN 1.4, 1.10"}
+    activation_energy: {value: 65.0, unit: kJ/mol, source: assumed, note: "no literature value; fixed, not fitted (Kodak XTOL rows share the D-76 slope, KIN 1.6; spec D1 2.4.5)"}
+    k_reg: {value: 100.0, unit: L/(mol*s), source: assumed, bounds: [1.0e-2, 1.0e4], prior: lognormal, note: "PLACEHOLDER; KIN 2.1"}
+  p-aminophenol:
+    # Rodinal is prediction only: every constant is the metol value, not fitted (spec D1 7.1).
+    k_et: {value: 0.05, unit: 1/s, source: assumed, bounds: [1.0e-4, 10.0], note: "metol value (spec D1 2.4.11, 7.1)"}
+    K_ads: {value: 100.0, unit: L/mol, source: assumed, bounds: [1.0, 1.0e4], note: "metol value (spec D1 7.1)"}
+    lambda0: {value: 0.01, unit: 1/s, source: assumed, bounds: [1.0e-4, 10.0], note: "metol value (spec D1 7.1)"}
+    activation_energy: {value: 65.0, unit: kJ/mol, source: assumed, note: "no literature value; fixed (spec D1 2.4.5)"}
+    k_des: {value: 0.1, unit: 1/s, source: assumed, bounds: [1.0e-3, 10.0], note: "metol value (spec D1 7.1); acts as an ETA without regenerator (spec D1 2.4.3)"}
+
+# Spec D1 2.4.3, 2.4.5, 2.4.11. K_Br at 20 C; K_I = iodide_ratio * K_Br at every temperature.
+halides:
+  K_Br: {value: 300.0, unit: L/mol, source: assumed, bounds: [10.0, 1.0e4], prior: lognormal, note: "PLACEHOLDER; Herz, KIN 1.5; sanity check theta_Br,sat <= 0.18"}
+  iodide_ratio: {value: 30.0, unit: "1", source: assumed, bounds: [10.0, 1000.0], note: "iodide restrains more strongly, no value (KIN 4.1)"}
+  adsorption_enthalpy: {value: -45.0, unit: kJ/mol, source: literature, ref: "Herz, Croat. Chem. Acta 53(2), 313 (1980), p. 317 Table: Delta H -10.7 / -11.5 kcal/mol on cubic / octahedral AgBr; KIN 1.5", bounds: [-60.0, -30.0], note: "fixed; bounds for sensitivity only; standard states differ (spec D1 2.4.11)"}
+
+# Spec D1 2.4.2, 2.4.11.
+barriers:
+  u_gel: {value: 2.0, unit: "1", source: assumed, bounds: [0.0, 10.0], prior: uniform, note: "PLACEHOLDER, kT units; KIN 1.1, 1.4"}
+  u_halide: {value: 5.0, unit: "1", source: assumed, bounds: [0.0, 20.0], prior: uniform, note: "PLACEHOLDER, kT units; KIN 1.4, 1.10"}
+  ionic_strength_ref: {value: 1.0, unit: mol/L, source: assumed, note: "I_ref of the screened gelatin barrier (spec D1 2.4.2)"}
+
+latent:
+  u_li: {value: 1.0, unit: "1", source: assumed, bounds: [0.0, 5.0], prior: uniform, note: "PLACEHOLDER; KIN 1.10 (Ohzeki)"}
+  n_sat: {value: 5.0, unit: "1", source: literature, ref: "Ohzeki, J. Imaging Sci. Technol. 40, 591 (1996), abstract: centres of >= 5 Ag atoms develop fast; KIN 1.1"}
+
+# Spec D1 2.4.2, 2.4.6, 2.4.11.
+solvent:
+  latent_attrition: {value: 1.0, unit: "1", source: assumed, bounds: [0.0, 5.0], prior: uniform, note: "PLACEHOLDER; KIN 2.2 (qualitative)"}
+  k_diss: {value: 1.0e-4, unit: um/s, source: assumed, bounds: [1.0e-6, 1.0e-2], prior: lognormal, note: "PLACEHOLDER (log centre of the bounds); KIN 2.2"}
+  c_sat_ref: {value: 1.0e-3, unit: mol/L, source: assumed, bounds: [1.0e-5, 1.0e-2], prior: lognormal, note: "PLACEHOLDER; Carroll & Hubbard 1934 (30 C, 7.5e-5 M AgBr at 0.005 M Na2SO3) extrapolated to 0.1 M gives 4.5e-4 to 1.5e-3 M, order of magnitude only (KIN 2.2)"}
+  sulfite_exponent: {value: 1.0, unit: "1", source: assumed, bounds: [0.6, 2.0], prior: uniform, note: "PLACEHOLDER initial value 1.0 (mass action, no bromide); Carroll & Hubbard slope 0.62 holds at 0.6-5 mM only (KIN 2.2; spec D1 2.4.11, 9 item 9)"}
+  bromide_exponent: {value: 0.4, unit: "1", source: assumed, bounds: [0.3, 1.0], note: "extrapolated: 4e-4 N KBr halves the solubility at low sulfite (KIN 2.2); mass action gives 1 with excess bromide"}
+  ligands: {value: 2.0, unit: "1", source: assumed, bounds: [1.0, 3.0], note: "sulfite ligands per dissolved Ag (spec D1 2.4.6)"}
+  k_pd: {value: 1.0e-4, unit: um/s, source: assumed, bounds: [1.0e-6, 1.0e-2], prior: lognormal, note: "PLACEHOLDER (log centre of the bounds); KIN 2.2"}
+  sulfonation_switch: {value: 1.0e-4, unit: mol/L, source: assumed, note: "c_s: low-sulfite developers leave sulfonation smoothly (spec D1 2.4.6)"}
+
+# Spec D1 2.3.7, 2.4.7, 2.4.8, 2.4.11.
+transport:
+  delta_max: {value: 300.0, unit: um, source: assumed, bounds: [200.0, 500.0], prior: uniform, note: "PLACEHOLDER; prior KIN 3.4"}
+  delta_agit: {value: 50.0, unit: um, source: assumed, bounds: [20.0, 100.0], prior: uniform, note: "PLACEHOLDER; KIN 3.4 (US 5,315,338 implies 6-104 um)"}
+  swelling_half_time: {value: 20.0, unit: s, source: assumed, bounds: [10.0, 40.0], note: "secondary per KIN 3.3"}
+  viscosity_ionic_coefficient: {value: 0.125, unit: L/mol, source: assumed, bounds: [0.0, 0.2], note: "b_eta from DEV 6.3 estimate 1.2-1.4 cP in 0.7-0.8 M sulfite, 1.3 cP at I = 2.4 M (spec D1 2.3.7)"}
+  water_viscosity:
+    temperature: {value: [18.0, 20.0, 24.0, 25.0], unit: C, source: assumed, note: "nodes of spec D1 2.3.7"}
+    viscosity: {value: [1.053, 1.002, 0.911, 0.890], unit: cP, source: assumed, note: "recalled CRC values cited in KIN 1.6, 3.1 (spec D1 2.3.7)"}
+  proton_diffusion: {value: 8130.0, unit: um2/s, source: assumed, note: "tracer 9.31e-5 cm2/s at 25 C (recalled) scaled to 20 C by T/eta; TOTH flux only (spec D1 2.3.7, 2.4.8)"}
+  hydroxide_diffusion: {value: 4600.0, unit: um2/s, source: assumed, note: "tracer 5.27e-5 cm2/s at 25 C (recalled) scaled to 20 C by T/eta; TOTH flux only (spec D1 2.3.7, 2.4.8)"}
+
+# Spec D1 2.3.7, 2.4.7, 2.4.11.
+gelatin:
+  groups_per_gram: {value: 4.8e-4, unit: mol/g, source: literature, ref: "Iwano, J. Soc. Photogr. Sci. Technol. Japan 33(3), 143 (1970): OH- reactive groups of gelatin; KIN 3.2"}
+  pka: {value: 10.5, unit: "1", source: assumed, bounds: [9.5, 11.5], note: "G-NH3+ / G-NH2 (spec D1 2.3.7)"}
+  initial_ph: {value: 5.5, unit: "1", source: assumed, bounds: [5.0, 6.5], note: "pH of the dry film's gelatin (spec D1 2.4.7)"}
+  dry_density: {value: 1.35, unit: g/cm3, source: assumed, note: "recalled (LAT 2.3); same value as emulsion.classes.RHO_GELATIN; spec D1 2.0.2, 2.4.7 give no number"}
