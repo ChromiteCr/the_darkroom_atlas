@@ -69,6 +69,7 @@ Public functions::
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
+from numbers import Integral
 
 import numpy as np
 
@@ -125,8 +126,9 @@ class ColumnLayout:
     def __post_init__(self) -> None:
         for name in ("n_dense", "n_diag", "n_comp", "n_local"):
             value = getattr(self, name)
-            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            if isinstance(value, bool) or not isinstance(value, Integral) or value < 0:
                 raise ValueError(f"{name} must be an int >= 0, got {value!r}")
+            object.__setattr__(self, name, int(value))  # numpy integers stored as int
         if self.n_comp < 1:
             raise ValueError("n_comp must be >= 1")
         if self.n_dense + self.n_diag < 1:

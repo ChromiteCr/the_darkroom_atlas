@@ -140,6 +140,37 @@ def test_lateral_factors():
     assert half.shape == (5, 3, 2)
 
 
+def test_lateral_accepts_numpy_integers():
+    # Sizes and indices derived from array arithmetic arrive as numpy integers.
+    for n in (np.int64(8), np.int32(8), np.uint16(8)):
+        np.testing.assert_array_equal(
+            lateral_factors(n, DX, "neumann", DIFF, 2.0),
+            lateral_factors(8, DX, "neumann", DIFF, 2.0),
+        )
+    rng = np.random.default_rng(12)
+    conc, bound, diff = _toth_block(rng)
+    d_toth = np.array([300.0, 500.0, 2000.0])
+    want = lateral_diffuse(
+        conc, diff, 4.0, boundary="neumann", spacing_um=DX, toth=TothLateral(2, bound, d_toth)
+    )
+    index = np.flatnonzero(np.array([False, False, True]))[0]  # np.int64
+    got = lateral_diffuse(
+        conc, diff, 4.0, boundary="neumann", spacing_um=DX, toth=TothLateral(index, bound, d_toth)
+    )
+    np.testing.assert_array_equal(got, want)
+    with pytest.raises(ValueError, match="n must"):
+        lateral_factors(np.bool_(True), DX, "neumann", DIFF, 2.0)
+    with pytest.raises(ValueError, match="toth.index"):
+        lateral_diffuse(
+            conc,
+            diff,
+            4.0,
+            boundary="neumann",
+            spacing_um=DX,
+            toth=TothLateral(np.bool_(True), bound, d_toth),
+        )
+
+
 # ---- TOTH (spec D1 3.5) ----------------------------------------------------------------------
 
 
@@ -205,15 +236,26 @@ def test_toth_lateral_diffusion_formula():
     rng = np.random.default_rng(8)
     beta = rng.uniform(0.001, 0.05, size=(4, 6, 7, 3))  # carriers: 2 families, H+, OH-
     d = np.array([[400.0, 500.0, 900.0], [80.0, 100.0, 700.0], [8130.0] * 3, [4600.0] * 3])
-    got = toth_lateral_diffusion(beta, d)
+    every = (slice(None), slice(None))
+    got = toth_lateral_diffusion(beta, d, inner=every)
     mean = beta.mean(axis=(1, 2))
     np.testing.assert_allclose(got, (d * mean).sum(axis=0) / mean.sum(axis=0), rtol=1e-14)
     inner = (slice(1, 5), slice(2, 6))
     got_inner = toth_lateral_diffusion(beta, d, inner=inner)
     mean_i = beta[:, 1:5, 2:6].mean(axis=(1, 2))
     np.testing.assert_allclose(got_inner, (d * mean_i).sum(axis=0) / mean_i.sum(axis=0), rtol=1e-14)
+    # The halo does not enter: changing beta outside the inner region leaves D_toth unchanged.
+    halo = beta.copy()
+    halo[:, :1] *= 50.0
+    halo[:, 5:] *= 0.01
+    halo[:, :, :2] *= 7.0
+    halo[:, :, 6:] *= 0.1
+    np.testing.assert_array_equal(toth_lateral_diffusion(halo, d, inner=inner), got_inner)
+    assert not np.allclose(toth_lateral_diffusion(halo, d, inner=every), got)
     # A single carrier gives its own D.
-    np.testing.assert_allclose(toth_lateral_diffusion(beta[:1], d[:1]), d[0], rtol=1e-15)
+    np.testing.assert_allclose(
+        toth_lateral_diffusion(beta[:1], d[:1], inner=inner), d[0], rtol=1e-15
+    )
 
 
 def _ideal():
@@ -335,9 +377,13 @@ def test_toth_rejects_bad_input():
     with pytest.raises(TypeError):
         lateral_diffuse(conc, DIFF, 1.0, boundary="neumann", spacing_um=DX, toth=(1, 0, 0))
     with pytest.raises(ValueError, match="disagree"):
-        toth_lateral_diffusion(np.ones((2, 3, 4)), np.ones((3, 4)))
+        toth_lateral_diffusion(np.ones((2, 3, 4)), np.ones((3, 4)), inner=(slice(None),))
     with pytest.raises(ValueError, match="zero"):
-        toth_lateral_diffusion(np.zeros((2, 3, 4)), np.ones((2, 4)))
+        toth_lateral_diffusion(np.zeros((2, 3, 4)), np.ones((2, 4)), inner=(slice(None),))
+    with pytest.raises(TypeError):
+        toth_lateral_diffusion(np.ones((2, 3, 4)), np.ones((2, 4)))  # inner is required
+    with pytest.raises(ValueError, match="slices"):
+        toth_lateral_diffusion(np.ones((2, 3, 4)), np.ones((2, 4)), inner=None)
     with pytest.raises(ValueError, match="slices"):
         toth_lateral_diffusion(np.ones((2, 3, 3, 4)), np.ones((2, 4)), inner=(slice(0, 2),))
     with pytest.raises(ValueError, match="no cells"):

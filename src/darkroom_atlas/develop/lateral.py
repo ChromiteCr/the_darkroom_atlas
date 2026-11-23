@@ -29,7 +29,7 @@ per level::
 
     D_toth,l = (sum_f D_f,l bbar_f,l + D_H,l bbar_H,l + D_OH,l bbar_OH,l) / bbar_mob,l
 
-(``bbar`` the mean over the block's cells, ``beta_mob`` without gelatin); then ``TOTH <- TOTH
+(``bbar`` the mean over the block's inner cells, not the halo; ``beta_mob`` without gelatin); then ``TOTH <- TOTH
 + (TOTH_mob' - TOTH_mob)``. Gelatin-bound protons stay put, TOTH is conserved and the number of
 transforms does not change (TOTH_mob takes TOTH's slot in the same transform).
 
@@ -39,15 +39,18 @@ Public functions::
                     wavenumber_per_um=None, toth=None) -> ndarray (same shape as conc)
         # grid: conc (ny, nx, *trailing), diffusion broadcast to trailing (e.g. (L, K))
         # pair: conc (2 n_pairs, *trailing), wavenumber_per_um (n_pairs,)
-    lateral_factors(n, spacing_um, boundary, diffusion_um2_s, tau_s) -> ndarray (n_modes, ...)
+    lateral_factors(n, spacing_um, boundary, diffusion_um2_s, tau_s, *, half=False)
+        -> ndarray (n_modes, *D.shape)  # half: rfft half spectrum, periodic axes only
     carrier_capacities(spec, totals, ph, mobile) -> ndarray (n_mobile + 2, *cells)
-    toth_lateral_diffusion(beta, diffusion_um2_s, *, inner=None) -> ndarray (L,)
+    toth_lateral_diffusion(beta, diffusion_um2_s, *, inner) -> ndarray (L,)
+        # inner: slices of the cell axes selecting the block's inner (non-halo) cells
     TothLateral(index, gel_bound, diffusion_um2_s)
 """
 
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from numbers import Integral
 from typing import Literal
 
 import numpy as np
@@ -126,8 +129,9 @@ def lateral_factors(
 
     ``half`` selects the ``rfft`` half spectrum of a periodic axis.
     """
-    if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+    if isinstance(n, bool) or not isinstance(n, Integral) or n < 1:
         raise ValueError(f"n must be an int >= 1, got {n!r}")
+    n = int(n)
     spacing = float(spacing_um)
     if not (math.isfinite(spacing) and spacing > 0.0):
         raise ValueError(f"spacing_um must be finite and > 0, got {spacing_um}")
@@ -186,7 +190,7 @@ def lateral_diffuse(
             raise ValueError("spacing_um is required for grid boundaries")
         out = _diffuse_grid(work, d, tau, float(spacing_um), boundary)
     if toth is not None:
-        i = toth.index
+        i = int(toth.index)
         out[..., i] = c[..., i] + (out[..., i] - mobile)
     return out
 
@@ -197,8 +201,9 @@ def _toth_setup(c: np.ndarray, d: np.ndarray, toth: TothLateral):
     if c.ndim < 2:
         raise ValueError("the TOTH treatment needs a component axis last")
     i = toth.index
-    if isinstance(i, bool) or not isinstance(i, int) or not (0 <= i < c.shape[-1]):
+    if isinstance(i, bool) or not isinstance(i, Integral) or not (0 <= i < c.shape[-1]):
         raise ValueError(f"toth.index must be an int in [0, {c.shape[-1]}), got {i!r}")
+    i = int(i)
     bound = np.asarray(toth.gel_bound, dtype=np.float64)
     if bound.shape != c.shape[:-1] or not np.all(np.isfinite(bound)):
         raise ValueError(f"toth.gel_bound must be finite with shape {c.shape[:-1]}")
@@ -297,15 +302,17 @@ def carrier_capacities(
 
 
 def toth_lateral_diffusion(
-    beta: np.ndarray, diffusion_um2_s: np.ndarray, *, inner: tuple[slice, ...] | None = None
+    beta: np.ndarray, diffusion_um2_s: np.ndarray, *, inner: tuple[slice, ...]
 ) -> np.ndarray:
     """``D_toth,l = sum_c D_c,l bbar_c,l / sum_c bbar_c,l`` per level (spec D1 3.5).
 
     ``beta`` ``(C, *cells, L)``: buffer capacity of each mobile carrier (families, then H+ and
     OH-, as :func:`carrier_capacities` gives, moved so that the level axis is last);
     ``diffusion_um2_s`` ``(C, L)``: the carrier's lateral D on each level. ``bbar`` is the mean
-    over the cells selected by ``inner`` (slices of the cell axes; default all cells of the
-    block). Returns ``(L,)``.
+    over the cells selected by ``inner``: one slice per cell axis, the inner (non-halo) cells
+    of the canonical block (spec D1 3.5; the same cells whose flux enters
+    ``Jbar_blk`` in spec D1 3.7). Required, so the halo padding never enters by default.
+    Returns ``(L,)``.
     """
     b = np.asarray(beta, dtype=np.float64)
     d = np.asarray(diffusion_um2_s, dtype=np.float64)
@@ -318,10 +325,13 @@ def toth_lateral_diffusion(
     if not (np.all(np.isfinite(d)) and np.all(d >= 0.0)):
         raise ValueError("diffusion must be finite and >= 0 um^2/s")
     n_cell_axes = b.ndim - 2
-    if inner is not None:
-        if len(inner) != n_cell_axes or not all(isinstance(s, slice) for s in inner):
-            raise ValueError(f"inner must be {n_cell_axes} slices of the cell axes")
-        b = b[(slice(None), *inner, slice(None))]
+    if (
+        not isinstance(inner, tuple)
+        or len(inner) != n_cell_axes
+        or not all(isinstance(s, slice) for s in inner)
+    ):
+        raise ValueError(f"inner must be a tuple of {n_cell_axes} slices of the cell axes")
+    b = b[(slice(None), *inner, slice(None))]
     if b.size == 0:
         raise ValueError("no cells selected")
     mean = b.reshape(b.shape[0], -1, b.shape[-1]).mean(axis=1)  # (C, L)

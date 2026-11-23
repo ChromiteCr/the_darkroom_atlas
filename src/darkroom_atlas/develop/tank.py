@@ -23,7 +23,7 @@ max_n |c_k(t_n) - c_k(0)|, 1e-6 M)``.
 Arrays use components on the last axis (``K_c`` components then TOTH, as ``flux_mean`` of spec
 D1 10). Public functions::
 
-    tank_coefficient(film_area_um2: float, volume_l: float) -> float          # 1/um
+    tank_coefficient(*, film_area_um2: float, volume_l: float) -> float       # 1/um
     advance_bulk(bulk (K,), flux (K,), h_s, coefficient) -> (K,)
     integrate_bulk(initial (K,), flux_mean (S, K), times_s (S+1,), coefficient) -> (S+1, K)
     mixing_inventory(conc (..., n_up, K), thickness_um (n_up,), bulk (K,)) -> (..., K)
@@ -94,8 +94,12 @@ def _finite(name: str, value, ndim: int | None = None) -> np.ndarray:
     return a
 
 
-def tank_coefficient(film_area_um2: float, volume_l: float) -> float:
-    """``1e-15 A_film / V_tank`` in 1/um (spec D1 2.4.9); ``ValueError`` unless both > 0."""
+def tank_coefficient(*, film_area_um2: float, volume_l: float) -> float:
+    """``1e-15 A_film / V_tank`` in 1/um (spec D1 2.4.9); ``ValueError`` unless both > 0.
+
+    Keyword-only: ``TankSpec`` (spec D1 10) orders its fields ``volume_l, film_area_um2``, so a
+    positional call could silently swap them.
+    """
     area, volume = float(film_area_um2), float(volume_l)
     if not (math.isfinite(area) and area > 0.0):
         raise ValueError(f"film_area_um2 must be finite and > 0, got {film_area_um2}")

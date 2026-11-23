@@ -52,7 +52,9 @@ def test_constants_match_spec():
 
 
 def test_tank_coefficient():
-    assert tank_coefficient(AREA_UM2, VOLUME_L) == pytest.approx(1e-15 * AREA_UM2 / VOLUME_L)
+    assert tank_coefficient(film_area_um2=AREA_UM2, volume_l=VOLUME_L) == pytest.approx(
+        1e-15 * AREA_UM2 / VOLUME_L
+    )
 
 
 def test_tank_mass_balance_kernel():
@@ -62,7 +64,7 @@ def test_tank_mass_balance_kernel():
     t = _schedule(rng)
     flux = rng.normal(scale=0.05, size=(t.size - 1, 6))  # mol L^-1 um s^-1 (D-76 order)
     c0 = np.array([0.79, 0.021, 0.045, 0.0, 0.0, 0.08])
-    coef = tank_coefficient(AREA_UM2, VOLUME_L)
+    coef = tank_coefficient(film_area_um2=AREA_UM2, volume_l=VOLUME_L)
     traj = integrate_bulk(c0, flux, t, coef)
     integral = (np.diff(t)[:, None] * flux).sum(axis=0)
     expect = -coef * integral
@@ -79,7 +81,7 @@ def test_tank_infinite_volume_kernel():
     t = _schedule(rng)
     flux = rng.normal(scale=0.05, size=(t.size - 1, 3))
     c0 = np.array([0.79, 0.0, 0.08])
-    traj = integrate_bulk(c0, flux, t, tank_coefficient(AREA_UM2, 1e9))
+    traj = integrate_bulk(c0, flux, t, tank_coefficient(film_area_um2=AREA_UM2, volume_l=1e9))
     assert np.max(np.abs(traj - c0)) <= 1e-12
 
 
@@ -89,7 +91,7 @@ def test_integrate_bulk_reproduces_stepwise_updates():
     t = _schedule(rng, 50)
     flux = rng.normal(size=(t.size - 1, 4))
     c0 = rng.uniform(size=4)
-    coef = tank_coefficient(AREA_UM2, VOLUME_L)
+    coef = tank_coefficient(film_area_um2=AREA_UM2, volume_l=VOLUME_L)
     c = c0
     stepwise = [c0]
     for n in range(t.size - 1):
@@ -110,7 +112,7 @@ def test_mixing_impulse_conserves_and_matches_jump():
     expect = ((conc - bulk) * thick[:, None]).sum(axis=-2)
     np.testing.assert_allclose(inv, expect, rtol=1e-12, atol=1e-18)
     inv_mean = area_mean(inv, weights)
-    coef = tank_coefficient(AREA_UM2, VOLUME_L)
+    coef = tank_coefficient(film_area_um2=AREA_UM2, volume_l=VOLUME_L)
     h = 0.1
     after = advance_bulk(bulk, mixing_flux(inv_mean, h), h, coef)
     np.testing.assert_allclose(after, bulk + coef * inv_mean, rtol=1e-15)
@@ -172,9 +174,11 @@ def test_contraction():
 
 def test_tank_rejects_bad_input():
     with pytest.raises(ValueError, match="volume"):
-        tank_coefficient(AREA_UM2, 0.0)
+        tank_coefficient(film_area_um2=AREA_UM2, volume_l=0.0)
     with pytest.raises(ValueError, match="film_area"):
-        tank_coefficient(-1.0, 1.0)
+        tank_coefficient(film_area_um2=-1.0, volume_l=1.0)
+    with pytest.raises(TypeError):
+        tank_coefficient(AREA_UM2, VOLUME_L)  # positional order would mirror TankSpec's
     with pytest.raises(ValueError, match="h_s"):
         advance_bulk(np.ones(2), np.ones(2), 0.0, 1.0)
     with pytest.raises(ValueError, match="shape"):

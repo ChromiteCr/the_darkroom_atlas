@@ -612,6 +612,19 @@ def test_fixed_step_never_rejects_negative_values():
 # ---- bad input -------------------------------------------------------------------------------
 
 
+def test_layout_accepts_numpy_integers():
+    # Counts derived from array arithmetic (grid sizes, np.flatnonzero) are numpy integers.
+    thickness = np.ones(5)
+    n_dense = np.int64(2)
+    lay = ColumnLayout(
+        n_dense=n_dense, n_diag=thickness.size - n_dense, n_comp=np.int32(2), n_local=np.uint8(1)
+    )
+    assert lay == LAYOUT
+    for name in ("n_dense", "n_diag", "n_comp", "n_local"):
+        assert type(getattr(lay, name)) is int
+    assert type(lay.size) is int and lay.size == LAYOUT.size
+
+
 def test_layout_rejects_bad_counts():
     with pytest.raises(ValueError):
         ColumnLayout(n_dense=-1, n_diag=2, n_comp=1)
@@ -621,6 +634,10 @@ def test_layout_rejects_bad_counts():
         ColumnLayout(n_dense=0, n_diag=0, n_comp=2)
     with pytest.raises(ValueError):
         ColumnLayout(n_dense=1.0, n_diag=2, n_comp=1)
+    with pytest.raises(ValueError):
+        ColumnLayout(n_dense=np.bool_(True), n_diag=2, n_comp=1)
+    with pytest.raises(ValueError):
+        ColumnLayout(n_dense=True, n_diag=2, n_comp=1)
     with pytest.raises(ValueError, match="shape"):
         LAYOUT.split(np.zeros((2, LAYOUT.size + 1)))
 
